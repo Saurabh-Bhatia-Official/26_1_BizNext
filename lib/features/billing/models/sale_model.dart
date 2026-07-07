@@ -1,0 +1,152 @@
+// lib/features/billing/models/sale_model.dart
+
+class SaleModel {
+  final int? id;
+  final int businessId;
+  final String invoiceNo;
+  final int? customerId;
+  final String? customerName;
+  final String? customerPhone;
+  final String? customerAddress;
+  final double subtotal;
+  final double discount;
+  final double gstAmount;
+  final double grandTotal;
+  final double paidAmount;
+  final double balanceDue;
+  final String paymentMode;
+  final int? accountId;
+  final String? accountName;
+  final String? notes;
+  final String status;
+  final DateTime date;
+  final List<SaleItemModel> items;
+
+  SaleModel({
+    this.id,
+    required this.businessId,
+    required this.invoiceNo,
+    this.customerId,
+    this.customerName,
+    this.customerPhone,
+    this.customerAddress,
+    required this.subtotal,
+    this.discount = 0,
+    required this.gstAmount,
+    required this.grandTotal,
+    this.paidAmount = 0,
+    this.balanceDue = 0,
+    this.paymentMode = 'Cash',
+    this.accountId,
+    this.accountName,
+    this.notes,
+    this.status = 'completed',
+    DateTime? date,
+    this.items = const [],
+  }) : date = date ?? DateTime.now();
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'business_id': businessId,
+      'invoice_no': invoiceNo,
+      'customer_id': customerId,
+      'subtotal': subtotal,
+      'discount': discount,
+      'gst_amount': gstAmount,
+      'grand_total': grandTotal,
+      'paid_amount': paidAmount,
+      'balance_due': balanceDue,
+      'payment_mode': paymentMode,
+      'account_id': accountId,
+      'notes': notes,
+      'status': status,
+      'date': date.toIso8601String(),
+    };
+  }
+
+  factory SaleModel.fromMap(Map<String, dynamic> map, [List<SaleItemModel> items = const []]) {
+    return SaleModel(
+      id: map['id'],
+      businessId: map['business_id'],
+      invoiceNo: map['invoice_no'],
+      customerId: map['customer_id'],
+      customerName: map['customer_name'],
+      customerPhone: map['customer_phone'],
+      customerAddress: map['customer_address'],
+      subtotal: (map['subtotal'] as num).toDouble(),
+      discount: (map['discount'] as num?)?.toDouble() ?? 0,
+      gstAmount: (map['gst_amount'] as num).toDouble(),
+      grandTotal: (map['grand_total'] as num).toDouble(),
+      paidAmount: (map['paid_amount'] as num?)?.toDouble() ?? 0,
+      balanceDue: (map['balance_due'] as num?)?.toDouble() ?? 0,
+      paymentMode: map['payment_mode'] ?? 'Cash',
+      accountId: map['account_id'],
+      accountName: map['account_name'],
+      notes: map['notes'],
+      status: map['status'] ?? 'completed',
+      date: DateTime.parse(map['date']),
+      items: items,
+    );
+  }
+}
+
+class SaleItemModel {
+  final int? id;
+  final int? saleId;
+  final int productId;
+  final String productName;
+  final double quantity;
+  final double price;
+  final double discount;
+  final double gstPercent;
+  final double gstAmount;
+  final double total;
+  final double purchasePrice;
+
+  SaleItemModel({
+    this.id,
+    this.saleId,
+    required this.productId,
+    required this.productName,
+    required this.quantity,
+    required this.price,
+    this.discount = 0,
+    this.gstPercent = 0,
+    required this.gstAmount,
+    required this.total,
+    this.purchasePrice = 0,
+  });
+
+  Map<String, dynamic> toMap(int saleId) {
+    return {
+      'id': id,
+      'sale_id': saleId,
+      'product_id': productId,
+      'product_name': productName,
+      'quantity': quantity,
+      'price': price,
+      'discount': discount,
+      'gst_percent': gstPercent,
+      'gst_amount': gstAmount,
+      'total': total,
+      'purchase_price': purchasePrice,
+    };
+  }
+
+  factory SaleItemModel.fromMap(Map<String, dynamic> map) {
+    return SaleItemModel(
+      id: map['id'],
+      saleId: map['sale_id'],
+      productId: map['product_id'],
+      productName: map['product_name'],
+      quantity: (map['quantity'] as num).toDouble(),
+      price: (map['price'] as num).toDouble(),
+      discount: (map['discount'] as num?)?.toDouble() ?? 0,
+      gstPercent: (map['gst_percent'] as num?)?.toDouble() ?? 0,
+      gstAmount: (map['gst_amount'] as num).toDouble(),
+      total: (map['total'] as num).toDouble(),
+      purchasePrice: (map['purchase_price'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
