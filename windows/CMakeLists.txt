@@ -3,6 +3,9 @@ set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 cmake_minimum_required(VERSION 3.14...3.30)
 project(biz_next LANGUAGES CXX)
 
+# Suppress CMake deprecation warnings from third-party plugins/SDKs (e.g. Firebase C++ SDK)
+set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
+
 if(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /FS")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /FS")

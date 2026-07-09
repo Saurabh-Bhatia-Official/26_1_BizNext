@@ -8,7 +8,7 @@ class AppConstants {
 
   // Database
   static const String dbName = 'biz_next.sys';
-  static const int dbVersion = 21;
+  static const int dbVersion = 22;
   static const String backupExtension = 'bzcfg';
 
   // ── Auth Tables ────────────────────────────────────────────────────────────
@@ -39,6 +39,19 @@ class AppConstants {
   static const String tblLoyaltySettings = 'loyalty_settings';
   static const String tblAppSettings = 'app_settings';
   static const String tblBudgets = 'budgets';
+  static const String tblInventoryTransactions = 'inventory_transactions';
+  static const String tblAuditLogs = 'audit_logs';
+  static const String tblPurchaseReturns = 'purchase_returns';
+  static const String tblPurchaseReturnItems = 'purchase_return_items';
+  static const String tblSalesReturns = 'sales_returns';
+  static const String tblSalesReturnItems = 'sales_return_items';
+  static const String tblWarehouses = 'warehouses';
+  static const String tblWarehouseStocks = 'warehouse_stocks';
+  static const String tblWarehouseTransfers = 'warehouse_transfers';
+  static const String tblWarehouseTransferItems = 'warehouse_transfer_items';
+  static const String tblInventoryAdjustments = 'inventory_adjustments';
+  static const String tblInventoryAdjustmentItems = 'inventory_adjustment_items';
+
 
   // ── Restaurant Tables ──────────────────────────────────────────────────────
   static const String tblRestaurantTables = 'restaurant_tables';

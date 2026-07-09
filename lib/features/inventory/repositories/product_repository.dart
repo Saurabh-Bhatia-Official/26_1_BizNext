@@ -83,6 +83,29 @@ class ProductRepository {
   }
 
   Future<int> addProduct(Product product, int businessId) async {
+    // Validations
+    if (product.sellingPrice < 0 || product.purchasePrice < 0) {
+      throw Exception("Price Error: Prices cannot be negative.");
+    }
+    if (product.sku != null && product.sku!.trim().isNotEmpty) {
+      final skuResult = await _db.rawQuery(
+        "SELECT COUNT(*) AS count FROM ${AppConstants.tblProducts} WHERE sku = ? AND business_id = ? AND is_active = 1",
+        [product.sku, businessId],
+      );
+      if (skuResult.isNotEmpty && (skuResult.first['count'] as int) > 0) {
+        throw Exception("Duplicate SKU Error: A product with SKU '${product.sku}' already exists.");
+      }
+    }
+    if (product.barcode != null && product.barcode!.trim().isNotEmpty) {
+      final barcodeResult = await _db.rawQuery(
+        "SELECT COUNT(*) AS count FROM ${AppConstants.tblProducts} WHERE barcode = ? AND business_id = ? AND is_active = 1",
+        [product.barcode, businessId],
+      );
+      if (barcodeResult.isNotEmpty && (barcodeResult.first['count'] as int) > 0) {
+        throw Exception("Duplicate Barcode Error: A product with barcode '${product.barcode}' already exists.");
+      }
+    }
+
     final data = product.toMap();
     data['business_id'] = businessId;
     return _db.insert(AppConstants.tblProducts, data);
@@ -90,6 +113,34 @@ class ProductRepository {
 
   Future<int> updateProduct(Product product) async {
     if (product.id == null) throw ArgumentError('Product id is required');
+    
+    // Validations
+    if (product.sellingPrice < 0 || product.purchasePrice < 0) {
+      throw Exception("Price Error: Prices cannot be negative.");
+    }
+    
+    final businessIdResult = await _db.rawQuery("SELECT business_id FROM ${AppConstants.tblProducts} WHERE id = ?", [product.id]);
+    final businessId = businessIdResult.isNotEmpty ? businessIdResult.first['business_id'] as int : 1;
+
+    if (product.sku != null && product.sku!.trim().isNotEmpty) {
+      final skuResult = await _db.rawQuery(
+        "SELECT COUNT(*) AS count FROM ${AppConstants.tblProducts} WHERE sku = ? AND business_id = ? AND id != ? AND is_active = 1",
+        [product.sku, businessId, product.id],
+      );
+      if (skuResult.isNotEmpty && (skuResult.first['count'] as int) > 0) {
+        throw Exception("Duplicate SKU Error: Another product with SKU '${product.sku}' already exists.");
+      }
+    }
+    if (product.barcode != null && product.barcode!.trim().isNotEmpty) {
+      final barcodeResult = await _db.rawQuery(
+        "SELECT COUNT(*) AS count FROM ${AppConstants.tblProducts} WHERE barcode = ? AND business_id = ? AND id != ? AND is_active = 1",
+        [product.barcode, businessId, product.id],
+      );
+      if (barcodeResult.isNotEmpty && (barcodeResult.first['count'] as int) > 0) {
+        throw Exception("Duplicate Barcode Error: Another product with barcode '${product.barcode}' already exists.");
+      }
+    }
+
     return _db.update(AppConstants.tblProducts, product.toMap(), product.id!);
   }
 

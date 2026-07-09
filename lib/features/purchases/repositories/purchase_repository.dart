@@ -26,121 +26,379 @@ class PurchaseRepository {
 
   Future<int> recordPurchase(PurchaseModel purchase) async {
     return await _db.transaction((txn) async {
-      // 1. Insert Purchase Header
-      final purchaseId = await txn.insert(AppConstants.tblPurchases, purchase.toMap());
+      // ── VALIDATION RULES ──
+      
+      // 1. Supplier Validation
+      if (purchase.supplierId == null) {
+        throw Exception("Invalid Supplier: Supplier is required for recording purchases.");
+      }
+      final supplierCheck = await txn.query(AppConstants.tblSuppliers, columns: ['id'], where: 'id = ?', whereArgs: [purchase.supplierId]);
+      if (supplierCheck.isEmpty) {
+        throw Exception("Invalid Supplier: Supplier does not exist.");
+      }
 
-      // 2. Insert Items and Update Stock
-      if (purchase.items != null) {
-        for (var item in purchase.items!) {
-          await txn.insert(AppConstants.tblPurchaseItems, item.toMap(purchaseId));
-          
-          // Update Product Stock and Cost Price
-          await txn.rawUpdate(
-            "UPDATE ${AppConstants.tblProducts} SET stock = stock + ?, purchase_price = ? WHERE id = ?",
-            [item.quantity, item.purchasePrice, item.productId],
-          );
+      // 2. Duplicate Purchase Invoice Validation
+      if (purchase.billNo != null && purchase.billNo!.trim().isNotEmpty) {
+        final duplicateCheck = await txn.query(
+          AppConstants.tblPurchases,
+          columns: ['id'],
+          where: 'supplier_id = ? AND bill_no = ? AND business_id = ?',
+          whereArgs: [purchase.supplierId, purchase.billNo, purchase.businessId],
+        );
+        if (duplicateCheck.isNotEmpty) {
+          throw Exception("Duplicate Purchase Invoice: A purchase with bill number '${purchase.billNo}' already exists for this supplier.");
         }
       }
 
-      // 3. Update Supplier Balance if Credit
-      if (purchase.supplierId != null && purchase.balanceDue > 0) {
+      // 3. Cash & Bank Validation
+      if (purchase.paidAmount > 0) {
+        if (purchase.accountId == null) {
+          throw Exception("Invalid Account: A payment account is required when paid amount is greater than zero.");
+        }
+        final accountResult = await txn.query(
+          AppConstants.tblAccounts,
+          columns: ['balance', 'name'],
+          where: 'id = ?',
+          whereArgs: [purchase.accountId],
+        );
+        if (accountResult.isEmpty) {
+          throw Exception("Invalid Account: Selected payment account does not exist.");
+        }
+        final currentBalance = (accountResult.first['balance'] as num).toDouble();
+        if (currentBalance < purchase.paidAmount) {
+          throw Exception("Insufficient funds in account '${accountResult.first['name']}': Current Balance = ₹$currentBalance, Payment Required = ₹${purchase.paidAmount}");
+        }
+      }
+
+      // 4. Item and GST Validation
+      if (purchase.items == null || purchase.items!.isEmpty) {
+        throw Exception("Invalid Purchase: Purchase must contain at least one line item.");
+      }
+      for (var item in purchase.items!) {
+        if (item.quantity <= 0) {
+          throw Exception("Negative Quantity Error: Product '${item.productName}' must have a positive quantity.");
+        }
+        if (item.purchasePrice < 0) {
+          throw Exception("Negative Price Error: Product '${item.productName}' must have a positive cost price.");
+        }
+        if (item.gstPercent < 0 || item.gstPercent > 100) {
+          throw Exception("Invalid GST: GST percentage for '${item.productName}' must be between 0% and 100%.");
+        }
+      }
+
+      // ── EXECUTION ──
+
+      // Get Default Warehouse (id = 1 or first available)
+      final warehouseResult = await txn.query(AppConstants.tblWarehouses, columns: ['id'], limit: 1);
+      final warehouseId = warehouseResult.isNotEmpty ? warehouseResult.first['id'] as int : 1;
+
+      // 1. Insert Purchase Header
+      final purchaseId = await txn.insert(AppConstants.tblPurchases, purchase.toMap());
+
+      // 2. Insert Items, Update Stock & Cost (WAC)
+      for (var item in purchase.items!) {
+        await txn.insert(AppConstants.tblPurchaseItems, item.toMap(purchaseId));
+        
+        // Fetch current product state
+        final productResult = await txn.query(
+          AppConstants.tblProducts,
+          columns: ['stock', 'purchase_price'],
+          where: 'id = ?',
+          whereArgs: [item.productId],
+        );
+        if (productResult.isEmpty) {
+          throw Exception("Product '${item.productName}' not found in database.");
+        }
+        
+        final currentStock = (productResult.first['stock'] as num).toDouble();
+        final currentWac = (productResult.first['purchase_price'] as num).toDouble();
+
+        // Calculate Weighted Average Cost (WAC)
+        double newWac = currentWac;
+        if (currentStock + item.quantity > 0) {
+          newWac = ((currentStock * currentWac) + (item.quantity * item.purchasePrice)) / (currentStock + item.quantity);
+        } else {
+          newWac = item.purchasePrice;
+        }
+
+        // Update Product Master stock & price
+        await txn.rawUpdate(
+          "UPDATE ${AppConstants.tblProducts} SET stock = stock + ?, purchase_price = ?, updated_at = datetime('now') WHERE id = ?",
+          [item.quantity, newWac, item.productId],
+        );
+
+        // Update Warehouse Stocks
+        final wsResult = await txn.query(
+          AppConstants.tblWarehouseStocks,
+          where: 'warehouse_id = ? AND product_id = ?',
+          whereArgs: [warehouseId, item.productId],
+        );
+        if (wsResult.isEmpty) {
+          await txn.insert(AppConstants.tblWarehouseStocks, {
+            'warehouse_id': warehouseId,
+            'product_id': item.productId,
+            'stock': item.quantity,
+          });
+        } else {
+          await txn.rawUpdate(
+            "UPDATE ${AppConstants.tblWarehouseStocks} SET stock = stock + ? WHERE warehouse_id = ? AND product_id = ?",
+            [item.quantity, warehouseId, item.productId],
+          );
+        }
+
+        // Record Stock Movement to Transaction Log
+        await txn.insert(AppConstants.tblInventoryTransactions, {
+          'product_id': item.productId,
+          'warehouse_id': warehouseId,
+          'transaction_type': 'PURCHASE',
+          'reference_number': purchase.billNo ?? "#$purchaseId",
+          'quantity': item.quantity,
+          'unit_cost': item.purchasePrice,
+          'opening_stock': currentStock,
+          'closing_stock': currentStock + item.quantity,
+          'remarks': 'Purchase recorded via bill ${purchase.billNo ?? "#$purchaseId"}',
+        });
+      }
+
+      // 3. Update Supplier Balance
+      if (purchase.balanceDue > 0) {
         await txn.rawUpdate(
           "UPDATE ${AppConstants.tblSuppliers} SET balance = balance + ? WHERE id = ?",
           [purchase.balanceDue, purchase.supplierId],
         );
       }
 
-      // 4. Record in Ledger
-      final entityType = purchase.supplierId != null ? AppConstants.entitySupplier : AppConstants.entityBusiness;
-      final entityId = purchase.supplierId ?? 0;
+      // 4. Double Entry Ledger Bookings
+      final billRef = purchase.billNo ?? "#$purchaseId";
+      final dateStr = purchase.date.toIso8601String();
 
+      // Entry A: Debit Inventory Asset Account = Grand Total - GST Amount (Subtotal)
       await txn.insert(AppConstants.tblLedger, {
         'business_id': purchase.businessId,
-        'entity_type': entityType,
-        'entity_id': entityId,
-        'type': AppConstants.ledgerCredit, // Liability or Cash decrease
-        'amount': purchase.grandTotal,
+        'entity_type': 'inventory',
+        'entity_id': 0,
+        'type': 'debit',
+        'amount': purchase.subtotal,
         'reference_id': purchaseId,
-        'account_id': purchase.accountId,
-        'description': 'Purchase: ${purchase.billNo ?? "#$purchaseId"} ${purchase.supplierId == null ? "(Direct)" : ""}',
-        'date': purchase.date.toIso8601String(),
+        'description': 'Inventory Debit (Purchase): $billRef',
+        'date': dateStr,
       });
 
-      if (purchase.paidAmount > 0) {
-         await txn.insert(AppConstants.tblLedger, {
+      // Entry B: Debit Input GST Account = GST Amount
+      if (purchase.gstAmount > 0) {
+        await txn.insert(AppConstants.tblLedger, {
           'business_id': purchase.businessId,
-          'entity_type': entityType,
-          'entity_id': entityId,
-          'type': AppConstants.ledgerDebit,
-          'amount': purchase.paidAmount,
+          'entity_type': 'gst',
+          'entity_id': 0,
+          'type': 'debit',
+          'amount': purchase.gstAmount,
           'reference_id': purchaseId,
-          'account_id': purchase.accountId,
-          'description': 'Payment for Purchase: ${purchase.billNo ?? "#$purchaseId"}',
-          'date': purchase.date.toIso8601String(),
+          'description': 'Input GST Debit (Purchase): $billRef',
+          'date': dateStr,
         });
       }
 
-      // 5. Update Account Balance
-      if (purchase.accountId != null && purchase.paidAmount > 0) {
+      // Entry C: Credit Cash/Bank = Paid Amount
+      if (purchase.paidAmount > 0) {
+        await txn.insert(AppConstants.tblLedger, {
+          'business_id': purchase.businessId,
+          'entity_type': 'account',
+          'entity_id': purchase.accountId,
+          'type': 'credit',
+          'amount': purchase.paidAmount,
+          'reference_id': purchaseId,
+          'account_id': purchase.accountId,
+          'description': 'Cash/Bank Credit (Purchase Payment): $billRef',
+          'date': dateStr,
+        });
+
+        // Deduct Cash/Bank balance
         await txn.rawUpdate(
           "UPDATE ${AppConstants.tblAccounts} SET balance = balance - ? WHERE id = ?",
           [purchase.paidAmount, purchase.accountId],
         );
       }
 
+      // Entry D: Credit Supplier Accounts Payable = Balance Due
+      if (purchase.balanceDue > 0) {
+        await txn.insert(AppConstants.tblLedger, {
+          'business_id': purchase.businessId,
+          'entity_type': 'supplier',
+          'entity_id': purchase.supplierId,
+          'type': 'credit',
+          'amount': purchase.balanceDue,
+          'reference_id': purchaseId,
+          'description': 'Accounts Payable Credit (Purchase Credit): $billRef',
+          'date': dateStr,
+        });
+      }
+
       return purchaseId;
     });
   }
+
   Future<void> deletePurchase(int purchaseId) async {
-    await _db.transaction((txn) async {
-      // 1. Get Purchase and Items
-      final purchaseResult = await txn.query(AppConstants.tblPurchases, where: 'id = ?', whereArgs: [purchaseId]);
-      if (purchaseResult.isEmpty) return;
-      final pMap = purchaseResult.first;
+    // Audit protection: prevent manual bill deletion
+    throw Exception("Deleting purchase bills directly is prohibited to maintain audit trails. Please execute a Purchase Return (Credit Note) to reverse stock and balances.");
+  }
 
-      final items = await txn.query(AppConstants.tblPurchaseItems, where: 'purchase_id = ?', whereArgs: [purchaseId]);
-
-      // 2. Revert Stock (Decrement)
-      for (final item in items) {
-        await txn.rawUpdate(
-          "UPDATE ${AppConstants.tblProducts} SET stock = stock - ? WHERE id = ?",
-          [item['quantity'], item['product_id']],
-        );
+  Future<int> recordPurchaseReturn(Map<String, dynamic> returnData, List<Map<String, dynamic>> items) async {
+    return await _db.transaction((txn) async {
+      // 1. Validate stock availability
+      for (var item in items) {
+        final productId = item['product_id'] as int;
+        final qty = (item['quantity'] as num).toDouble();
+        
+        final productResult = await txn.query(AppConstants.tblProducts, columns: ['stock', 'name'], where: 'id = ?', whereArgs: [productId]);
+        if (productResult.isEmpty) throw Exception("Product ID $productId not found.");
+        final currentStock = (productResult.first['stock'] as num).toDouble();
+        if (currentStock < qty) {
+          throw Exception("Insufficient stock for product '${productResult.first['name']}': Available = $currentStock, Required return quantity = $qty");
+        }
       }
 
-      // 3. Revert Supplier Balance if applicable
-      final supplierId = pMap['supplier_id'] as int?;
-      final balanceDue = (pMap['balance_due'] as num?)?.toDouble() ?? 0;
-      if (supplierId != null && balanceDue > 0) {
+      // 2. Insert Purchase Return Header
+      final returnId = await txn.insert(AppConstants.tblPurchaseReturns, returnData);
+
+      // Get Default Warehouse
+      final warehouseResult = await txn.query(AppConstants.tblWarehouses, columns: ['id'], limit: 1);
+      final warehouseId = warehouseResult.isNotEmpty ? warehouseResult.first['id'] as int : 1;
+
+      // 3. Deduct stock and update inventory logs
+      for (var item in items) {
+        final productId = item['product_id'] as int;
+        final qty = (item['quantity'] as num).toDouble();
+        final price = (item['price'] as num).toDouble();
+        final gstPercent = (item['gst_percent'] as num?)?.toDouble() ?? 0.0;
+        final gstAmount = qty * price * (gstPercent / 100);
+        final total = (qty * price) + gstAmount;
+
+        final productResult = await txn.query(AppConstants.tblProducts, columns: ['stock', 'purchase_price'], where: 'id = ?', whereArgs: [productId]);
+        final currentStock = (productResult.first['stock'] as num).toDouble();
+        final cost = (productResult.first['purchase_price'] as num).toDouble();
+
+        await txn.insert(AppConstants.tblPurchaseReturnItems, {
+          'return_id': returnId,
+          'product_id': productId,
+          'product_name': item['product_name'] ?? 'Product',
+          'quantity': qty,
+          'price': price,
+          'gst_percent': gstPercent,
+          'gst_amount': gstAmount,
+          'total': total,
+        });
+
+        // Deduct stock in Product Master
+        await txn.rawUpdate(
+          "UPDATE ${AppConstants.tblProducts} SET stock = stock - ?, updated_at = datetime('now') WHERE id = ?",
+          [qty, productId],
+        );
+
+        // Deduct warehouse stock
+        await txn.rawUpdate(
+          "UPDATE ${AppConstants.tblWarehouseStocks} SET stock = stock - ? WHERE warehouse_id = ? AND product_id = ?",
+          [qty, warehouseId, productId],
+        );
+
+        // Log stock movement
+        await txn.insert(AppConstants.tblInventoryTransactions, {
+          'product_id': productId,
+          'warehouse_id': warehouseId,
+          'transaction_type': 'PURCHASE_RETURN',
+          'reference_number': returnData['return_no'] ?? '#PR-$returnId',
+          'quantity': qty,
+          'unit_cost': cost,
+          'opening_stock': currentStock,
+          'closing_stock': currentStock - qty,
+          'remarks': 'Purchase return processed',
+        });
+      }
+
+      // 4. Update Supplier Balance if credit return
+      final supplierId = returnData['supplier_id'] as int?;
+      final grandTotal = (returnData['grand_total'] as num).toDouble();
+      final refundAmount = (returnData['refund_amount'] as num?)?.toDouble() ?? 0.0;
+      final balanceDueReduction = grandTotal - refundAmount;
+
+      if (supplierId != null && balanceDueReduction > 0) {
         await txn.rawUpdate(
           "UPDATE ${AppConstants.tblSuppliers} SET balance = balance - ? WHERE id = ?",
-          [balanceDue, supplierId],
+          [balanceDueReduction, supplierId],
         );
       }
 
-      // 4. Reverse Account Balance
-      final oldAccId = pMap['account_id'] as int?;
-      final oldPaid = (pMap['paid_amount'] as num?)?.toDouble() ?? 0;
-      if (oldAccId != null && oldPaid > 0) {
-        await txn.rawUpdate("UPDATE ${AppConstants.tblAccounts} SET balance = balance + ? WHERE id = ?", [oldPaid, oldAccId]);
+      // 5. Post Ledger entries (Reversal of Purchase DR/CR rules)
+      final businessId = returnData['business_id'] as int;
+      final returnNo = returnData['return_no'] ?? '#PR-$returnId';
+      final dateStr = returnData['date'] ?? DateTime.now().toIso8601String();
+
+      // AP/Cash Debit
+      if (refundAmount > 0) {
+        await txn.insert(AppConstants.tblLedger, {
+          'business_id': businessId,
+          'entity_type': 'account',
+          'entity_id': returnData['account_id'] ?? 0,
+          'type': 'debit',
+          'amount': refundAmount,
+          'reference_id': returnId,
+          'description': 'Refund Debit (Purchase Return): $returnNo',
+          'date': dateStr,
+        });
+        
+        if (returnData['account_id'] != null) {
+          await txn.rawUpdate(
+            "UPDATE ${AppConstants.tblAccounts} SET balance = balance + ? WHERE id = ?",
+            [refundAmount, returnData['account_id']],
+          );
+        }
+      }
+      
+      if (balanceDueReduction > 0 && supplierId != null) {
+        await txn.insert(AppConstants.tblLedger, {
+          'business_id': businessId,
+          'entity_type': 'supplier',
+          'entity_id': supplierId,
+          'type': 'debit',
+          'amount': balanceDueReduction,
+          'reference_id': returnId,
+          'description': 'Accounts Payable Debit (Purchase Return Reversal): $returnNo',
+          'date': dateStr,
+        });
       }
 
-      // 5. Delete Ledger entries
-      await txn.delete(
-        AppConstants.tblLedger, 
-        where: 'reference_id = ? AND entity_type IN (?, ?)', 
-        whereArgs: [purchaseId, AppConstants.entitySupplier, AppConstants.entityBusiness],
-      );
+      // Inventory credit
+      await txn.insert(AppConstants.tblLedger, {
+        'business_id': businessId,
+        'entity_type': 'inventory',
+        'entity_id': 0,
+        'type': 'credit',
+        'amount': (returnData['subtotal'] as num).toDouble(),
+        'reference_id': returnId,
+        'description': 'Inventory Credit (Purchase Return Reversal): $returnNo',
+        'date': dateStr,
+      });
 
-      // 5. Delete Purchase and items
-      await txn.delete(AppConstants.tblPurchaseItems, where: 'purchase_id = ?', whereArgs: [purchaseId]);
-      await txn.delete(AppConstants.tblPurchases, where: 'id = ?', whereArgs: [purchaseId]);
+      // GST credit
+      final gstAmount = (returnData['gst_amount'] as num).toDouble();
+      if (gstAmount > 0) {
+        await txn.insert(AppConstants.tblLedger, {
+          'business_id': businessId,
+          'entity_type': 'gst',
+          'entity_id': 0,
+          'type': 'credit',
+          'amount': gstAmount,
+          'reference_id': returnId,
+          'description': 'Input GST Credit (Purchase Return Reversal): $returnNo',
+          'date': dateStr,
+        });
+      }
+
+      return returnId;
     });
   }
 
   Future<void> addPurchasePayment(int purchaseId, double amount, String mode, {int? accountId}) async {
     await _db.transaction((txn) async {
-      // 1. Get Purchase
       final purchaseResult = await txn.query(AppConstants.tblPurchases, where: 'id = ?', whereArgs: [purchaseId]);
       if (purchaseResult.isEmpty) return;
       final p = purchaseResult.first;
@@ -148,13 +406,24 @@ class PurchaseRepository {
       final businessId = p['business_id'] as int;
       final billNo = p['bill_no'] as String?;
 
-      // 2. Update Purchase
+      // Validate account balance
+      if (accountId != null) {
+        final accountResult = await txn.query(AppConstants.tblAccounts, columns: ['balance', 'name'], where: 'id = ?', whereArgs: [accountId]);
+        if (accountResult.isNotEmpty) {
+          final balance = (accountResult.first['balance'] as num).toDouble();
+          if (balance < amount) {
+            throw Exception("Insufficient funds in account '${accountResult.first['name']}' to complete payment of ₹$amount.");
+          }
+        }
+      }
+
+      // Update Purchase
       await txn.rawUpdate(
         "UPDATE ${AppConstants.tblPurchases} SET paid_amount = paid_amount + ?, balance_due = balance_due - ? WHERE id = ?",
         [amount, amount, purchaseId],
       );
 
-      // 3. Update Supplier Balance
+      // Update Supplier Balance
       if (supplierId != null) {
         await txn.rawUpdate(
           "UPDATE ${AppConstants.tblSuppliers} SET balance = balance - ? WHERE id = ?",
@@ -162,7 +431,7 @@ class PurchaseRepository {
         );
       }
 
-      // 4. Record in Ledger
+      // Record in Ledger
       await txn.insert(AppConstants.tblLedger, {
         'business_id': businessId,
         'entity_type': supplierId != null ? AppConstants.entitySupplier : AppConstants.entityBusiness,
@@ -170,11 +439,11 @@ class PurchaseRepository {
         'type': AppConstants.ledgerDebit,
         'amount': amount,
         'reference_id': purchaseId,
-        'description': 'Pending Payment for Bill: ${billNo ?? "#$purchaseId"} ($mode)',
+        'description': 'Payment for Bill: ${billNo ?? "#$purchaseId"} ($mode)',
         'date': DateTime.now().toIso8601String(),
       });
 
-      // 5. Sync Account Balance
+      // Sync Account Balance
       if (accountId != null) {
         await txn.rawUpdate(
           "UPDATE ${AppConstants.tblAccounts} SET balance = balance - ? WHERE id = ?",

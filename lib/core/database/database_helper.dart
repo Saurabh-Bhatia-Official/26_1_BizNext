@@ -536,6 +536,188 @@ class DatabaseHelper {
         end_date     TEXT NOT NULL
       )
     ''');
+
+    await _createErpTables(txn);
+  }
+
+  Future<void> _createErpTables(Transaction txn) async {
+    // Warehouses
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblWarehouses} (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER NOT NULL DEFAULT 1,
+        name        TEXT    NOT NULL,
+        code        TEXT,
+        address     TEXT,
+        is_active   INTEGER NOT NULL DEFAULT 1,
+        created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(business_id, name)
+      )
+    ''');
+
+    // Warehouse Stocks
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblWarehouseStocks} (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        warehouse_id INTEGER NOT NULL REFERENCES ${AppConstants.tblWarehouses}(id) ON DELETE CASCADE,
+        product_id   INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE CASCADE,
+        stock        REAL    NOT NULL DEFAULT 0,
+        UNIQUE(warehouse_id, product_id)
+      )
+    ''');
+
+    // Inventory Transactions
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblInventoryTransactions} (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id       INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE CASCADE,
+        warehouse_id     INTEGER REFERENCES ${AppConstants.tblWarehouses}(id) ON DELETE SET NULL,
+        transaction_type TEXT NOT NULL,
+        reference_number TEXT NOT NULL,
+        quantity         REAL NOT NULL,
+        unit_cost        REAL NOT NULL DEFAULT 0,
+        opening_stock    REAL NOT NULL DEFAULT 0,
+        closing_stock    REAL NOT NULL DEFAULT 0,
+        created_by       INTEGER,
+        created_date     TEXT NOT NULL DEFAULT (datetime('now')),
+        remarks          TEXT
+      )
+    ''');
+
+    // Audit Logs
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblAuditLogs} (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id        INTEGER,
+        timestamp      TEXT NOT NULL DEFAULT (datetime('now')),
+        module         TEXT NOT NULL,
+        action_type    TEXT NOT NULL,
+        record_id      INTEGER,
+        previous_state TEXT,
+        new_state      TEXT,
+        ip_address     TEXT,
+        device_info    TEXT
+      )
+    ''');
+
+    // Purchase Returns
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblPurchaseReturns} (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id  INTEGER NOT NULL DEFAULT 1,
+        purchase_id  INTEGER REFERENCES ${AppConstants.tblPurchases}(id) ON DELETE SET NULL,
+        return_no    TEXT NOT NULL,
+        supplier_id  INTEGER REFERENCES ${AppConstants.tblSuppliers}(id) ON DELETE SET NULL,
+        subtotal     REAL NOT NULL DEFAULT 0,
+        discount     REAL NOT NULL DEFAULT 0,
+        gst_amount   REAL NOT NULL DEFAULT 0,
+        grand_total  REAL NOT NULL DEFAULT 0,
+        refund_amount REAL NOT NULL DEFAULT 0,
+        status       TEXT NOT NULL DEFAULT 'completed',
+        date         TEXT NOT NULL DEFAULT (datetime('now')),
+        notes        TEXT
+      )
+    ''');
+
+    // Purchase Return Items
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblPurchaseReturnItems} (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_id    INTEGER NOT NULL REFERENCES ${AppConstants.tblPurchaseReturns}(id) ON DELETE CASCADE,
+        product_id   INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE RESTRICT,
+        product_name TEXT NOT NULL,
+        quantity     REAL NOT NULL,
+        price        REAL NOT NULL,
+        gst_percent  REAL NOT NULL DEFAULT 0,
+        gst_amount   REAL NOT NULL DEFAULT 0,
+        total        REAL NOT NULL
+      )
+    ''');
+
+    // Sales Returns
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblSalesReturns} (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id  INTEGER NOT NULL DEFAULT 1,
+        sale_id      INTEGER REFERENCES ${AppConstants.tblSales}(id) ON DELETE SET NULL,
+        return_no    TEXT NOT NULL,
+        customer_id  INTEGER REFERENCES ${AppConstants.tblCustomers}(id) ON DELETE SET NULL,
+        subtotal     REAL NOT NULL DEFAULT 0,
+        discount     REAL NOT NULL DEFAULT 0,
+        gst_amount   REAL NOT NULL DEFAULT 0,
+        grand_total  REAL NOT NULL DEFAULT 0,
+        refund_amount REAL NOT NULL DEFAULT 0,
+        status       TEXT NOT NULL DEFAULT 'completed',
+        date         TEXT NOT NULL DEFAULT (datetime('now')),
+        notes        TEXT
+      )
+    ''');
+
+    // Sales Return Items
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblSalesReturnItems} (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_id    INTEGER NOT NULL REFERENCES ${AppConstants.tblSalesReturns}(id) ON DELETE CASCADE,
+        product_id   INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE RESTRICT,
+        product_name TEXT NOT NULL,
+        quantity     REAL NOT NULL,
+        price        REAL NOT NULL,
+        gst_percent  REAL NOT NULL DEFAULT 0,
+        gst_amount   REAL NOT NULL DEFAULT 0,
+        total        REAL NOT NULL
+      )
+    ''');
+
+    // Warehouse Transfers
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblWarehouseTransfers} (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id         INTEGER NOT NULL DEFAULT 1,
+        transfer_no         TEXT NOT NULL,
+        source_warehouse_id INTEGER NOT NULL REFERENCES ${AppConstants.tblWarehouses}(id) ON DELETE CASCADE,
+        dest_warehouse_id   INTEGER NOT NULL REFERENCES ${AppConstants.tblWarehouses}(id) ON DELETE CASCADE,
+        status              TEXT NOT NULL DEFAULT 'completed',
+        date                TEXT NOT NULL DEFAULT (datetime('now')),
+        notes               TEXT
+      )
+    ''');
+
+    // Warehouse Transfer Items
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblWarehouseTransferItems} (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        transfer_id  INTEGER NOT NULL REFERENCES ${AppConstants.tblWarehouseTransfers}(id) ON DELETE CASCADE,
+        product_id   INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE RESTRICT,
+        product_name TEXT NOT NULL,
+        quantity     REAL NOT NULL
+      )
+    ''');
+
+    // Inventory Adjustments
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblInventoryAdjustments} (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id     INTEGER NOT NULL DEFAULT 1,
+        adjustment_no   TEXT NOT NULL,
+        warehouse_id    INTEGER NOT NULL REFERENCES ${AppConstants.tblWarehouses}(id) ON DELETE CASCADE,
+        adjustment_type TEXT NOT NULL,
+        status          TEXT NOT NULL DEFAULT 'completed',
+        date            TEXT NOT NULL DEFAULT (datetime('now')),
+        notes           TEXT
+      )
+    ''');
+
+    // Inventory Adjustment Items
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblInventoryAdjustmentItems} (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        adjustment_id INTEGER NOT NULL REFERENCES ${AppConstants.tblInventoryAdjustments}(id) ON DELETE CASCADE,
+        product_id   INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE RESTRICT,
+        product_name TEXT NOT NULL,
+        quantity     REAL NOT NULL,
+        remarks      TEXT
+      )
+    ''');
   }
 
   Future<void> _createIndexes(Transaction txn) async {
@@ -1043,6 +1225,35 @@ class DatabaseHelper {
         ''');
       });
     }
+
+    if (oldVersion < 22) {
+      await db.transaction((txn) async {
+        await _createErpTables(txn);
+        
+        final businesses = await txn.query(AppConstants.tblBusinesses);
+        for (var b in businesses) {
+          final bId = b['id'] as int;
+          final wId = await txn.insert(AppConstants.tblWarehouses, {
+            'business_id': bId,
+            'name': 'Default Warehouse',
+            'code': 'WH-DF',
+            'address': 'Main Business Location',
+            'is_active': 1,
+          });
+          
+          final products = await txn.query(AppConstants.tblProducts, where: 'business_id = ?', whereArgs: [bId]);
+          for (var p in products) {
+            final pId = p['id'] as int;
+            final stock = (p['stock'] as num?)?.toDouble() ?? 0.0;
+            await txn.insert(AppConstants.tblWarehouseStocks, {
+              'warehouse_id': wId,
+              'product_id': pId,
+              'stock': stock,
+            });
+          }
+        }
+      });
+    }
   }
 
   Future<void> _createSyncTable(Transaction txn) async {
@@ -1407,6 +1618,15 @@ class DatabaseHelper {
       'earn_rate': 1.0,
       'redeem_value': 1.0,
       'min_redeem_pts': 100,
+      'is_active': 1,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+
+    // 6. Default Warehouse
+    await database.insert(AppConstants.tblWarehouses, {
+      'business_id': businessId,
+      'name': 'Default Warehouse',
+      'code': 'WH-DF',
+      'address': 'Main Business Location',
       'is_active': 1,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
