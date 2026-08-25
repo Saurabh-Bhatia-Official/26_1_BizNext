@@ -24,7 +24,12 @@ class BillingRepository {
 
       // 2. Validate Customer if Credit
       if (sale.customerId != null) {
-        final custCheck = await txn.query(AppConstants.tblCustomers, columns: ['id'], where: 'id = ?', whereArgs: [sale.customerId]);
+        final custCheck = await txn.query(
+          AppConstants.tblCustomers,
+          columns: ['id'],
+          where: 'id = ? AND business_id = ?',
+          whereArgs: [sale.customerId, sale.businessId],
+        );
         if (custCheck.isEmpty) {
           throw Exception("Invalid Customer: Customer does not exist.");
         }
@@ -41,7 +46,13 @@ class BillingRepository {
       final allowNegativeStock = settingsResult.isNotEmpty && settingsResult.first['value'] == '1';
 
       // Get Default Warehouse
-      final warehouseResult = await txn.query(AppConstants.tblWarehouses, columns: ['id'], limit: 1);
+      final warehouseResult = await txn.query(
+        AppConstants.tblWarehouses,
+        columns: ['id'],
+        where: 'business_id = ?',
+        whereArgs: [sale.businessId],
+        limit: 1,
+      );
       final warehouseId = warehouseResult.isNotEmpty ? warehouseResult.first['id'] as int : 1;
 
       double totalCogs = 0.0;
@@ -58,8 +69,8 @@ class BillingRepository {
         final productResult = await txn.query(
           AppConstants.tblProducts,
           columns: ['stock', 'purchase_price', 'name'],
-          where: 'id = ?',
-          whereArgs: [item.productId],
+          where: 'id = ? AND business_id = ?',
+          whereArgs: [item.productId, sale.businessId],
         );
         if (productResult.isEmpty) {
           throw Exception("Product '${item.productName}' not found in database.");
@@ -86,8 +97,8 @@ class BillingRepository {
         final product = await txn.query(
           AppConstants.tblProducts,
           columns: ['purchase_price', 'stock'],
-          where: 'id = ?',
-          whereArgs: [item.productId],
+          where: 'id = ? AND business_id = ?',
+          whereArgs: [item.productId, sale.businessId],
         );
         final costPrice = product.isNotEmpty ? (product.first['purchase_price'] as num).toDouble() : 0.0;
         final openingStock = product.isNotEmpty ? (product.first['stock'] as num).toDouble() : 0.0;
@@ -99,8 +110,8 @@ class BillingRepository {
 
         // Decrement Product Master stock
         await txn.rawUpdate(
-          "UPDATE ${AppConstants.tblProducts} SET stock = stock - ?, updated_at = datetime('now') WHERE id = ?",
-          [item.quantity, item.productId],
+          "UPDATE ${AppConstants.tblProducts} SET stock = stock - ?, updated_at = datetime('now') WHERE id = ? AND business_id = ?",
+          [item.quantity, item.productId, sale.businessId],
         );
 
         // Decrement Warehouse Stock
@@ -126,8 +137,8 @@ class BillingRepository {
       // 3. Update customer outstanding balance if credit sale
       if (sale.customerId != null && sale.balanceDue > 0) {
         await txn.rawUpdate(
-          "UPDATE ${AppConstants.tblCustomers} SET balance = balance + ? WHERE id = ?",
-          [sale.balanceDue, sale.customerId],
+          "UPDATE ${AppConstants.tblCustomers} SET balance = balance + ? WHERE id = ? AND business_id = ?",
+          [sale.balanceDue, sale.customerId, sale.businessId],
         );
       }
 

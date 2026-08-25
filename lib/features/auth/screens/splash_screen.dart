@@ -56,20 +56,21 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [AppColors.primary, AppColors.accent]),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(28),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.3),
+                        color: AppColors.primary.withValues(alpha: 0.15),
                         blurRadius: 30,
                         offset: const Offset(0, 10),
                       )
                     ],
                   ),
-                  child: const Center(
-                    child: Text(
-                      '💼',
-                      style: TextStyle(fontSize: 48),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: Image.asset(
+                      'assets/logo.png',
+                      fit: BoxFit.cover,
                     ),
                   ),
                 ).animate()

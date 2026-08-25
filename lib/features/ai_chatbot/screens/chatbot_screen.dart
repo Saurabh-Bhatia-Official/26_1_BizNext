@@ -54,86 +54,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
-  void _showApiKeyDialog(BuildContext context, String currentKey) {
-    final controller = TextEditingController(text: currentKey);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: [
-            const Icon(Icons.key_rounded, color: AppColors.primary, size: 24),
-            const SizedBox(width: 12),
-            const Text(
-              "Gemini API Key",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "To access your live database and ask business questions, paste a Gemini API Key.",
-              style: TextStyle(
-                fontSize: 13,
-                color: isDark ? AppColors.textMuted : AppColors.textLight.withValues(alpha: 0.6),
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              obscureText: true,
-              style: const TextStyle(fontSize: 14),
-              decoration: AppTheme.inputDecoration(
-                labelText: "API Key",
-                prefixIcon: Icons.vpn_key_rounded,
-                isDark: isDark,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              "Don't have a key? You can get a free one from Google AI Studio (aistudio.google.com). Leave empty to use Offline Demo Mode.",
-              style: TextStyle(
-                fontSize: 11,
-                color: AppColors.primary.withValues(alpha: 0.8),
-                height: 1.3,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text("Cancel", style: TextStyle(color: AppColors.textMuted)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              ref.read(chatbotProvider.notifier).saveApiKey(controller.text);
-              Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("API Key updated successfully!"),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text("Save Key"),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -208,19 +128,15 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                               Container(
                                 width: 8,
                                 height: 8,
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: state.apiKey.isNotEmpty
-                                      ? AppColors.success
-                                      : AppColors.warning,
+                                  color: AppColors.success,
                                 ),
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                state.apiKey.isNotEmpty
-                                    ? "Live Online Mode"
-                                    : "Offline Demo Mode",
-                                style: const TextStyle(
+                              const Text(
+                                "Local NLP Mode",
+                                style: TextStyle(
                                   fontSize: 11,
                                   color: AppColors.textMuted,
                                   fontWeight: FontWeight.w600,
@@ -230,20 +146,6 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
                           ),
                         ],
                       ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.key_rounded, size: 20),
-                      tooltip: "API Key Settings",
-                      style: IconButton.styleFrom(
-                        backgroundColor: isDark
-                            ? Colors.white.withValues(alpha: 0.04)
-                            : AppColors.primary.withValues(alpha: 0.08),
-                        foregroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () => _showApiKeyDialog(context, state.apiKey),
                     ),
                     const SizedBox(width: 8),
                     IconButton(

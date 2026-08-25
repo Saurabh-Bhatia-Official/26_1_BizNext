@@ -238,14 +238,15 @@ class _LoginCard extends StatelessWidget {
               child: Container(
                 width: 72, height: 72,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [AppColors.primary, AppColors.accent]),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(22),
-                  boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8))],
+                  boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 8))],
                 ),
-                child: const Center(
-                  child: Text(
-                    '💼',
-                    style: TextStyle(fontSize: 36),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: Image.asset(
+                    'assets/logo.png',
+                    fit: BoxFit.cover,
                   ),
                 ),
               ).animate().scale(curve: Curves.elasticOut, duration: 600.ms),

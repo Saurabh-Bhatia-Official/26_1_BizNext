@@ -7,11 +7,12 @@ import '../theme/app_theme.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../../features/settings/providers/settings_provider.dart';
-import '../services/subscription_service.dart';
-import '../../features/settings/screens/subscription_screen.dart';
 import 'app_shell.dart';
 import '../services/sync_service.dart';
 import '../database/database_providers.dart';
+import '../services/rbac_service.dart';
+
+import '../constants/app_constants.dart';
 
 class NavDestination {
   final String label;
@@ -58,6 +59,7 @@ class AppSidebar extends ConsumerWidget {
     final sidebarColor = isDark ? AppColors.darkSidebar : AppColors.lightSidebar;
     final isCollapsed = isCollapsedOverride ?? (MediaQuery.of(context).size.width < 1100);
     final settings = ref.watch(featureSettingsProvider);
+    final isWide = MediaQuery.of(context).size.width >= AppConstants.sidebarBreakpoint;
 
     return Container(
       width: isCollapsed ? 88 : 280,
@@ -80,10 +82,19 @@ class AppSidebar extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
                   children: [
-                    const Text(
-                      '💼',
-                      style: TextStyle(
-                        fontSize: 32,
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.asset(
+                          'assets/logo.png',
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                     if (!isCollapsed) ...[
@@ -121,17 +132,41 @@ class AppSidebar extends ConsumerWidget {
                           ],
                         ),
                       ),
+                      if (isWide) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: () => ref.read(sidebarHiddenProvider.notifier).state = true,
+                          icon: const Icon(Icons.menu_open_rounded, color: AppColors.primary, size: 20),
+                          tooltip: 'Hide Sidebar',
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+                if (!isCollapsed) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
                       const _ReloadButton(),
                       const SizedBox(width: 8),
                       _ThemeToggleSmall(),
                     ],
-                  ],
-                ),
+                  ),
+                ],
                 if (isCollapsed) ...[
                   const SizedBox(height: 20),
                   const _ReloadButton(),
                   const SizedBox(height: 12),
                   _ThemeToggleSmall(),
+                  if (isWide) ...[
+                    const SizedBox(height: 12),
+                    IconButton(
+                      onPressed: () => ref.read(sidebarHiddenProvider.notifier).state = true,
+                      icon: const Icon(Icons.menu_open_rounded, color: AppColors.primary, size: 20),
+                      tooltip: 'Hide Sidebar',
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -205,32 +240,33 @@ class AppSidebar extends ConsumerWidget {
     final d = navDestinations[index];
     final active = selectedIndex == index;
     
-    // Gate subscription features
-    final isPro = ref.watch(subscriptionServiceProvider).isPro;
-    final restrictedIndices = [11, 12, 13, 14]; // Offers, Loyalty, Notifications, AI Assistant
-    final isLocked = !isPro && restrictedIndices.contains(index);
+    // Gate role-based access
+    final rbac = ref.watch(rbacProvider);
+    bool hasRoleAccess = true;
+    if (index == 9) { // Reports
+      hasRoleAccess = rbac.hasPermission(AppPermission.viewReports);
+    } else if (index == 10) { // Budgeting
+      hasRoleAccess = rbac.hasPermission(AppPermission.manageBudgets);
+    } else if (index == 15) { // Settings
+      hasRoleAccess = rbac.hasPermission(AppPermission.manageSettings);
+    } else if (index == 8) { // Accounts
+      hasRoleAccess = rbac.isOwnerOrAdmin || rbac.isManager;
+    } else if (index == 3 || index == 4 || index == 5 || index == 7) { // Purchase & Inventory, Suppliers
+      hasRoleAccess = rbac.isOwnerOrAdmin || rbac.isManager;
+    }
+
+    if (!hasRoleAccess) {
+      return const SizedBox.shrink(); // Hide the nav item completely for unauthorized roles
+    }
 
     return _SidebarItem(
       label: d.label,
       icon: active ? d.activeIcon : d.icon,
       isSelected: active,
       isCollapsed: isCollapsed,
-      isLocked: isLocked,
+      isLocked: false,
       onTap: () {
-        if (isLocked) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('"${d.label}" requires a Pro subscription. Please upgrade.'),
-              backgroundColor: Colors.amber.shade800,
-            ),
-          );
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
-          );
-        } else {
-          onDestinationSelected(index);
-        }
+        onDestinationSelected(index);
       },
     );
   }
@@ -410,8 +446,8 @@ class _SidebarFooter extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tier = ref.watch(subscriptionTierProvider);
-    final isPro = tier == 'pro';
+    const tier = 'pro';
+    const isPro = true;
 
     if (isCollapsed) {
       return InkWell(
@@ -492,11 +528,12 @@ class _SidebarFooter extends ConsumerWidget {
                   ),
                 ),
                 Text(
-                  isPro ? 'Pro Plan' : 'Free Plan',
+                  (user?.role ?? 'Owner').toUpperCase(),
                   style: TextStyle(
-                    color: isPro ? Colors.amber : AppColors.textMuted,
+                    color: AppColors.primary,
                     fontSize: 10,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ],

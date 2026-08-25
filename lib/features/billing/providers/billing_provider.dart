@@ -15,6 +15,7 @@ import '../../loyalty/providers/loyalty_provider.dart';
 import '../../customers/providers/customer_provider.dart';
 import '../../inventory/models/product_discount.dart';
 import '../../customers/models/customer_discount.dart';
+import '../../accounts/providers/accounts_provider.dart';
 
 final billingRepositoryProvider = Provider<BillingRepository>((ref) => BillingRepository());
 
@@ -282,6 +283,20 @@ class BillingNotifier extends StateNotifier<BillingState> {
       final paidAmount = isCredit ? 0.0 : state.grandTotal;
       final balanceDue = isCredit ? state.grandTotal : 0.0;
 
+      int? finalAccountId = state.selectedAccountId;
+      if (paidAmount > 0 && finalAccountId == null) {
+        try {
+          final accountsList = await _ref.read(accountsProvider.future);
+          if (accountsList.isNotEmpty) {
+            final cashAcc = accountsList.firstWhere(
+              (a) => a.name.toLowerCase().contains('cash'), 
+              orElse: () => accountsList.first
+            );
+            finalAccountId = cashAcc.id;
+          }
+        } catch (_) {}
+      }
+
       String finalNotes = state.notes ?? '';
       if (state.appliedOffers.isNotEmpty) {
         final offersStr = 'Offers Applied: ${state.appliedOffers.join(', ')}';
@@ -290,7 +305,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
         }
       }
 
-      final sale = state.toSaleHistory(
+      final sale = state.copyWith(selectedAccountId: finalAccountId).toSaleHistory(
         businessId: businessId,
         invoiceNo: invoiceNo,
         notesOverride: finalNotes.isEmpty ? null : finalNotes,
@@ -308,7 +323,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
 
       // Update Customer Loyalty Points
       if (state.selectedCustomerId != null) {
-        final currentCustomer = _ref.read(customersProvider).value?.firstWhere((c) => c.id == state.selectedCustomerId);
+        final currentCustomer = _ref.read(customersProvider).value?.where((c) => c.id == state.selectedCustomerId).firstOrNull;
         if (currentCustomer != null) {
           final updatedPoints = currentCustomer.loyaltyPoints - state.pointsRedeemed + state.pointsEarned;
           await _ref.read(customerRepositoryProvider).updateCustomer(

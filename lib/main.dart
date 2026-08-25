@@ -12,24 +12,13 @@ import 'core/theme/app_theme.dart';
 import 'core/widgets/app_shell.dart';
 import 'core/constants/app_constants.dart';
 
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/screens/business_selector_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/splash_screen.dart';
-import 'features/auth/screens/sync_mode_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    debugPrint("Firebase init skipped/unconfigured on this platform: $e");
-  }
 
   // Initialize FFI for Windows/Linux desktop
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
@@ -43,13 +32,10 @@ Future<void> main() async {
   // Load preferences
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString(AppConstants.prefSyncMode, 'offline');
-  const initialSyncMode = 'offline';
-
   runApp(
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
-        syncModeProvider.overrideWith((ref) => SyncModeNotifier(initialSyncMode)),
       ],
       child: const BizNextApp(),
     ),

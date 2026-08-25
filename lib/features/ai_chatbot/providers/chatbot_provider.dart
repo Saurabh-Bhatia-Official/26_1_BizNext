@@ -10,23 +10,19 @@ import '../models/chatbot_message.dart';
 
 class ChatbotState {
   final List<ChatbotMessage> messages;
-  final String apiKey;
   final bool isLoading;
 
   const ChatbotState({
     this.messages = const [],
-    this.apiKey = '',
     this.isLoading = false,
   });
 
   ChatbotState copyWith({
     List<ChatbotMessage>? messages,
-    String? apiKey,
     bool? isLoading,
   }) {
     return ChatbotState(
       messages: messages ?? this.messages,
-      apiKey: apiKey ?? this.apiKey,
       isLoading: isLoading ?? this.isLoading,
     );
   }
@@ -36,15 +32,13 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
   final SharedPreferences _prefs;
   final Ref _ref;
 
-  static const String _prefApiKey = 'gemini_api_key';
-  static const String _prefChatHistory = 'chatbot_chat_history_v1';
+  static const String _prefChatHistory = 'chatbot_chat_history_local_v1';
 
   ChatbotNotifier(this._prefs, this._ref) : super(const ChatbotState()) {
     _loadState();
   }
 
   void _loadState() {
-    final apiKey = _prefs.getString(_prefApiKey) ?? '';
     final historyStr = _prefs.getString(_prefChatHistory);
     List<ChatbotMessage> history = [];
 
@@ -62,7 +56,7 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
       history = [
         ChatbotMessage(
           id: 'greeting',
-          text: "Hello! I am your BizNext AI Assistant. Ask me anything about your products, sales history, customers, or general business concepts!",
+          text: "Hello! I am your completely local BizNext AI Assistant. Ask me anything about your sales, inventory, or account balances. All queries are processed securely on your device!",
           isUser: false,
           timestamp: DateTime.now(),
         )
@@ -71,21 +65,15 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
 
     state = ChatbotState(
       messages: history,
-      apiKey: apiKey,
       isLoading: false,
     );
-  }
-
-  Future<void> saveApiKey(String key) async {
-    await _prefs.setString(_prefApiKey, key.trim());
-    state = state.copyWith(apiKey: key.trim());
   }
 
   Future<void> clearHistory() async {
     final defaultGreeting = [
       ChatbotMessage(
         id: 'greeting',
-        text: "Hello! I am your BizNext AI Assistant. Ask me anything about your products, sales history, customers, or general business concepts!",
+        text: "Hello! I am your completely local BizNext AI Assistant. Ask me anything about your sales, inventory, or account balances. All queries are processed securely on your device!",
         isUser: false,
         timestamp: DateTime.now(),
       )
@@ -114,11 +102,11 @@ class ChatbotNotifier extends StateNotifier<ChatbotState> {
 
     final businessId = _ref.read(activeBusinessIdProvider);
 
-    // 2. Call Service to get Response
+    // 2. Call Local NLP Service to get Response
     final botResponse = await AIChatbotService.sendMessage(
       prompt: text,
       history: state.messages.where((m) => m.id != 'greeting').toList(),
-      apiKey: state.apiKey,
+      apiKey: 'local_nlp_mode', // Ignored now
       businessId: businessId,
     );
 

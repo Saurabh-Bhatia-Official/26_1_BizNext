@@ -14,6 +14,7 @@ import '../../../core/widgets/searchable_dropdown.dart';
 import '../../../core/widgets/category_manager_screen.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../../core/services/media_upload_service.dart';
+import '../../../core/services/shortcut_service.dart';
 
 class AddEditProductScreen extends ConsumerStatefulWidget {
   final Product? product;
@@ -101,9 +102,18 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final categoriesAsync = ref.watch(categoriesProvider);
     final priceCatsAsync = ref.watch(priceCategoriesProvider);
+    final shortcuts = ref.watch(shortcutSettingsProvider);
+    final saveShortcut = shortcuts['save'] ?? ShortcutNotifier.defaults['save']?.defaultShortcut ?? '';
+    final cancelShortcut = shortcuts['cancel'] ?? ShortcutNotifier.defaults['cancel']?.defaultShortcut ?? '';
+    final saveBtnLabel = isEditing ? 'Save Changes' : 'Create Product';
+    final saveBtnText = saveShortcut.isNotEmpty ? '$saveBtnLabel ($saveShortcut)' : saveBtnLabel;
+    final cancelBtnText = cancelShortcut.isNotEmpty ? 'Cancel ($cancelShortcut)' : 'Cancel';
 
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
+    return AppShortcut(
+      actionId: 'cancel',
+      onPressed: () => Navigator.maybePop(context),
+      child: Scaffold(
+        backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
       appBar: AppBar(
         title: Text(isEditing ? 'Edit Product' : 'New Product'),
         backgroundColor: Colors.transparent,
@@ -363,22 +373,26 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
-                      child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
+                      child: Text(cancelBtnText, style: const TextStyle(fontWeight: FontWeight.w700)),
                     ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     flex: 2,
-                    child: ElevatedButton(
+                    child: AppShortcut(
+                      actionId: 'save',
                       onPressed: _saveProduct,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        elevation: 4,
-                        shadowColor: AppColors.primary.withValues(alpha: 0.4),
+                      child: ElevatedButton(
+                        onPressed: _saveProduct,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 4,
+                          shadowColor: AppColors.primary.withValues(alpha: 0.4),
+                        ),
+                        child: Text(saveBtnText),
                       ),
-                      child: Text(isEditing ? 'Save Changes' : 'Create Product'),
                     ),
                   ),
                 ],
@@ -388,7 +402,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
           ),
         ),
       ),
-    );
+    ),);
   }
 
   TextEditingController _getTierCtrl(int catId) {
@@ -435,7 +449,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     try {
       final success = await ref.read(productFormProvider.notifier).saveProduct(product);
       if (success && mounted) {
-        await _showSuccessAndClose(context, isEditing);
+        Navigator.pop(context);
       }
     } on DuplicateProductNameException catch (e) {
       if (mounted) {

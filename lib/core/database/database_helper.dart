@@ -1270,16 +1270,76 @@ class DatabaseHelper {
   }
 
   // ── Generic CRUD ───────────────────────────────────────────────────────────
+  Future<int?> getActiveBusinessId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(AppConstants.prefBusinessId);
+  }
+
+  bool _isBusinessScopedTable(String table) {
+    const scopedTables = {
+      AppConstants.tblCategories,
+      AppConstants.tblProducts,
+      AppConstants.tblPriceCategories,
+      AppConstants.tblCustomers,
+      AppConstants.tblSuppliers,
+      AppConstants.tblSales,
+      AppConstants.tblPurchases,
+      AppConstants.tblLedger,
+      AppConstants.tblAccounts,
+      AppConstants.tblExpenses,
+      AppConstants.tblExpenseCategories,
+      AppConstants.tblTransactions,
+      AppConstants.tblTransactionCategories,
+      AppConstants.tblCustomerDiscounts,
+      AppConstants.tblProductDiscounts,
+      AppConstants.tblOffers,
+      AppConstants.tblLoyaltySettings,
+      AppConstants.tblAppSettings,
+      AppConstants.tblBudgets,
+      AppConstants.tblInventoryTransactions,
+      AppConstants.tblPurchaseReturns,
+      AppConstants.tblSalesReturns,
+      AppConstants.tblWarehouses,
+      AppConstants.tblRestaurantTables,
+      AppConstants.tblKot,
+    };
+    return scopedTables.contains(table);
+  }
+
+  Map<String, dynamic> _scopeWhereClause(String? where, List<dynamic>? whereArgs, int businessId) {
+    if (where == null || where.trim().isEmpty) {
+      return {
+        'where': 'business_id = ?',
+        'whereArgs': [businessId],
+      };
+    }
+    if (where.contains('business_id')) {
+      return {
+        'where': where,
+        'whereArgs': whereArgs,
+      };
+    }
+    return {
+      'where': '($where) AND business_id = ?',
+      'whereArgs': [...?whereArgs, businessId],
+    };
+  }
+
   Future<int> insert(String table, Map<String, dynamic> data) async {
     if (table != 'sync_queue') {
       await _enforceFreeLimits(table);
     }
     final db = await database;
-    final id = await db.insert(table, data, conflictAlgorithm: ConflictAlgorithm.replace);
+    final activeBizId = await getActiveBusinessId();
+    final Map<String, dynamic> securedData = Map<String, dynamic>.from(data);
+    if (activeBizId != null && _isBusinessScopedTable(table)) {
+      securedData['business_id'] = activeBizId;
+    }
+    final id = await db.insert(table, securedData, conflictAlgorithm: ConflictAlgorithm.replace);
     if (id > 0) {
       notify(table);
       if (table != 'sync_queue') {
-        await _addToSyncQueue(table, id, 'INSERT', data);
+        await _addToSyncQueue(table, id, 'INSERT', securedData);
       }
     }
     return id;
@@ -1294,17 +1354,47 @@ class DatabaseHelper {
     int? offset,
   }) async {
     final db = await database;
+    final activeBizId = await getActiveBusinessId();
+    if (activeBizId != null && _isBusinessScopedTable(table)) {
+      final queryParams = _scopeWhereClause(where, whereArgs, activeBizId);
+      final scopedWhere = queryParams['where'] as String?;
+      final scopedWhereArgs = queryParams['whereArgs'] as List<dynamic>?;
+      return db.query(table, where: scopedWhere, whereArgs: scopedWhereArgs, orderBy: orderBy, limit: limit, offset: offset);
+    }
     return db.query(table, where: where, whereArgs: whereArgs, orderBy: orderBy, limit: limit, offset: offset);
   }
 
   Future<Map<String, dynamic>?> queryById(String table, int id) async {
     final db = await database;
+    final activeBizId = await getActiveBusinessId();
+    if (activeBizId != null && _isBusinessScopedTable(table)) {
+      final r = await db.query(table, where: 'id = ? AND business_id = ?', whereArgs: [id, activeBizId]);
+      return r.isNotEmpty ? r.first : null;
+    }
     final r = await db.query(table, where: 'id = ?', whereArgs: [id]);
     return r.isNotEmpty ? r.first : null;
   }
 
   Future<int> update(String table, Map<String, dynamic> data, int id) async {
     final db = await database;
+    final activeBizId = await getActiveBusinessId();
+    
+    if (activeBizId != null) {
+      if (_isBusinessScopedTable(table)) {
+        final updatedData = Map<String, dynamic>.from(data);
+        updatedData['business_id'] = activeBizId;
+        final count = await db.update(table, updatedData, where: 'id = ? AND business_id = ?', whereArgs: [id, activeBizId]);
+        if (count > 0) {
+          notify(table);
+          await _addToSyncQueue(table, id, 'UPDATE', updatedData);
+        }
+        return count;
+      }
+      if (table == AppConstants.tblBusinesses && id != activeBizId) {
+        throw Exception("Security violation: Unauthorized attempt to modify business ID $id.");
+      }
+    }
+
     final count = await db.update(table, data, where: 'id = ?', whereArgs: [id]);
     if (count > 0) {
       notify(table);
@@ -1315,6 +1405,22 @@ class DatabaseHelper {
 
   Future<int> delete(String table, int id) async {
     final db = await database;
+    final activeBizId = await getActiveBusinessId();
+    
+    if (activeBizId != null) {
+      if (_isBusinessScopedTable(table)) {
+        final count = await db.delete(table, where: 'id = ? AND business_id = ?', whereArgs: [id, activeBizId]);
+        if (count > 0) {
+          notify(table);
+          await _addToSyncQueue(table, id, 'DELETE', null);
+        }
+        return count;
+      }
+      if (table == AppConstants.tblBusinesses && id != activeBizId) {
+        throw Exception("Security violation: Unauthorized attempt to delete business ID $id.");
+      }
+    }
+
     final count = await db.delete(table, where: 'id = ?', whereArgs: [id]);
     if (count > 0) {
       notify(table);
@@ -1324,40 +1430,10 @@ class DatabaseHelper {
   }
 
   Future<void> _enforceFreeLimits(String table) async {
-    final prefs = await SharedPreferences.getInstance();
-    final tier = prefs.getString('subscription_tier') ?? 'free';
-    if (tier == 'pro') return;
-
-    if (table == AppConstants.tblProducts) {
-      final countResult = await rawQuery('SELECT COUNT(*) as count FROM ${AppConstants.tblProducts} WHERE is_active = 1');
-      final count = countResult.isNotEmpty ? (countResult.first['count'] as int) : 0;
-      if (count >= 10) {
-        throw Exception('Free tier limit reached: Maximum 10 products allowed. Please upgrade to Pro.');
-      }
-    } else if (table == AppConstants.tblSales) {
-      final countResult = await rawQuery('SELECT COUNT(*) as count FROM ${AppConstants.tblSales}');
-      final count = countResult.isNotEmpty ? (countResult.first['count'] as int) : 0;
-      if (count >= 10) {
-        throw Exception('Free tier limit reached: Maximum 10 sales invoices allowed. Please upgrade to Pro.');
-      }
-    } else if (table == AppConstants.tblCustomers) {
-      final countResult = await rawQuery('SELECT COUNT(*) as count FROM ${AppConstants.tblCustomers}');
-      final count = countResult.isNotEmpty ? (countResult.first['count'] as int) : 0;
-      if (count >= 10) {
-        throw Exception('Free tier limit reached: Maximum 10 customers allowed. Please upgrade to Pro.');
-      }
-    } else if (table == AppConstants.tblOffers) {
-      throw Exception('Offers & Promotions require a Pro subscription. Please upgrade.');
-    } else if (table == AppConstants.tblLoyaltySettings) {
-      throw Exception('Loyalty Program configuration requires a Pro subscription. Please upgrade.');
-    }
+    // Limits removed - all features are completely unlocked
   }
 
   Future<void> _addToSyncQueue(String table, int recordId, String operation, Map<String, dynamic>? data) async {
-    final prefs = await SharedPreferences.getInstance();
-    final tier = prefs.getString('subscription_tier') ?? 'free';
-    if (tier != 'pro') return;
-
     final syncable = [
       AppConstants.tblCategories,
       AppConstants.tblProducts,
@@ -1635,75 +1711,372 @@ class DatabaseHelper {
 // ── Web Fallback Mock Database Implementation ────────────────────────────────
 
 class MockDatabase implements Database {
+  static final Map<String, List<Map<String, dynamic>>> _cache = {};
+
+  Future<List<Map<String, dynamic>>> _getTable(String table) async {
+    if (_cache.containsKey(table)) {
+      return _cache[table]!;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final jsonStr = prefs.getString('mock_db_$table');
+    List<Map<String, dynamic>> list = [];
+    if (jsonStr != null) {
+      try {
+        final decoded = jsonDecode(jsonStr) as List<dynamic>;
+        list = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      } catch (_) {}
+    } else {
+      if (table == AppConstants.tblUsers) {
+        list = [
+          {
+            'id': 1,
+            'username': 'admin',
+            'password_hash': DatabaseHelper.hashPassword('admin123'),
+            'full_name': 'Admin User',
+            'role': AppConstants.roleOwner,
+            'is_active': 1,
+          }
+        ];
+      } else if (table == AppConstants.tblBusinesses) {
+        list = [
+          {
+            'id': 1,
+            'name': 'Demo Business',
+            'type': 'Retail Shop',
+            'owner_id': 1,
+            'is_active': 1,
+          }
+        ];
+      } else if (table == AppConstants.tblUserBusinesses) {
+        list = [
+          {
+            'id': 1,
+            'user_id': 1,
+            'business_id': 1,
+            'role': AppConstants.roleOwner,
+          }
+        ];
+      } else if (table == AppConstants.tblAppSettings) {
+        list = [
+          {'key': 'customer_discount_enabled', 'value': '1'},
+          {'key': 'product_discount_enabled', 'value': '1'},
+          {'key': 'offers_enabled', 'value': '1'},
+          {'key': 'loyalty_enabled', 'value': '0'},
+          {'key': 'gst_enabled', 'value': '1'},
+          {'key': 'inventory_tracking_enabled', 'value': '1'},
+          {'key': 'notifications_enabled', 'value': '0'},
+        ];
+      }
+      prefs.setString('mock_db_$table', jsonEncode(list));
+    }
+    _cache[table] = list;
+    return list;
+  }
+
+  Future<void> _saveTable(String table, List<Map<String, dynamic>> data) async {
+    _cache[table] = data;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('mock_db_$table', jsonEncode(data));
+  }
+
+  @override
+  Future<int> insert(String table, Map<String, dynamic> values, {String? nullColumnHack, ConflictAlgorithm? conflictAlgorithm}) async {
+    final list = await _getTable(table);
+    final row = Map<String, dynamic>.from(values);
+    if (!row.containsKey('id')) {
+      row['id'] = list.isEmpty ? 1 : (list.map((e) => e['id'] as int).reduce((a, b) => a > b ? a : b) + 1);
+    } else {
+      final existingIndex = list.indexWhere((e) => e['id'] == row['id']);
+      if (existingIndex != -1) {
+        list[existingIndex] = row;
+        await _saveTable(table, list);
+        return row['id'] as int;
+      }
+    }
+    list.add(row);
+    await _saveTable(table, list);
+    return row['id'] as int;
+  }
+
   @override
   Future<List<Map<String, Object?>>> query(String table, {bool? distinct, List<String>? columns, String? where, List<Object?>? whereArgs, String? groupBy, String? having, String? orderBy, int? limit, int? offset}) async {
-    if (table == AppConstants.tblUsers) {
-      return [
-        {
-          'id': 1,
-          'username': 'admin',
-          'password_hash': DatabaseHelper.hashPassword('admin123'),
-          'full_name': 'Admin User',
-          'role': AppConstants.roleOwner,
-          'is_active': 1,
+    final list = await _getTable(table);
+    var filtered = List<Map<String, dynamic>>.from(list);
+    
+    if (where != null && whereArgs != null) {
+      final parts = where.split('AND');
+      for (var i = 0; i < parts.length; i++) {
+        final part = parts[i].trim();
+        if (part.contains('=')) {
+          final key = part.split('=').first.trim().replaceAll('(', '').replaceAll(')', '');
+          if (i < whereArgs.length) {
+            final val = whereArgs[i];
+            filtered = filtered.where((row) => row[key]?.toString() == val?.toString()).toList();
+          }
         }
-      ];
+      }
     }
-    if (table == AppConstants.tblBusinesses) {
-      return [
-        {
-          'id': 1,
-          'name': 'Demo Business',
-          'type': 'Retail Shop',
-          'owner_id': 1,
-          'is_active': 1,
+
+    if (limit != null) {
+      filtered = filtered.take(limit).toList();
+    }
+    return filtered.map((e) => Map<String, Object?>.from(e)).toList();
+  }
+
+  @override
+  Future<int> update(String table, Map<String, dynamic> values, {String? where, List<Object?>? whereArgs, ConflictAlgorithm? conflictAlgorithm}) async {
+    final list = await _getTable(table);
+    int count = 0;
+    
+    for (var i = 0; i < list.length; i++) {
+      bool matches = true;
+      if (where != null && whereArgs != null) {
+        final parts = where.split('AND');
+        for (var j = 0; j < parts.length; j++) {
+          final part = parts[j].trim();
+          if (part.contains('=')) {
+            final key = part.split('=').first.trim().replaceAll('(', '').replaceAll(')', '');
+            if (j < whereArgs.length) {
+              final val = whereArgs[j];
+              if (list[i][key]?.toString() != val?.toString()) {
+                matches = false;
+              }
+            }
+          }
         }
-      ];
+      }
+      if (matches) {
+        list[i] = {...list[i], ...values};
+        count++;
+      }
     }
-    if (table == AppConstants.tblUserBusinesses) {
-      return [
-        {
-          'id': 1,
-          'user_id': 1,
-          'business_id': 1,
-          'role': AppConstants.roleOwner,
+    await _saveTable(table, list);
+    return count;
+  }
+
+  @override
+  Future<int> delete(String table, {String? where, List<Object?>? whereArgs}) async {
+    final list = await _getTable(table);
+    final initialLength = list.length;
+    
+    if (where == null) {
+      await _saveTable(table, []);
+      return initialLength;
+    }
+
+    list.removeWhere((row) {
+      bool matches = true;
+      if (whereArgs != null) {
+        final parts = where.split('AND');
+        for (var j = 0; j < parts.length; j++) {
+          final part = parts[j].trim();
+          if (part.contains('=')) {
+            final key = part.split('=').first.trim().replaceAll('(', '').replaceAll(')', '');
+            if (j < whereArgs.length) {
+              final val = whereArgs[j];
+              if (row[key]?.toString() != val?.toString()) {
+                matches = false;
+              }
+            }
+          }
         }
-      ];
-    }
-    if (table == AppConstants.tblAppSettings) {
-      return [
-        {'key': 'customer_discount_enabled', 'value': '1'},
-        {'key': 'product_discount_enabled', 'value': '1'},
-        {'key': 'offers_enabled', 'value': '1'},
-        {'key': 'loyalty_enabled', 'value': '0'},
-        {'key': 'gst_enabled', 'value': '1'},
-        {'key': 'inventory_tracking_enabled', 'value': '1'},
-        {'key': 'notifications_enabled', 'value': '0'},
-      ];
-    }
-    return [];
+      }
+      return matches;
+    });
+    
+    await _saveTable(table, list);
+    return initialLength - list.length;
   }
 
   @override
   Future<List<Map<String, Object?>>> rawQuery(String sql, [List<Object?>? arguments]) async {
-    if (sql.contains(AppConstants.tblUsers)) {
-      return [
-        {
-          'id': 1,
-          'username': 'admin',
-          'password_hash': DatabaseHelper.hashPassword('admin123'),
-          'full_name': 'Admin User',
-          'role': AppConstants.roleOwner,
-          'is_active': 1,
+    final lowerSql = sql.toLowerCase();
+    String? matchedTable;
+    for (var table in [
+      AppConstants.tblUsers, AppConstants.tblBusinesses, AppConstants.tblUserBusinesses,
+      AppConstants.tblCategories, AppConstants.tblProducts, AppConstants.tblPriceCategories,
+      AppConstants.tblCustomers, AppConstants.tblSuppliers, AppConstants.tblSales,
+      AppConstants.tblSaleItems, AppConstants.tblPurchases, AppConstants.tblPurchaseItems,
+      AppConstants.tblLedger, AppConstants.tblAccounts, AppConstants.tblExpenses,
+      AppConstants.tblAppSettings, AppConstants.tblBudgets, AppConstants.tblLoyaltySettings,
+      AppConstants.tblOffers, AppConstants.tblRestaurantTables, AppConstants.tblKot,
+      AppConstants.tblTransactions
+    ]) {
+      if (lowerSql.contains(table)) {
+        matchedTable = table;
+        break;
+      }
+    }
+
+    if (matchedTable != null) {
+      var list = await _getTable(matchedTable);
+      
+      // Filter list based on arguments
+      if (arguments != null && arguments.isNotEmpty) {
+        if (lowerSql.contains('business_id = ?') || lowerSql.contains('business_id =')) {
+          final bizId = arguments.first;
+          list = list.where((row) => row['business_id']?.toString() == bizId?.toString()).toList();
+        } else if (lowerSql.contains('username = ?') || lowerSql.contains('username =')) {
+          list = list.where((row) => row['username'] == arguments.first).toList();
         }
-      ];
+
+        // Apply date filter logic for stats/dashboard (date >= ? and date < ?)
+        if (lowerSql.contains('date >= ?') && arguments.length > 1) {
+          final dateStartStr = arguments[1] as String?;
+          if (dateStartStr != null) {
+            list = list.where((row) {
+              final rowDate = row['date'];
+              if (rowDate is String) {
+                return rowDate.compareTo(dateStartStr) >= 0;
+              }
+              return true;
+            }).toList();
+          }
+        }
+        if (lowerSql.contains('date < ?') && arguments.length > 2) {
+          final dateEndStr = arguments[2] as String?;
+          if (dateEndStr != null) {
+            list = list.where((row) {
+              final rowDate = row['date'];
+              if (rowDate is String) {
+                return rowDate.compareTo(dateEndStr) < 0;
+              }
+              return true;
+            }).toList();
+          }
+        }
+      }
+
+      // Check for aggregates
+      if (lowerSql.contains('sum(') || lowerSql.contains('count(')) {
+        final Map<String, Object?> resultRow = {};
+
+        // Find all aliases in the SQL query dynamically
+        // Matches e.g. "as total", "as net_sales", "as gst", "as discount", "as count"
+        final aliasMatches = RegExp(r'as\s+(\w+)').allMatches(lowerSql);
+        for (var m in aliasMatches) {
+          final alias = m.group(1);
+          if (alias != null) {
+            resultRow[alias] = 0.0; // Default all double/numeric aggregates to 0.0 to prevent null checks throwing
+          }
+        }
+
+        // 1. Check for count
+        if (lowerSql.contains('count(*)')) {
+          String alias = 'count';
+          if (lowerSql.contains('as count')) alias = 'count';
+          else if (lowerSql.contains('as transaction_count')) alias = 'transaction_count';
+          else if (lowerSql.contains('as total_products')) alias = 'total_products';
+          resultRow[alias] = list.length;
+        }
+
+        // 2. Check for inventory value
+        if (lowerSql.contains('stock * purchase_price')) {
+          double sum = 0.0;
+          for (var row in list) {
+            final stock = (row['stock'] as num?)?.toDouble() ?? 0.0;
+            final price = (row['purchase_price'] as num?)?.toDouble() ?? 0.0;
+            sum += stock * price;
+          }
+          resultRow['inventory_value'] = sum;
+        }
+
+        // 3. Check for low stock count
+        if (lowerSql.contains('stock <= min_stock')) {
+          int count = 0;
+          for (var row in list) {
+            final stock = (row['stock'] as num?)?.toDouble() ?? 0.0;
+            final minStock = (row['min_stock'] as num?)?.toDouble() ?? 0.0;
+            if (stock <= minStock) count++;
+          }
+          resultRow['low_stock_count'] = count;
+        }
+
+        // 4. Check for out of stock count
+        if (lowerSql.contains('stock <= 0')) {
+          int count = 0;
+          for (var row in list) {
+            final stock = (row['stock'] as num?)?.toDouble() ?? 0.0;
+            if (stock <= 0) count++;
+          }
+          resultRow['out_of_stock_count'] = count;
+        }
+
+        // 5. Check for general sum(grand_total)
+        if (lowerSql.contains('grand_total')) {
+          double grandTotalSum = 0.0;
+          double balanceDueSum = 0.0;
+          double gstSum = 0.0;
+          double discountSum = 0.0;
+          double netSalesSum = 0.0;
+          for (var row in list) {
+            final gt = (row['grand_total'] as num?)?.toDouble() ?? 0.0;
+            final gst = (row['gst_amount'] as num?)?.toDouble() ?? 0.0;
+            final disc = (row['discount'] as num?)?.toDouble() ?? 0.0;
+            grandTotalSum += gt;
+            balanceDueSum += (row['balance_due'] as num?)?.toDouble() ?? 0.0;
+            gstSum += gst;
+            discountSum += disc;
+            netSalesSum += (gt - gst);
+          }
+          if (lowerSql.contains('total_purchases')) {
+            resultRow['total_purchases'] = grandTotalSum;
+            resultRow['total_payable'] = balanceDueSum;
+          } else {
+            resultRow['total'] = grandTotalSum;
+            resultRow['net_sales'] = netSalesSum;
+            resultRow['gst'] = gstSum;
+            resultRow['discount'] = discountSum;
+          }
+        }
+
+        // 6. Check for general sum(amount)
+        if (lowerSql.contains('amount')) {
+          double amountSum = 0.0;
+          for (var row in list) {
+            amountSum += (row['amount'] as num?)?.toDouble() ?? 0.0;
+          }
+          resultRow['total'] = amountSum;
+        }
+
+        // 7. Check for general sum(balance)
+        if (lowerSql.contains('balance')) {
+          double balanceSum = 0.0;
+          for (var row in list) {
+            balanceSum += (row['balance'] as num?)?.toDouble() ?? 0.0;
+          }
+          resultRow['total'] = balanceSum;
+        }
+
+        // 8. Custom evaluation for cogsRes query (si.quantity * si.purchase_price)
+        if (lowerSql.contains('quantity *')) {
+          double cogsSum = 0.0;
+          for (var row in list) {
+            final qty = (row['quantity'] as num?)?.toDouble() ?? 0.0;
+            final pPrice = (row['purchase_price'] as num?)?.toDouble() ?? 0.0;
+            cogsSum += qty * pPrice;
+          }
+          resultRow['total'] = cogsSum;
+        }
+
+        return [resultRow];
+      }
+
+      if (arguments != null && arguments.isNotEmpty) {
+        if (lowerSql.contains('username =')) {
+          final filtered = list.where((row) => row['username'] == arguments[0]).toList();
+          return filtered.map((e) => Map<String, Object?>.from(e)).toList();
+        }
+      }
+
+      return list.map((e) => Map<String, Object?>.from(e)).toList();
     }
     return [];
   }
 
   @override
   Future<T> transaction<T>(Future<T> Function(Transaction txn) action, {bool? exclusive}) async {
-    final mockTxn = MockTransaction();
+    final mockTxn = MockTransaction(this);
     return await action(mockTxn as Transaction);
   }
 
@@ -1713,9 +2086,6 @@ class MockDatabase implements Database {
   @override
   dynamic noSuchMethod(Invocation invocation) {
     final name = invocation.memberName.toString();
-    if (name.contains("insert") || name.contains("update") || name.contains("delete")) {
-      return Future.value(1);
-    }
     if (name.contains("execute")) {
       return Future.value();
     }
@@ -1730,17 +2100,34 @@ class MockDatabase implements Database {
 }
 
 class MockTransaction implements Transaction {
+  final MockDatabase _db;
+  MockTransaction(this._db);
+
+  @override
+  Future<int> insert(String table, Map<String, dynamic> values, {String? nullColumnHack, ConflictAlgorithm? conflictAlgorithm}) =>
+      _db.insert(table, values, nullColumnHack: nullColumnHack, conflictAlgorithm: conflictAlgorithm);
+
+  @override
+  Future<List<Map<String, Object?>>> query(String table, {bool? distinct, List<String>? columns, String? where, List<Object?>? whereArgs, String? groupBy, String? having, String? orderBy, int? limit, int? offset}) =>
+      _db.query(table, distinct: distinct, columns: columns, where: where, whereArgs: whereArgs, groupBy: groupBy, having: having, orderBy: orderBy, limit: limit, offset: offset);
+
+  @override
+  Future<int> update(String table, Map<String, dynamic> values, {String? where, List<Object?>? whereArgs, ConflictAlgorithm? conflictAlgorithm}) =>
+      _db.update(table, values, where: where, whereArgs: whereArgs, conflictAlgorithm: conflictAlgorithm);
+
+  @override
+  Future<int> delete(String table, {String? where, List<Object?>? whereArgs}) =>
+      _db.delete(table, where: where, whereArgs: whereArgs);
+
+  @override
+  Future<List<Map<String, Object?>>> rawQuery(String sql, [List<Object?>? arguments]) =>
+      _db.rawQuery(sql, arguments);
+
   @override
   dynamic noSuchMethod(Invocation invocation) {
     final name = invocation.memberName.toString();
-    if (name.contains("query") || name.contains("rawQuery")) {
-      return Future.value(<Map<String, Object?>>[]);
-    }
-    if (name.contains("insert") || name.contains("update") || name.contains("delete") || name.contains("rawInsert")) {
+    if (name.contains("execute") || name.contains("rawInsert") || name.contains("rawUpdate")) {
       return Future.value(1);
-    }
-    if (name.contains("execute")) {
-      return Future.value();
     }
     return super.noSuchMethod(invocation);
   }

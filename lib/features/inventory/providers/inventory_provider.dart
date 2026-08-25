@@ -131,12 +131,16 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
         final tieredPrices = _ref.read(productTieredPricesProvider);
         await _repo.updateProductPrices(product.id!, tieredPrices);
       }
-      state = const AsyncValue.data(null);
+      if (mounted) {
+        state = const AsyncValue.data(null);
+      }
       return true;
     } on DuplicateProductNameException {
       rethrow; // Let the UI handle it
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) {
+        state = AsyncValue.error(e, st);
+      }
       return false;
     }
   }
@@ -145,10 +149,14 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     try {
       await _repo.deleteProduct(id);
-      state = const AsyncValue.data(null);
+      if (mounted) {
+        state = const AsyncValue.data(null);
+      }
       return true;
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) {
+        state = AsyncValue.error(e, st);
+      }
       return false;
     }
   }
@@ -164,10 +172,14 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
         barcode: null,
       );
       await _repo.addProduct(duplicated, businessId);
-      state = const AsyncValue.data(null);
+      if (mounted) {
+        state = const AsyncValue.data(null);
+      }
       return true;
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) {
+        state = AsyncValue.error(e, st);
+      }
       return false;
     }
   }
@@ -181,10 +193,14 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
       } else {
         await _repo.updateCategory(category);
       }
-      state = const AsyncValue.data(null);
+      if (mounted) {
+        state = const AsyncValue.data(null);
+      }
       return true;
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) {
+        state = AsyncValue.error(e, st);
+      }
       return false;
     }
   }
@@ -193,10 +209,14 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     try {
       await _repo.deleteCategory(id);
-      state = const AsyncValue.data(null);
+      if (mounted) {
+        state = const AsyncValue.data(null);
+      }
       return true;
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) {
+        state = AsyncValue.error(e, st);
+      }
       return false;
     }
   }
@@ -206,10 +226,14 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
     try {
       final businessId = _ref.read(activeBusinessIdProvider);
       await _repo.addPriceCategory(category, businessId);
-      state = const AsyncValue.data(null);
+      if (mounted) {
+        state = const AsyncValue.data(null);
+      }
       return true;
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) {
+        state = AsyncValue.error(e, st);
+      }
       return false;
     }
   }
@@ -218,10 +242,14 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     try {
       await _repo.deletePriceCategory(id);
-      state = const AsyncValue.data(null);
+      if (mounted) {
+        state = const AsyncValue.data(null);
+      }
       return true;
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) {
+        state = AsyncValue.error(e, st);
+      }
       return false;
     }
   }

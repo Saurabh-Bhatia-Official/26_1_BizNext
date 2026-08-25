@@ -152,14 +152,6 @@ class _AddPurchaseScreenState extends ConsumerState<AddPurchaseScreen> {
         children: [
           Row(
             children: [
-              IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.arrow_back_rounded),
-                style: IconButton.styleFrom(
-                  backgroundColor: isDark ? Colors.white.withValues(alpha: 0.05) : AppColors.lightBg,
-                ),
-              ),
-              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -653,15 +645,49 @@ class _EditablePurchaseRow extends ConsumerWidget {
   }
 }
 
-class _SummaryDetailsPanel extends ConsumerWidget {
+class _SummaryDetailsPanel extends ConsumerStatefulWidget {
   final bool isDark;
   final VoidCallback onComplete;
   const _SummaryDetailsPanel({required this.isDark, required this.onComplete});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SummaryDetailsPanel> createState() => _SummaryDetailsPanelState();
+}
+
+class _SummaryDetailsPanelState extends ConsumerState<_SummaryDetailsPanel> {
+  late final TextEditingController _discountController;
+  late final TextEditingController _paidAmountController;
+
+  @override
+  void initState() {
+    super.initState();
+    final form = ref.read(purchaseFormProvider);
+    _discountController = TextEditingController(text: form.discount > 0 ? form.discount.toString() : '');
+    _paidAmountController = TextEditingController(text: form.paidAmount > 0 ? form.paidAmount.toString() : '');
+  }
+
+  @override
+  void dispose() {
+    _discountController.dispose();
+    _paidAmountController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final form = ref.watch(purchaseFormProvider);
     final accountsAsync = ref.watch(accountsProvider);
+
+    // Sync from provider to controllers if modified externally (e.g. form reset or loaded for edit)
+    final providerDiscountStr = form.discount > 0 ? form.discount.toString() : '';
+    if (_discountController.text != providerDiscountStr && double.tryParse(_discountController.text) != form.discount) {
+      _discountController.text = providerDiscountStr;
+    }
+    
+    final providerPaidStr = form.paidAmount > 0 ? form.paidAmount.toString() : '';
+    if (_paidAmountController.text != providerPaidStr && double.tryParse(_paidAmountController.text) != form.paidAmount) {
+      _paidAmountController.text = providerPaidStr;
+    }
 
     return Column(
       children: [
@@ -677,14 +703,14 @@ class _SummaryDetailsPanel extends ConsumerWidget {
                 _SummaryLine(label: 'Total GST', value: form.totalGst),
                 const Divider(height: 32),
                 TextField(
-                  controller: TextEditingController(text: form.discount > 0 ? form.discount.toString() : '')..selection = TextSelection.collapsed(offset: (form.discount > 0 ? form.discount.toString() : '').length),
+                  controller: _discountController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Extra Discount', prefixIcon: Icon(Icons.discount_rounded), prefixText: '₹ '),
                   onChanged: (v) => ref.read(purchaseFormProvider.notifier).setDiscount(double.tryParse(v) ?? 0),
                 ),
                 const SizedBox(height: 16),
                 TextField(
-                  controller: TextEditingController(text: form.paidAmount > 0 ? form.paidAmount.toString() : '')..selection = TextSelection.collapsed(offset: (form.paidAmount > 0 ? form.paidAmount.toString() : '').length),
+                  controller: _paidAmountController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Amount Paid', prefixIcon: Icon(Icons.payments_rounded), prefixText: '₹ '),
                   onChanged: (v) => ref.read(purchaseFormProvider.notifier).setPaidAmount(double.tryParse(v) ?? 0),
@@ -697,7 +723,7 @@ class _SummaryDetailsPanel extends ConsumerWidget {
                     prefixIcon: Icons.account_balance_wallet_rounded,
                     items: accounts.map((a) => SearchableDropdownItem(value: a.id, label: '${a.name} (₹${a.balance})')).toList(),
                     onChanged: (v) => ref.read(purchaseFormProvider.notifier).setAccount(v),
-                    isDark: isDark,
+                    isDark: widget.isDark,
                   ),
                   loading: () => const LinearProgressIndicator(),
                   error: (_, _) => const SizedBox(),
@@ -709,7 +735,7 @@ class _SummaryDetailsPanel extends ConsumerWidget {
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: isDark ? Colors.white.withValues(alpha: 0.02) : AppColors.lightBg,
+            color: widget.isDark ? Colors.white.withValues(alpha: 0.02) : AppColors.lightBg,
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
           ),
           child: Column(
@@ -717,16 +743,26 @@ class _SummaryDetailsPanel extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Grand Total', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
-                  Text(CurrencyFormatter.format(form.grandTotal), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.primary)),
+                  const Flexible(
+                    child: Text('Grand Total', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textMuted), overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(CurrencyFormatter.format(form.grandTotal), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.primary), overflow: TextOverflow.ellipsis),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Balance Due', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
-                  Text(CurrencyFormatter.format(form.balanceDue), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: form.balanceDue > 0 ? AppColors.error : AppColors.success)),
+                  const Flexible(
+                    child: Text('Balance Due', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textMuted), overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(CurrencyFormatter.format(form.balanceDue), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: form.balanceDue > 0 ? AppColors.error : AppColors.success), overflow: TextOverflow.ellipsis),
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
@@ -743,9 +779,9 @@ class _SummaryDetailsPanel extends ConsumerWidget {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
-                            color: isSelected ? AppColors.primary : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white),
+                            color: isSelected ? AppColors.primary : (widget.isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: isSelected ? AppColors.primary : (isDark ? AppColors.darkBorder : AppColors.lightBorder)),
+                            border: Border.all(color: isSelected ? AppColors.primary : (widget.isDark ? AppColors.darkBorder : AppColors.lightBorder)),
                           ),
                           alignment: Alignment.center,
                           child: Text(mode, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: isSelected ? Colors.white : AppColors.textMuted)),
@@ -761,7 +797,7 @@ class _SummaryDetailsPanel extends ConsumerWidget {
                 child: ElevatedButton(
                   onPressed: form.items.isEmpty || form.supplierId == null || form.isProcessing
                       ? null
-                      : onComplete,
+                      : widget.onComplete,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     backgroundColor: AppColors.primary,

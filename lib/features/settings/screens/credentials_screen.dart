@@ -5,6 +5,7 @@ import '../../../core/providers/theme_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../auth/models/user_model.dart';
+import '../../../core/services/rbac_service.dart';
 
 final _allUsersProvider = FutureProvider.autoDispose<List<UserModel>>((ref) async {
   final repo = ref.watch(authRepositoryProvider);
@@ -17,6 +18,43 @@ class CredentialsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final rbac = ref.watch(rbacProvider);
+    
+    if (!rbac.hasPermission(AppPermission.manageCredentials)) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.lock_outline_rounded,
+                size: 64,
+                color: isDark ? Colors.white54 : Colors.black45,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Access Denied',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'You do not have permission to view credentials.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.white60 : Colors.black54,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final usersAsync = ref.watch(_allUsersProvider);
 
     return Scaffold(

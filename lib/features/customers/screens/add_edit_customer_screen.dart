@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/customer_model.dart';
 import '../providers/customer_provider.dart';
+import '../../../core/services/shortcut_service.dart';
 
 class AddEditCustomerScreen extends ConsumerStatefulWidget {
   final CustomerModel? customer;
@@ -51,9 +52,16 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final formState = ref.watch(customerFormProvider);
+    final shortcuts = ref.watch(shortcutSettingsProvider);
+    final saveShortcut = shortcuts['save'] ?? ShortcutNotifier.defaults['save']?.defaultShortcut ?? '';
+    final saveBtnLabel = isEditing ? 'Update Customer' : 'Create Customer';
+    final saveBtnText = saveShortcut.isNotEmpty ? '$saveBtnLabel ($saveShortcut)' : saveBtnLabel;
 
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
+    return AppShortcut(
+      actionId: 'cancel',
+      onPressed: () => Navigator.maybePop(context),
+      child: Scaffold(
+        backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
       appBar: AppBar(
         title: Text(isEditing ? 'Edit Customer' : 'New Customer'),
         backgroundColor: Colors.transparent,
@@ -142,22 +150,26 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
               SizedBox(
                 width: double.infinity,
                 height: 60,
-                child: ElevatedButton(
+                child: AppShortcut(
+                  actionId: 'save',
                   onPressed: formState.isLoading ? null : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  child: ElevatedButton(
+                    onPressed: formState.isLoading ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    ),
+                    child: formState.isLoading 
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(saveBtnText, style: const TextStyle(fontWeight: FontWeight.w800)),
                   ),
-                  child: formState.isLoading 
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : Text(isEditing ? 'Update Customer' : 'Create Customer', style: const TextStyle(fontWeight: FontWeight.w800)),
                 ),
               ).animate().slideY(begin: 0.2, end: 0),
             ],
           ),
         ),
       ),
-    );
+    ),);
   }
 
   void _save() async {

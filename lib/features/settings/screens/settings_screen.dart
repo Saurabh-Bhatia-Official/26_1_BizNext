@@ -14,6 +14,73 @@ import 'gst_settings_screen.dart';
 import '../../../core/services/auto_update_service.dart';
 import 'package:camera/camera.dart';
 import 'credentials_screen.dart';
+import '../../../core/services/rbac_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/foundation.dart';
+import '../../billing/utils/invoice_service.dart';
+import '../../billing/models/sale_history_model.dart';
+import '../../../core/widgets/qr_scanner_screen.dart';
+import '../../auth/models/business_model.dart';
+import 'shortcut_settings_screen.dart';
+import '../../updater/screens/update_screen.dart';
+
+class PermissionNotifier extends StateNotifier<PermissionStatus> {
+  final Permission _permission;
+  PermissionNotifier(this._permission) : super(PermissionStatus.denied) {
+    checkPermission();
+  }
+
+  Future<void> checkPermission() async {
+    final isMobile = !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+    if (!isMobile) {
+      state = PermissionStatus.granted;
+      return;
+    }
+    try {
+      state = await _permission.status;
+    } catch (_) {
+      state = PermissionStatus.granted;
+    }
+  }
+
+  Future<void> requestPermission() async {
+    final isMobile = !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+    if (!isMobile) return;
+    try {
+      final res = await _permission.request();
+      state = res;
+    } catch (_) {
+      state = PermissionStatus.granted;
+    }
+  }
+}
+
+final cameraPermissionProvider = StateNotifierProvider<PermissionNotifier, PermissionStatus>((ref) {
+  return PermissionNotifier(Permission.camera);
+});
+
+final bluetoothPermissionProvider = StateNotifierProvider<PermissionNotifier, PermissionStatus>((ref) {
+  return PermissionNotifier(Permission.bluetoothConnect);
+});
+
+String _getPermissionLabel(PermissionStatus status) {
+  switch (status) {
+    case PermissionStatus.granted:
+      return 'Granted';
+    case PermissionStatus.denied:
+      return 'Denied (Tap to Request)';
+    case PermissionStatus.permanentlyDenied:
+      return 'Permanently Denied (Check Settings)';
+    case PermissionStatus.restricted:
+      return 'Restricted';
+    case PermissionStatus.limited:
+      return 'Limited';
+    case PermissionStatus.provisional:
+      return 'Provisional';
+    default:
+      return 'Unknown';
+  }
+}
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -22,6 +89,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final business = ref.watch(currentBusinessProvider);
+    final rbac = ref.watch(rbacProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -46,7 +114,7 @@ class SettingsScreen extends ConsumerWidget {
                   label: 'Business Name',
                   value: business?.name ?? 'Not set',
                   icon: Icons.business_rounded,
-                  onTap: () => _showEditDialog(context, ref, 'Business Name', business?.name ?? '', (v) async {
+                  onTap: !rbac.isOwnerOrAdmin ? null : () => _showEditDialog(context, ref, 'Business Name', business?.name ?? '', (v) async {
                     if (business == null) return;
                     final success = await ref.read(authProvider.notifier).updateActiveBusiness(business.copyWith(name: v));
                     if (success) AppAlert.success(ref, 'Business name updated');
@@ -56,7 +124,7 @@ class SettingsScreen extends ConsumerWidget {
                   label: 'GST Number',
                   value: business?.gstNumber ?? 'Not provided',
                   icon: Icons.receipt_long_rounded,
-                  onTap: () => _showEditDialog(context, ref, 'GST Number', business?.gstNumber ?? '', (v) async {
+                  onTap: !rbac.isOwnerOrAdmin ? null : () => _showEditDialog(context, ref, 'GST Number', business?.gstNumber ?? '', (v) async {
                     if (business == null) return;
                     final success = await ref.read(authProvider.notifier).updateActiveBusiness(business.copyWith(gstNumber: v));
                     if (success) AppAlert.success(ref, 'GST Number updated');
@@ -66,7 +134,7 @@ class SettingsScreen extends ConsumerWidget {
                   label: 'Business Address',
                   value: business?.address ?? 'Not set',
                   icon: Icons.location_on_rounded,
-                  onTap: () => _showEditDialog(context, ref, 'Business Address', business?.address ?? '', (v) async {
+                  onTap: !rbac.isOwnerOrAdmin ? null : () => _showEditDialog(context, ref, 'Business Address', business?.address ?? '', (v) async {
                     if (business == null) return;
                     final success = await ref.read(authProvider.notifier).updateActiveBusiness(business.copyWith(address: v));
                     if (success) AppAlert.success(ref, 'Address updated successfully');
@@ -76,7 +144,7 @@ class SettingsScreen extends ConsumerWidget {
                   label: 'Phone',
                   value: business?.phone ?? 'Not set',
                   icon: Icons.phone_rounded,
-                  onTap: () => _showEditDialog(context, ref, 'Phone', business?.phone ?? '', (v) async {
+                  onTap: !rbac.isOwnerOrAdmin ? null : () => _showEditDialog(context, ref, 'Phone', business?.phone ?? '', (v) async {
                     if (business == null) return;
                     final success = await ref.read(authProvider.notifier).updateActiveBusiness(business.copyWith(phone: v));
                     if (success) AppAlert.success(ref, 'Phone number updated');
@@ -113,6 +181,18 @@ class SettingsScreen extends ConsumerWidget {
                   icon: Icons.camera_alt_rounded,
                   onTap: () => _showCameraSelectionDialog(context, ref),
                 ),
+                const Divider(height: 1),
+                _SettingsTile(
+                  label: 'Keyboard Shortcuts',
+                  value: 'Manage and customize application hotkeys',
+                  icon: Icons.keyboard_rounded,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ShortcutSettingsScreen()),
+                    );
+                  },
+                ),
               ],
             ),
 
@@ -126,42 +206,42 @@ class SettingsScreen extends ConsumerWidget {
                 _FeatureToggle(
                   label: 'Customer Discount System',
                   value: ref.watch(featureSettingsProvider).customerDiscountEnabled,
-                  onChanged: (v) => ref.read(featureSettingsProvider.notifier).toggleCustomerDiscount(v),
+                  onChanged: !rbac.isOwnerOrAdmin ? null : (v) => ref.read(featureSettingsProvider.notifier).toggleCustomerDiscount(v),
                 ),
                 _FeatureToggle(
                   label: 'Product Discount System',
                   value: ref.watch(featureSettingsProvider).productDiscountEnabled,
-                  onChanged: (v) => ref.read(featureSettingsProvider.notifier).toggleProductDiscount(v),
+                  onChanged: !rbac.isOwnerOrAdmin ? null : (v) => ref.read(featureSettingsProvider.notifier).toggleProductDiscount(v),
                 ),
                 _FeatureToggle(
                   label: 'Offers & Promotions',
                   value: ref.watch(featureSettingsProvider).offersEnabled,
-                  onChanged: (v) => ref.read(featureSettingsProvider.notifier).toggleOffers(v),
+                  onChanged: !rbac.isOwnerOrAdmin ? null : (v) => ref.read(featureSettingsProvider.notifier).toggleOffers(v),
                 ),
                 _FeatureToggle(
                   label: 'Loyalty Program',
                   value: ref.watch(featureSettingsProvider).loyaltyEnabled,
-                  onChanged: (v) => ref.read(featureSettingsProvider.notifier).toggleLoyalty(v),
+                  onChanged: !rbac.isOwnerOrAdmin ? null : (v) => ref.read(featureSettingsProvider.notifier).toggleLoyalty(v),
                 ),
                 _FeatureToggle(
                   label: 'GST Features',
                   value: ref.watch(featureSettingsProvider).gstEnabled,
-                  onChanged: (v) => ref.read(featureSettingsProvider.notifier).toggleGst(v),
+                  onChanged: !rbac.isOwnerOrAdmin ? null : (v) => ref.read(featureSettingsProvider.notifier).toggleGst(v),
                 ),
                 _FeatureToggle(
                   label: 'Inventory Tracking',
                   value: ref.watch(featureSettingsProvider).inventoryTrackingEnabled,
-                  onChanged: (v) => ref.read(featureSettingsProvider.notifier).toggleInventoryTracking(v),
+                  onChanged: !rbac.isOwnerOrAdmin ? null : (v) => ref.read(featureSettingsProvider.notifier).toggleInventoryTracking(v),
                 ),
                 _FeatureToggle(
                   label: 'WhatsApp/SMS Notifications',
                   value: ref.watch(featureSettingsProvider).notificationsEnabled,
-                  onChanged: (v) => ref.read(featureSettingsProvider.notifier).toggleNotifications(v),
+                  onChanged: !rbac.isOwnerOrAdmin ? null : (v) => ref.read(featureSettingsProvider.notifier).toggleNotifications(v),
                 ),
                 _FeatureToggle(
                   label: 'Auto Sync Data',
                   value: ref.watch(featureSettingsProvider).autoSyncEnabled,
-                  onChanged: (v) => ref.read(featureSettingsProvider.notifier).toggleAutoSync(v),
+                  onChanged: !rbac.isOwnerOrAdmin ? null : (v) => ref.read(featureSettingsProvider.notifier).toggleAutoSync(v),
                 ),
               ],
             ),
@@ -199,40 +279,92 @@ class SettingsScreen extends ConsumerWidget {
             ),
 
             const SizedBox(height: 32),
-            
-            // ── Data Backup ──
+
+            // ── Hardware & Permissions ──
             _SettingsSection(
-              title: 'Data Backup & Recovery',
+              title: 'Hardware & Permissions',
               isDark: isDark,
               children: [
                 _SettingsTile(
-                  label: 'Export Database',
-                  value: 'Create a backup of all your business data',
-                  icon: Icons.backup_rounded,
-                  onTap: () => _confirmBackup(context, ref),
+                  label: 'Camera Permission',
+                  value: _getPermissionLabel(ref.watch(cameraPermissionProvider)),
+                  icon: Icons.camera_alt_rounded,
+                  onTap: () => ref.read(cameraPermissionProvider.notifier).requestPermission(),
                 ),
+                const Divider(height: 1),
                 _SettingsTile(
-                  label: 'Import Database',
-                  value: 'Restore data from a previous backup file',
-                  icon: Icons.settings_backup_restore_rounded,
-                  onTap: () => _confirmRestore(context, ref),
+                  label: 'Printer / Bluetooth Permission',
+                  value: _getPermissionLabel(ref.watch(bluetoothPermissionProvider)),
+                  icon: Icons.bluetooth_rounded,
+                  onTap: () => ref.read(bluetoothPermissionProvider.notifier).requestPermission(),
                 ),
+                const Divider(height: 1),
                 _SettingsTile(
-                  label: 'Reset Shop Data',
-                  value: 'Clear all data for THIS shop only',
-                  icon: Icons.store_rounded,
-                  color: AppColors.error,
-                  onTap: () => _confirmShopReset(context, ref),
+                  label: 'Test Camera Scanner',
+                  value: 'Open camera scanner overlay to test barcode detection',
+                  icon: Icons.qr_code_scanner_rounded,
+                  onTap: () {
+                    final cameraIndex = ref.read(featureSettingsProvider).selectedCameraIndex;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => QRScannerScreen(initialCameraIndex: cameraIndex)),
+                    );
+                  },
                 ),
+                const Divider(height: 1),
                 _SettingsTile(
-                  label: 'Reset All Data',
-                  value: 'PERMANENTLY delete all software data',
-                  icon: Icons.delete_forever_rounded,
-                  color: AppColors.error,
-                  onTap: () => _confirmReset(context, ref),
+                  label: 'Test Print Receipt',
+                  value: 'Send a mock test page to your default printer',
+                  icon: Icons.print_rounded,
+                  onTap: () => _testPrint(context, ref),
+                ),
+                const Divider(height: 1),
+                _SettingsTile(
+                  label: 'Test Barcode Scanner Input',
+                  value: 'Verify USB/Bluetooth physical scanner input',
+                  icon: Icons.keyboard_rounded,
+                  onTap: () => _testScannerInput(context),
                 ),
               ],
             ),
+
+            if (rbac.isOwnerOrAdmin) ...[
+              const SizedBox(height: 32),
+              
+              // ── Data Backup ──
+              _SettingsSection(
+                title: 'Data Backup & Recovery',
+                isDark: isDark,
+                children: [
+                  _SettingsTile(
+                    label: 'Export Database',
+                    value: 'Create a backup of all your business data',
+                    icon: Icons.backup_rounded,
+                    onTap: () => _confirmBackup(context, ref),
+                  ),
+                  _SettingsTile(
+                    label: 'Import Database',
+                    value: 'Restore data from a previous backup file',
+                    icon: Icons.settings_backup_restore_rounded,
+                    onTap: () => _confirmRestore(context, ref),
+                  ),
+                  _SettingsTile(
+                    label: 'Reset Shop Data',
+                    value: 'Clear all data for THIS shop only',
+                    icon: Icons.store_rounded,
+                    color: AppColors.error,
+                    onTap: () => _confirmShopReset(context, ref),
+                  ),
+                  _SettingsTile(
+                    label: 'Reset All Data',
+                    value: 'PERMANENTLY delete all software data',
+                    icon: Icons.delete_forever_rounded,
+                    color: AppColors.error,
+                    onTap: () => _confirmReset(context, ref),
+                  ),
+                ],
+              ),
+            ],
 
             const SizedBox(height: 32),
 
@@ -241,25 +373,32 @@ class SettingsScreen extends ConsumerWidget {
               title: 'About',
               isDark: isDark,
               children: [
+                if (rbac.hasPermission(AppPermission.manageCredentials)) ...[
+                  _SettingsTile(
+                    label: 'Login Credentials',
+                    value: 'View all registered user accounts',
+                    icon: Icons.key_rounded,
+                    color: AppColors.primary,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const CredentialsScreen()),
+                      );
+                    },
+                  ),
+                  const Divider(height: 1),
+                ],
                 _SettingsTile(
-                  label: 'Login Credentials',
-                  value: 'View all registered user accounts',
-                  icon: Icons.key_rounded,
-                  color: AppColors.primary,
+                  label: 'Software Updates',
+                  value: 'Check for updates, view history & rollback',
+                  icon: Icons.system_update_rounded,
+                  color: Colors.blue,
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const CredentialsScreen()),
+                      MaterialPageRoute(builder: (_) => const UpdateScreen()),
                     );
                   },
-                ),
-                const Divider(height: 1),
-                _SettingsTile(
-                  label: 'Check for Software Updates',
-                  value: 'Version: 1.0.0',
-                  icon: Icons.system_update_rounded,
-                  color: Colors.blue,
-                  onTap: () => _handleSoftwareUpdate(context, ref),
                 ),
                 const Divider(height: 1),
                 _SettingsTile(
@@ -280,6 +419,75 @@ class SettingsScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  void _testPrint(BuildContext context, WidgetRef ref) async {
+    try {
+      final business = ref.read(currentBusinessProvider);
+      await InvoiceService.generateAndPrintInvoice(
+        business: business ?? BusinessModel(id: 1, name: 'BizNext Demo', type: 'Retail'),
+        sale: SaleHistoryModel(
+          id: 9999,
+          businessId: business?.id ?? 1,
+          invoiceNo: 'TEST-PRINT-001',
+          date: DateTime.now(),
+          customerName: 'Walk-In Customer',
+          subtotal: 100.0,
+          gstAmount: 0.0,
+          grandTotal: 100.0,
+          paidAmount: 100.0,
+          balanceDue: 0.0,
+          paymentMode: 'Cash',
+          items: [
+            SaleHistoryItemModel(
+              productId: 1,
+              productName: 'Hardware Test Item',
+              quantity: 1.0,
+              price: 100.0,
+              gstAmount: 0.0,
+              total: 100.0,
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      AppAlert.error(ref, 'Printing test failed: $e');
+    }
+  }
+
+  void _testScannerInput(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text('Scan Test Barcode', style: TextStyle(fontWeight: FontWeight.w900)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Please connect your hardware scanner and scan a barcode, or type it manually to test input:'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Scanner Output',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.qr_code_rounded),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -640,10 +848,10 @@ class _SettingsTile extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Color? color;
 
-  const _SettingsTile({required this.label, required this.value, required this.icon, required this.onTap, this.color});
+  const _SettingsTile({required this.label, required this.value, required this.icon, this.onTap, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -656,7 +864,7 @@ class _SettingsTile extends StatelessWidget {
       ),
       title: Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
       subtitle: Text(value, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-      trailing: const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textMuted),
+      trailing: onTap == null ? null : const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textMuted),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
     );
   }
@@ -665,9 +873,9 @@ class _SettingsTile extends StatelessWidget {
 class _FeatureToggle extends StatelessWidget {
   final String label;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
-  const _FeatureToggle({required this.label, required this.value, required this.onChanged});
+  const _FeatureToggle({required this.label, required this.value, this.onChanged});
 
   @override
   Widget build(BuildContext context) {

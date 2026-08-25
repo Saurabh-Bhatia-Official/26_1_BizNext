@@ -27,23 +27,19 @@ class SyncService {
   }
 
   Future<void> syncNow(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    final tier = prefs.getString('subscription_tier') ?? 'free';
-    if (tier != 'pro') {
-      if (kDebugMode) print("Skipping sync: user is not on PRO tier. Database remains strictly local.");
-      return;
-    }
-
     if (_isSyncing) return;
     _isSyncing = true;
     
     try {
-      if (kDebugMode) print("Starting background sync...");
+      // if (kDebugMode) print("Starting background sync..."); // Suppress noisy starting log
       await pushLocalChanges(token);
       await pullRemoteChanges(token);
-      if (kDebugMode) print("Sync completed successfully.");
+      // if (kDebugMode) print("Sync completed successfully."); // Suppress noisy success log
     } catch (e) {
-      if (kDebugMode) print("Sync failed: $e");
+      final errStr = e.toString();
+      if (!errStr.contains("Failed to fetch") && !errStr.contains("Connection refused") && !errStr.contains("SocketException")) {
+        if (kDebugMode) print("Sync failed: $e");
+      }
     } finally {
       _isSyncing = false;
     }
@@ -86,7 +82,10 @@ class SyncService {
         }
       }
     } catch (e) {
-      if (kDebugMode) print("Push synchronization error: $e");
+      final errStr = e.toString();
+      if (!errStr.contains("Failed to fetch") && !errStr.contains("Connection refused") && !errStr.contains("SocketException")) {
+        if (kDebugMode) print("Push synchronization error: $e");
+      }
       rethrow;
     }
   }
@@ -140,7 +139,10 @@ class SyncService {
           }
         }
       } catch (e) {
-        if (kDebugMode) print("Pull sync error for table $table: $e");
+        final errStr = e.toString();
+        if (!errStr.contains("Failed to fetch") && !errStr.contains("Connection refused") && !errStr.contains("SocketException")) {
+          if (kDebugMode) print("Pull sync error for table $table: $e");
+        }
       }
     }
   }

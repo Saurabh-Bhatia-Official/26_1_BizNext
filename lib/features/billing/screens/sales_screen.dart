@@ -116,8 +116,9 @@ class _SalesSummaryBar extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       child: statsAsync.when(
-        data: (stats) => Row(
-          children: [
+        data: (stats) {
+          final isMobile = MediaQuery.of(context).size.width < 600;
+          final cards = [
             _SummaryCard(
               label: 'Today\'s Sales',
               value: stats.todaySales,
@@ -125,7 +126,7 @@ class _SalesSummaryBar extends ConsumerWidget {
               colors: [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
               isDark: isDark,
             ),
-            const SizedBox(width: 16),
+            if (isMobile) const SizedBox(height: 16) else const SizedBox(width: 16),
             _SummaryCard(
               label: 'This Month',
               value: stats.monthSales,
@@ -133,8 +134,12 @@ class _SalesSummaryBar extends ConsumerWidget {
               colors: [const Color(0xFF10B981), const Color(0xFF059669)],
               isDark: isDark,
             ),
-          ],
-        ),
+          ];
+
+          return isMobile 
+            ? Column(children: cards) 
+            : Row(children: cards.map((c) => c is _SummaryCard ? Expanded(child: c) : c).toList());
+        },
         loading: () => const LinearProgressIndicator(),
         error: (_, _) => const SizedBox.shrink(),
       ),
@@ -153,10 +158,10 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
           gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
@@ -192,8 +197,7 @@ class _SummaryCard extends StatelessWidget {
             ),
           ],
         ),
-      ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutCubic),
-    );
+      ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOutCubic);
   }
 }
 

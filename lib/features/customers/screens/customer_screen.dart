@@ -76,40 +76,58 @@ class _CustomerHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
+    final headerContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Customers',
+          style: TextStyle(
+            fontSize: isMobile ? 24 : 28,
+            fontWeight: FontWeight.w900,
+            color: isDark ? Colors.white : AppColors.textLight,
+          ),
+        ),
+        const Text('Manage your client base and balances', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+      ],
+    );
+
+    final controls = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: isMobile ? MediaQuery.of(context).size.width - 120 : 240,
+          child: TextField(
+            onChanged: (v) => ref.read(customerSearchQueryProvider.notifier).state = v,
+            decoration: const InputDecoration(
+              hintText: 'Search customers...',
+              prefixIcon: Icon(Icons.search_rounded, size: 20),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        LayoutToggle(current: layoutMode, onChanged: onLayoutChanged, isDark: isDark),
+      ],
+    );
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 20),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
+      padding: EdgeInsets.fromLTRB(isMobile ? 16 : 24, isMobile ? 20 : 32, isMobile ? 16 : 24, 20),
+      child: isMobile
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Customers',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? Colors.white : AppColors.textLight,
-                  ),
-                ),
-                const Text('Manage your client base and balances', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+                headerContent,
+                const SizedBox(height: 16),
+                controls,
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: headerContent),
+                controls,
               ],
             ),
-          ),
-          SizedBox(
-            width: 240,
-            child: TextField(
-              onChanged: (v) => ref.read(customerSearchQueryProvider.notifier).state = v,
-              decoration: const InputDecoration(
-                hintText: 'Search customers...',
-                prefixIcon: Icon(Icons.search_rounded, size: 20),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          LayoutToggle(current: layoutMode, onChanged: onLayoutChanged, isDark: isDark),
-        ],
-      ),
     );
   }
 }
@@ -124,14 +142,14 @@ class _CustomerGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossCount = constraints.maxWidth > 1200 ? 4 : (constraints.maxWidth > 800 ? 3 : 2);
+        final crossCount = constraints.maxWidth > 1200 ? 4 : (constraints.maxWidth > 800 ? 3 : (constraints.maxWidth < 600 ? 1 : 2));
         return GridView.builder(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
+          padding: EdgeInsets.fromLTRB(constraints.maxWidth < 600 ? 16 : 24, 0, constraints.maxWidth < 600 ? 16 : 24, 100),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossCount,
-            crossAxisSpacing: 20,
-            mainAxisSpacing: 20,
-            childAspectRatio: 1.4,
+            crossAxisSpacing: constraints.maxWidth < 600 ? 12 : 20,
+            mainAxisSpacing: constraints.maxWidth < 600 ? 12 : 20,
+            childAspectRatio: constraints.maxWidth < 600 ? 1.8 : 1.4,
           ),
           itemCount: customers.length,
           itemBuilder: (_, i) => _CustomerCard(customer: customers[i], isDark: isDark)

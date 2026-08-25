@@ -32,7 +32,12 @@ class PurchaseRepository {
       if (purchase.supplierId == null) {
         throw Exception("Invalid Supplier: Supplier is required for recording purchases.");
       }
-      final supplierCheck = await txn.query(AppConstants.tblSuppliers, columns: ['id'], where: 'id = ?', whereArgs: [purchase.supplierId]);
+      final supplierCheck = await txn.query(
+        AppConstants.tblSuppliers,
+        columns: ['id'],
+        where: 'id = ? AND business_id = ?',
+        whereArgs: [purchase.supplierId, purchase.businessId],
+      );
       if (supplierCheck.isEmpty) {
         throw Exception("Invalid Supplier: Supplier does not exist.");
       }
@@ -58,8 +63,8 @@ class PurchaseRepository {
         final accountResult = await txn.query(
           AppConstants.tblAccounts,
           columns: ['balance', 'name'],
-          where: 'id = ?',
-          whereArgs: [purchase.accountId],
+          where: 'id = ? AND business_id = ?',
+          whereArgs: [purchase.accountId, purchase.businessId],
         );
         if (accountResult.isEmpty) {
           throw Exception("Invalid Account: Selected payment account does not exist.");
@@ -88,8 +93,14 @@ class PurchaseRepository {
 
       // ── EXECUTION ──
 
-      // Get Default Warehouse (id = 1 or first available)
-      final warehouseResult = await txn.query(AppConstants.tblWarehouses, columns: ['id'], limit: 1);
+      // Get Default Warehouse scoped to the business
+      final warehouseResult = await txn.query(
+        AppConstants.tblWarehouses,
+        columns: ['id'],
+        where: 'business_id = ?',
+        whereArgs: [purchase.businessId],
+        limit: 1,
+      );
       final warehouseId = warehouseResult.isNotEmpty ? warehouseResult.first['id'] as int : 1;
 
       // 1. Insert Purchase Header
@@ -99,12 +110,12 @@ class PurchaseRepository {
       for (var item in purchase.items!) {
         await txn.insert(AppConstants.tblPurchaseItems, item.toMap(purchaseId));
         
-        // Fetch current product state
+        // Fetch current product state scoped to the business
         final productResult = await txn.query(
           AppConstants.tblProducts,
           columns: ['stock', 'purchase_price'],
-          where: 'id = ?',
-          whereArgs: [item.productId],
+          where: 'id = ? AND business_id = ?',
+          whereArgs: [item.productId, purchase.businessId],
         );
         if (productResult.isEmpty) {
           throw Exception("Product '${item.productName}' not found in database.");
@@ -121,17 +132,18 @@ class PurchaseRepository {
           newWac = item.purchasePrice;
         }
 
-        // Update Product Master stock & price
+        // Update Product Master stock & price scoped to the business
         await txn.rawUpdate(
-          "UPDATE ${AppConstants.tblProducts} SET stock = stock + ?, purchase_price = ?, updated_at = datetime('now') WHERE id = ?",
-          [item.quantity, newWac, item.productId],
+          "UPDATE ${AppConstants.tblProducts} SET stock = stock + ?, purchase_price = ?, updated_at = datetime('now') WHERE id = ? AND business_id = ?",
+          [item.quantity, newWac, item.productId, purchase.businessId],
         );
 
-        // Update Warehouse Stocks
-        final wsResult = await txn.query(
-          AppConstants.tblWarehouseStocks,
-          where: 'warehouse_id = ? AND product_id = ?',
-          whereArgs: [warehouseId, item.productId],
+        // Update Warehouse Stocks (scoped to the business warehouse)
+        final wsResult = await txn.rawQuery(
+          "SELECT ws.id FROM ${AppConstants.tblWarehouseStocks} ws "
+          "INNER JOIN ${AppConstants.tblWarehouses} w ON ws.warehouse_id = w.id "
+          "WHERE ws.warehouse_id = ? AND ws.product_id = ? AND w.business_id = ?",
+          [warehouseId, item.productId, purchase.businessId],
         );
         if (wsResult.isEmpty) {
           await txn.insert(AppConstants.tblWarehouseStocks, {
@@ -160,11 +172,11 @@ class PurchaseRepository {
         });
       }
 
-      // 3. Update Supplier Balance
+      // 3. Update Supplier Balance scoped to the business
       if (purchase.balanceDue > 0) {
         await txn.rawUpdate(
-          "UPDATE ${AppConstants.tblSuppliers} SET balance = balance + ? WHERE id = ?",
-          [purchase.balanceDue, purchase.supplierId],
+          "UPDATE ${AppConstants.tblSuppliers} SET balance = balance + ? WHERE id = ? AND business_id = ?",
+          [purchase.balanceDue, purchase.supplierId, purchase.businessId],
         );
       }
 
@@ -212,10 +224,10 @@ class PurchaseRepository {
           'date': dateStr,
         });
 
-        // Deduct Cash/Bank balance
+        // Deduct Cash/Bank balance scoped to the business
         await txn.rawUpdate(
-          "UPDATE ${AppConstants.tblAccounts} SET balance = balance - ? WHERE id = ?",
-          [purchase.paidAmount, purchase.accountId],
+          "UPDATE ${AppConstants.tblAccounts} SET balance = balance - ? WHERE id = ? AND business_id = ?",
+          [purchase.paidAmount, purchase.accountId, purchase.businessId],
         );
       }
 
@@ -244,12 +256,19 @@ class PurchaseRepository {
 
   Future<int> recordPurchaseReturn(Map<String, dynamic> returnData, List<Map<String, dynamic>> items) async {
     return await _db.transaction((txn) async {
-      // 1. Validate stock availability
+      final businessId = returnData['business_id'] as int;
+
+      // 1. Validate stock availability scoped to business
       for (var item in items) {
         final productId = item['product_id'] as int;
         final qty = (item['quantity'] as num).toDouble();
         
-        final productResult = await txn.query(AppConstants.tblProducts, columns: ['stock', 'name'], where: 'id = ?', whereArgs: [productId]);
+        final productResult = await txn.query(
+          AppConstants.tblProducts,
+          columns: ['stock', 'name'],
+          where: 'id = ? AND business_id = ?',
+          whereArgs: [productId, businessId],
+        );
         if (productResult.isEmpty) throw Exception("Product ID $productId not found.");
         final currentStock = (productResult.first['stock'] as num).toDouble();
         if (currentStock < qty) {
@@ -260,8 +279,14 @@ class PurchaseRepository {
       // 2. Insert Purchase Return Header
       final returnId = await txn.insert(AppConstants.tblPurchaseReturns, returnData);
 
-      // Get Default Warehouse
-      final warehouseResult = await txn.query(AppConstants.tblWarehouses, columns: ['id'], limit: 1);
+      // Get Default Warehouse scoped to business
+      final warehouseResult = await txn.query(
+        AppConstants.tblWarehouses,
+        columns: ['id'],
+        where: 'business_id = ?',
+        whereArgs: [businessId],
+        limit: 1,
+      );
       final warehouseId = warehouseResult.isNotEmpty ? warehouseResult.first['id'] as int : 1;
 
       // 3. Deduct stock and update inventory logs
@@ -273,7 +298,12 @@ class PurchaseRepository {
         final gstAmount = qty * price * (gstPercent / 100);
         final total = (qty * price) + gstAmount;
 
-        final productResult = await txn.query(AppConstants.tblProducts, columns: ['stock', 'purchase_price'], where: 'id = ?', whereArgs: [productId]);
+        final productResult = await txn.query(
+          AppConstants.tblProducts,
+          columns: ['stock', 'purchase_price'],
+          where: 'id = ? AND business_id = ?',
+          whereArgs: [productId, businessId],
+        );
         final currentStock = (productResult.first['stock'] as num).toDouble();
         final cost = (productResult.first['purchase_price'] as num).toDouble();
 
@@ -288,10 +318,10 @@ class PurchaseRepository {
           'total': total,
         });
 
-        // Deduct stock in Product Master
+        // Deduct stock in Product Master scoped to business
         await txn.rawUpdate(
-          "UPDATE ${AppConstants.tblProducts} SET stock = stock - ?, updated_at = datetime('now') WHERE id = ?",
-          [qty, productId],
+          "UPDATE ${AppConstants.tblProducts} SET stock = stock - ?, updated_at = datetime('now') WHERE id = ? AND business_id = ?",
+          [qty, productId, businessId],
         );
 
         // Deduct warehouse stock
@@ -314,7 +344,7 @@ class PurchaseRepository {
         });
       }
 
-      // 4. Update Supplier Balance if credit return
+      // 4. Update Supplier Balance if credit return scoped to business
       final supplierId = returnData['supplier_id'] as int?;
       final grandTotal = (returnData['grand_total'] as num).toDouble();
       final refundAmount = (returnData['refund_amount'] as num?)?.toDouble() ?? 0.0;
@@ -322,13 +352,12 @@ class PurchaseRepository {
 
       if (supplierId != null && balanceDueReduction > 0) {
         await txn.rawUpdate(
-          "UPDATE ${AppConstants.tblSuppliers} SET balance = balance - ? WHERE id = ?",
-          [balanceDueReduction, supplierId],
+          "UPDATE ${AppConstants.tblSuppliers} SET balance = balance - ? WHERE id = ? AND business_id = ?",
+          [balanceDueReduction, supplierId, businessId],
         );
       }
 
       // 5. Post Ledger entries (Reversal of Purchase DR/CR rules)
-      final businessId = returnData['business_id'] as int;
       final returnNo = returnData['return_no'] ?? '#PR-$returnId';
       final dateStr = returnData['date'] ?? DateTime.now().toIso8601String();
 
@@ -347,8 +376,8 @@ class PurchaseRepository {
         
         if (returnData['account_id'] != null) {
           await txn.rawUpdate(
-            "UPDATE ${AppConstants.tblAccounts} SET balance = balance + ? WHERE id = ?",
-            [refundAmount, returnData['account_id']],
+            "UPDATE ${AppConstants.tblAccounts} SET balance = balance + ? WHERE id = ? AND business_id = ?",
+            [refundAmount, returnData['account_id'], businessId],
           );
         }
       }
@@ -406,9 +435,14 @@ class PurchaseRepository {
       final businessId = p['business_id'] as int;
       final billNo = p['bill_no'] as String?;
 
-      // Validate account balance
+      // Validate account balance scoped to business
       if (accountId != null) {
-        final accountResult = await txn.query(AppConstants.tblAccounts, columns: ['balance', 'name'], where: 'id = ?', whereArgs: [accountId]);
+        final accountResult = await txn.query(
+          AppConstants.tblAccounts,
+          columns: ['balance', 'name'],
+          where: 'id = ? AND business_id = ?',
+          whereArgs: [accountId, businessId],
+        );
         if (accountResult.isNotEmpty) {
           final balance = (accountResult.first['balance'] as num).toDouble();
           if (balance < amount) {
@@ -417,17 +451,17 @@ class PurchaseRepository {
         }
       }
 
-      // Update Purchase
+      // Update Purchase scoped to business
       await txn.rawUpdate(
-        "UPDATE ${AppConstants.tblPurchases} SET paid_amount = paid_amount + ?, balance_due = balance_due - ? WHERE id = ?",
-        [amount, amount, purchaseId],
+        "UPDATE ${AppConstants.tblPurchases} SET paid_amount = paid_amount + ?, balance_due = balance_due - ? WHERE id = ? AND business_id = ?",
+        [amount, amount, purchaseId, businessId],
       );
 
-      // Update Supplier Balance
+      // Update Supplier Balance scoped to business
       if (supplierId != null) {
         await txn.rawUpdate(
-          "UPDATE ${AppConstants.tblSuppliers} SET balance = balance - ? WHERE id = ?",
-          [amount, supplierId],
+          "UPDATE ${AppConstants.tblSuppliers} SET balance = balance - ? WHERE id = ? AND business_id = ?",
+          [amount, supplierId, businessId],
         );
       }
 
@@ -443,11 +477,11 @@ class PurchaseRepository {
         'date': DateTime.now().toIso8601String(),
       });
 
-      // Sync Account Balance
+      // Sync Account Balance scoped to business
       if (accountId != null) {
         await txn.rawUpdate(
-          "UPDATE ${AppConstants.tblAccounts} SET balance = balance - ? WHERE id = ?",
-          [amount, accountId],
+          "UPDATE ${AppConstants.tblAccounts} SET balance = balance - ? WHERE id = ? AND business_id = ?",
+          [amount, accountId, businessId],
         );
       }
     });

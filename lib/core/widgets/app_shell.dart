@@ -26,9 +26,11 @@ import '../../features/budgeting/screens/budget_screen.dart';
 import 'notification_overlay.dart';
 import '../../core/services/sync_service.dart';
 import '../services/subscription_service.dart';
+import '../../core/services/shortcut_service.dart';
 
 final selectedNavIndexProvider = StateProvider<int>((ref) => 0);
 final previousNavIndexProvider = StateProvider<int>((ref) => 0);
+final sidebarHiddenProvider = StateProvider<bool>((ref) => false);
 final shellNavigatorKey = GlobalKey<NavigatorState>();
 
 class AppShell extends ConsumerStatefulWidget {
@@ -99,183 +101,249 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
       const ProfileScreen(),
     ];
 
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
-      appBar: isWide
-          ? null
-          : AppBar(
-              backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-              elevation: 0,
-              title: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    '💼',
-                    style: TextStyle(fontSize: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    selectedIndex < navDestinations.length 
-                      ? navDestinations[selectedIndex].label 
-                      : 'Profile',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                ],
-              ),
-              centerTitle: true,
-              leading: Builder(
-                builder: (ctx) => IconButton(
-                  icon: const Icon(Icons.menu_rounded),
-                  onPressed: () => Scaffold.of(ctx).openDrawer(),
-                ),
-              ),
-              actions: [
-                IconButton(
-                  icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
-                  onPressed: () => ref.read(themeModeProvider.notifier).toggle(),
-                ),
-                const SizedBox(width: 8),
-              ],
-            ),
-      drawer: isWide
-          ? null
-          : Drawer(
-              width: 260,
-              child: AppSidebar(
-                selectedIndex: selectedIndex,
-                isCollapsedOverride: false,
-                onDestinationSelected: (i) {
-                  ref.read(previousNavIndexProvider.notifier).state = ref.read(selectedNavIndexProvider);
-                  ref.read(selectedNavIndexProvider.notifier).state = i;
-                  Navigator.of(context).pop();
-                },
-              ),
-            ),
-      body: Column(
+    return ShortcutListener(
+      child: Stack(
         children: [
-          Expanded(
-            child: Stack(
-              children: [
-                Row(
+          AppShortcut(
+            actionId: 'nav_dashboard',
+            onPressed: () => ref.read(selectedNavIndexProvider.notifier).state = 0,
+            child: const SizedBox.shrink(),
+          ),
+          AppShortcut(
+            actionId: 'nav_pos',
+            onPressed: () => ref.read(selectedNavIndexProvider.notifier).state = 1,
+            child: const SizedBox.shrink(),
+          ),
+          AppShortcut(
+            actionId: 'nav_sales',
+            onPressed: () => ref.read(selectedNavIndexProvider.notifier).state = 2,
+            child: const SizedBox.shrink(),
+          ),
+          AppShortcut(
+            actionId: 'nav_inventory',
+            onPressed: () => ref.read(selectedNavIndexProvider.notifier).state = 5,
+            child: const SizedBox.shrink(),
+          ),
+          AppShortcut(
+            actionId: 'nav_settings',
+            onPressed: () => ref.read(selectedNavIndexProvider.notifier).state = 15,
+            child: const SizedBox.shrink(),
+          ),
+          Scaffold(
+            backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
+        appBar: isWide
+            ? null
+            : AppBar(
+                backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                elevation: 0,
+                title: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (isWide)
-                      AppSidebar(
-                        selectedIndex: selectedIndex,
-                        onDestinationSelected: (i) {
-                          ref.read(previousNavIndexProvider.notifier).state = ref.read(selectedNavIndexProvider);
-                          ref.read(selectedNavIndexProvider.notifier).state = i;
-                        },
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                    Expanded(
-                      child: IndexedStack(
-                        index: selectedIndex,
-                        children: List.generate(screens.length, (index) {
-                          final isPro = ref.watch(subscriptionServiceProvider).isPro;
-                          final restrictedIndices = [11, 12, 13, 14];
-                          final showLock = !isPro && restrictedIndices.contains(index);
-
-                          if (showLock) {
-                            return const PremiumLockedScreen();
-                          }
-
-                          return Navigator(
-                            key: _navigatorKeys[index],
-                            onGenerateRoute: (settings) => MaterialPageRoute(
-                              builder: (context) => screens[index],
-                            ),
-                          );
-                        }),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.asset(
+                          'assets/logo.png',
+                          fit: BoxFit.cover,
+                        ),
                       ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      selectedIndex < navDestinations.length 
+                        ? navDestinations[selectedIndex].label 
+                        : 'Profile',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                     ),
                   ],
                 ),
-                const NotificationOverlay(),
-              ],
-            ),
-          ),
-          const _BetaBanner(),
-        ],
-      ),
-      bottomNavigationBar: isWide
-          ? null
-          : Container(
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkSurface.withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.9),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-                    blurRadius: 20,
-                    offset: const Offset(0, -5),
-                  ),
-                ],
-                border: Border(
-                  top: BorderSide(
-                    color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
-                    width: 1,
+                centerTitle: true,
+                leading: Builder(
+                  builder: (ctx) => IconButton(
+                    icon: const Icon(Icons.menu_rounded),
+                    onPressed: () => Scaffold.of(ctx).openDrawer(),
                   ),
                 ),
+                actions: [
+                  IconButton(
+                    icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
+                    onPressed: () => ref.read(themeModeProvider.notifier).toggle(),
+                  ),
+                  const SizedBox(width: 8),
+                ],
               ),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+        drawer: isWide
+            ? null
+            : Drawer(
+                width: 260,
+                child: AppSidebar(
+                  selectedIndex: selectedIndex,
+                  isCollapsedOverride: false,
+                  onDestinationSelected: (i) {
+                    ref.read(previousNavIndexProvider.notifier).state = ref.read(selectedNavIndexProvider);
+                    ref.read(selectedNavIndexProvider.notifier).state = i;
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ),
+        body: Column(
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  Row(
                     children: [
-                      _buildBottomNavItem(
-                        context,
-                        ref,
-                        icon: Icons.grid_view_rounded,
-                        activeIcon: Icons.grid_view_rounded,
-                        label: 'Dashboard',
-                        index: 0,
-                        currentIndex: selectedIndex,
-                      ),
-                      _buildBottomNavItem(
-                        context,
-                        ref,
-                        icon: Icons.shopping_cart_outlined,
-                        activeIcon: Icons.shopping_cart_rounded,
-                        label: 'POS',
-                        index: 1,
-                        currentIndex: selectedIndex,
-                      ),
-                      _buildBottomNavItem(
-                        context,
-                        ref,
-                        icon: Icons.receipt_long_outlined,
-                        activeIcon: Icons.receipt_long_rounded,
-                        label: 'Sales',
-                        index: 2,
-                        currentIndex: selectedIndex,
-                      ),
-                      _buildBottomNavItem(
-                        context,
-                        ref,
-                        icon: Icons.inventory_2_outlined,
-                        activeIcon: Icons.inventory_2_rounded,
-                        label: 'Stock',
-                        index: 5,
-                        currentIndex: selectedIndex,
-                      ),
-                      Builder(
-                        builder: (ctx) => _buildBottomNavItem(
-                          context,
-                          ref,
-                          icon: Icons.menu_rounded,
-                          activeIcon: Icons.menu_rounded,
-                          label: 'More',
-                          index: -1,
-                          currentIndex: selectedIndex,
-                          onTap: () {
-                            Scaffold.of(ctx).openDrawer();
+                      if (isWide && !ref.watch(sidebarHiddenProvider))
+                        AppSidebar(
+                          selectedIndex: selectedIndex,
+                          onDestinationSelected: (i) {
+                            ref.read(previousNavIndexProvider.notifier).state = ref.read(selectedNavIndexProvider);
+                            ref.read(selectedNavIndexProvider.notifier).state = i;
                           },
+                        ),
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            IndexedStack(
+                              index: selectedIndex,
+                              children: List.generate(screens.length, (index) {
+                                final isPro = ref.watch(subscriptionServiceProvider).isPro;
+                                final restrictedIndices = [11, 12, 13, 14];
+                                final showLock = !isPro && restrictedIndices.contains(index);
+  
+                                if (showLock) {
+                                  return const PremiumLockedScreen();
+                                }
+  
+                                return Navigator(
+                                  key: _navigatorKeys[index],
+                                  onGenerateRoute: (settings) => MaterialPageRoute(
+                                    builder: (context) => screens[index],
+                                  ),
+                                );
+                              }),
+                            ),
+                            if (isWide && ref.watch(sidebarHiddenProvider))
+                              Positioned(
+                                left: 16,
+                                top: 24,
+                                child: Material(
+                                  color: isDark ? AppColors.darkSurface : Colors.white,
+                                  elevation: 4,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: BorderSide(
+                                      color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                                    ),
+                                  ),
+                                  child: IconButton(
+                                    icon: const Icon(Icons.menu_rounded, color: AppColors.primary),
+                                    onPressed: () => ref.read(sidebarHiddenProvider.notifier).state = false,
+                                    tooltip: 'Show Sidebar',
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
+                  const NotificationOverlay(),
+                ],
               ),
             ),
+            const _BetaBanner(),
+          ],
+        ),
+        bottomNavigationBar: isWide
+            ? null
+            : Container(
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface.withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.9),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                      blurRadius: 20,
+                      offset: const Offset(0, -5),
+                    ),
+                  ],
+                  border: Border(
+                    top: BorderSide(
+                      color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildBottomNavItem(
+                          context,
+                          ref,
+                          icon: Icons.grid_view_rounded,
+                          activeIcon: Icons.grid_view_rounded,
+                          label: 'Dashboard',
+                          index: 0,
+                          currentIndex: selectedIndex,
+                        ),
+                        _buildBottomNavItem(
+                          context,
+                          ref,
+                          icon: Icons.shopping_cart_outlined,
+                          activeIcon: Icons.shopping_cart_rounded,
+                          label: 'POS',
+                          index: 1,
+                          currentIndex: selectedIndex,
+                        ),
+                        _buildBottomNavItem(
+                          context,
+                          ref,
+                          icon: Icons.receipt_long_outlined,
+                          activeIcon: Icons.receipt_long_rounded,
+                          label: 'Sales',
+                          index: 2,
+                          currentIndex: selectedIndex,
+                        ),
+                        _buildBottomNavItem(
+                          context,
+                          ref,
+                          icon: Icons.inventory_2_outlined,
+                          activeIcon: Icons.inventory_2_rounded,
+                          label: 'Stock',
+                          index: 5,
+                          currentIndex: selectedIndex,
+                        ),
+                        Builder(
+                          builder: (ctx) => _buildBottomNavItem(
+                            context,
+                            ref,
+                            icon: Icons.menu_rounded,
+                            activeIcon: Icons.menu_rounded,
+                            label: 'More',
+                            index: -1,
+                            currentIndex: selectedIndex,
+                            onTap: () {
+                              Scaffold.of(ctx).openDrawer();
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ),
+        ],
+      ),
     );
   }
 

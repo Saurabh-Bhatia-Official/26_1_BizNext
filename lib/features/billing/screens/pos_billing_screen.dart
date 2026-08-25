@@ -22,16 +22,15 @@ import '../providers/sales_stats_provider.dart';
 import '../utils/invoice_service.dart';
 import '../../../core/widgets/searchable_dropdown.dart';
 import '../../../core/widgets/qr_scanner_screen.dart';
+import '../../../core/services/shortcut_service.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:io';
-import 'package:simple_barcode_scanner/simple_barcode_scanner.dart';
 import 'package:camera/camera.dart';
 
 // Local POS specific state
 final _posSearchProvider = StateProvider.autoDispose<String>((ref) => '');
 final _isCameraVisibleProvider = StateProvider.autoDispose<bool>((ref) => false);
 final _posCategoryProvider = StateProvider.autoDispose<int?>((ref) => null);
-final _isCatalogVisibleProvider = StateProvider.autoDispose<bool>((ref) => true);
+final _posPriceListProvider = StateProvider.autoDispose<String>((ref) => 'Standard');
 
 class PosBillingScreen extends ConsumerWidget {
   const PosBillingScreen({super.key});
@@ -42,65 +41,70 @@ class PosBillingScreen extends ConsumerWidget {
     final isMobile = MediaQuery.of(context).size.width < 700;
 
     if (isMobile) {
-      return PopScope(
+      return AppShortcut(
+        actionId: 'pos_clear',
+        onPressed: () => ref.invalidate(billingProvider),
+        child: PopScope(
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) ref.invalidate(billingProvider);
+          },
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              title: Text(
+                'POS BILLING', 
+                style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 0.5)
+              ),
+              leading: Navigator.canPop(context) 
+                ? IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => Navigator.pop(context))
+                : IconButton(icon: const Icon(Icons.menu_rounded), onPressed: () => Scaffold.of(context).openDrawer()),
+            ),
+            body: _ProductPicker(isDark: isDark),
+            bottomSheet: _MobileCartSheet(isDark: isDark),
+          ),
+        ),
+      );
+    }
+
+    return AppShortcut(
+      actionId: 'pos_clear',
+      onPressed: () => ref.invalidate(billingProvider),
+      child: PopScope(
         onPopInvokedWithResult: (didPop, result) {
           if (didPop) ref.invalidate(billingProvider);
         },
         child: Scaffold(
           backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            title: Text(
-              'POS BILLING', 
-              style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 0.5)
-            ),
-            leading: Navigator.canPop(context) 
-              ? IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => Navigator.pop(context))
-              : IconButton(icon: const Icon(Icons.menu_rounded), onPressed: () => Scaffold.of(context).openDrawer()),
-          ),
-          body: _ProductPicker(isDark: isDark),
-          bottomSheet: _MobileCartSheet(isDark: isDark),
-        ),
-      );
-    }
-
-    final isCatalogVisible = ref.watch(_isCatalogVisibleProvider);
-
-    return PopScope(
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) ref.invalidate(billingProvider);
-      },
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Row(
-          children: [
-            // ── Left: Product Catalog ──
-            if (isCatalogVisible)
+          body: Row(
+            children: [
+              // ── Left: Product Catalog ──
               Expanded(
                 flex: 10,
                 child: _ProductPicker(isDark: isDark),
               ),
-            
-            // ── Right: Checkout Panel ──
-            Expanded(
-              flex: isCatalogVisible ? 4 : 14,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkSurface : Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
-                      blurRadius: 40,
-                      offset: const Offset(-10, 0),
-                    ),
-                  ],
-                  border: Border(left: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder, width: 1.5)),
+              
+              // ── Right: Checkout Panel ──
+              Expanded(
+                flex: 4,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkSurface : Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
+                        blurRadius: 40,
+                        offset: const Offset(-10, 0),
+                      ),
+                    ],
+                    border: Border(left: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder, width: 1.5)),
+                  ),
+                  child: _CartPanel(isDark: isDark),
                 ),
-                child: _CartPanel(isDark: isDark),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -118,10 +122,12 @@ class _ProductPicker extends ConsumerStatefulWidget {
 
 class _ProductPickerState extends ConsumerState<_ProductPicker> {
   final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -132,11 +138,14 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
     final searchQuery = ref.watch(_posSearchProvider).toLowerCase();
     final selectedCatId = ref.watch(_posCategoryProvider);
 
-    return Column(
-      children: [
+    return AppShortcut(
+      actionId: 'pos_search',
+      onPressed: () => _searchFocusNode.requestFocus(),
+      child: Column(
+        children: [
         // ── Catalog Header & Search ──
         Padding(
-          padding: const EdgeInsets.fromLTRB(32, 40, 32, 24),
+          padding: EdgeInsets.fromLTRB(MediaQuery.of(context).size.width < 700 ? 16 : 32, MediaQuery.of(context).size.width < 700 ? 20 : 40, MediaQuery.of(context).size.width < 700 ? 16 : 32, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -147,7 +156,7 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Product Catalog', 
+                          'Quick Search & Add', 
                           style: GoogleFonts.outfit(
                             fontSize: 34, 
                             fontWeight: FontWeight.w900, 
@@ -158,10 +167,10 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.inventory_2_rounded, size: 14, color: AppColors.primary),
+                            const Icon(Icons.flash_on_rounded, size: 14, color: AppColors.primary),
                             const SizedBox(width: 8),
                             Text(
-                              'Select items to build current transaction', 
+                              'Type or scan to build the current transaction', 
                               style: TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w600),
                             ),
                           ],
@@ -169,6 +178,8 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
                       ],
                     ),
                   ),
+                  _PriceListSelector(isDark: widget.isDark),
+                  const SizedBox(width: 16),
                   _BarcodeScannerButton(
                     onScan: (code) {
                       _searchController.text = code;
@@ -184,6 +195,7 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
                   Expanded(
                     child: _ProfessionalSearchBar(
                       controller: _searchController,
+                      focusNode: _searchFocusNode,
                       onChanged: (v) => ref.read(_posSearchProvider.notifier).state = v,
                       isDark: widget.isDark,
                     ),
@@ -250,29 +262,70 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
                 return matchSearch && matchCat;
               }).toList();
 
+              if (searchQuery.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.search_rounded, size: 64, color: AppColors.textMuted.withValues(alpha: 0.3)),
+                      const SizedBox(height: 16),
+                      Text('Search or scan to add products', style: TextStyle(color: AppColors.textMuted, fontSize: 16, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                );
+              }
+
               if (filtered.isEmpty) return _NoResults(query: searchQuery);
 
-              return LayoutBuilder(builder: (ctx, constraints) {
-                int crossCount = (constraints.maxWidth / 220).floor().clamp(2, 6);
-                return GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(32, 8, 32, 100),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossCount,
-                    crossAxisSpacing: 24,
-                    mainAxisSpacing: 24,
-                    childAspectRatio: 0.85,
-                  ),
-                  itemCount: filtered.length,
-                  itemBuilder: (ctx, i) => _ProductTile(product: filtered[i], isDark: widget.isDark),
-                );
-              });
+              return ListView.separated(
+                padding: EdgeInsets.fromLTRB(
+                  MediaQuery.of(context).size.width < 450 ? 16 : 32, 
+                  8, 
+                  MediaQuery.of(context).size.width < 450 ? 16 : 32, 
+                  100
+                ),
+                itemCount: filtered.length,
+                separatorBuilder: (ctx, i) => const Divider(height: 1, color: AppColors.lightBorder),
+                itemBuilder: (ctx, i) {
+                  final p = filtered[i];
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text('Stock: ${p.stock} ${p.unit}   •   SKU: ${p.sku ?? "-"}', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(CurrencyFormatter.format(p.sellingPrice), style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.primary, fontSize: 16)),
+                        const SizedBox(width: 16),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                          child: const Icon(Icons.add, color: AppColors.primary, size: 20),
+                        ),
+                      ],
+                    ),
+                    onTap: () {
+                      final error = ref.read(billingProvider.notifier).addProduct(p);
+                      if (error != null) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: AppColors.error));
+                      } else {
+                        ref.read(_posSearchProvider.notifier).state = '';
+                        _searchController.clear();
+                      }
+                    },
+                  );
+                },
+              );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error: $e')),
           ),
         ),
       ],
-    );
+    ),);
   }
 
   void _instantAddBarcode(String code) {
@@ -301,6 +354,38 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
         );
       }
     }
+  }
+}
+
+class _PriceListSelector extends ConsumerWidget {
+  final bool isDark;
+  const _PriceListSelector({required this.isDark});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(_posPriceListProvider);
+    final lists = ['Standard', 'Wholesale', 'VIP Customer', 'Employee'];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.lightBorder),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: selected,
+          icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
+          isDense: true,
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? Colors.white : AppColors.textLight),
+          onChanged: (v) {
+            if (v != null) ref.read(_posPriceListProvider.notifier).state = v;
+          },
+          items: lists.map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
+        ),
+      ),
+    );
   }
 }
 
@@ -345,7 +430,8 @@ class _ProfessionalSearchBar extends ConsumerWidget {
   final Function(String) onChanged;
   final bool isDark;
   final TextEditingController controller;
-  const _ProfessionalSearchBar({required this.onChanged, required this.isDark, required this.controller});
+  final FocusNode? focusNode;
+  const _ProfessionalSearchBar({required this.onChanged, required this.isDark, required this.controller, this.focusNode});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -365,6 +451,7 @@ class _ProfessionalSearchBar extends ConsumerWidget {
       ),
       child: TextField(
         controller: controller,
+        focusNode: focusNode,
         onChanged: onChanged,
         onSubmitted: (v) {
           final trimmed = v.trim();
@@ -656,9 +743,11 @@ class _ProductTile extends ConsumerWidget {
   }
 
   void _onProductTap(BuildContext context, WidgetRef ref) async {
-    final tiers = ref.read(tieredPricesForProductProvider(product.id!)).value ?? [];
+    final tiers = await ref.read(productRepositoryProvider).getProductPrices(product.id!);
     if (tiers.isNotEmpty) {
-      _showPriceTierMenu(context, ref, product, tiers);
+      if (context.mounted) {
+        _showPriceTierMenu(context, ref, product, tiers);
+      }
     } else {
       final error = ref.read(billingProvider.notifier).addProduct(product);
       if (error != null) AppAlert.warning(ref, error);
@@ -739,8 +828,6 @@ class _CartPanel extends ConsumerWidget {
     final billing = ref.watch(billingProvider);
     final customersAsync = ref.watch(customersProvider);
 
-    final isCatalogVisible = ref.watch(_isCatalogVisibleProvider);
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final isSmallScreen = constraints.maxHeight < 800;
@@ -764,27 +851,14 @@ class _CartPanel extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: Icon(
-                          isCatalogVisible ? Icons.view_sidebar_rounded : Icons.view_sidebar_outlined,
-                          color: AppColors.primary,
-                        ),
-                        onPressed: () => ref.read(_isCatalogVisibleProvider.notifier).state = !isCatalogVisible,
-                        tooltip: isCatalogVisible ? 'Hide Catalog' : 'Show Catalog',
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Bill Summary', 
-                        style: GoogleFonts.outfit(
-                          fontSize: 22, 
-                          fontWeight: FontWeight.w900, 
-                          letterSpacing: -1.0,
-                          color: isDark ? Colors.white : AppColors.textLight,
-                        )
-                      ),
-                    ],
+                  Text(
+                    'Bill Summary', 
+                    style: GoogleFonts.outfit(
+                      fontSize: 22, 
+                      fontWeight: FontWeight.w900, 
+                      letterSpacing: -1.0,
+                      color: isDark ? Colors.white : AppColors.textLight,
+                    )
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -1180,39 +1254,44 @@ class _TierSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tiers = ref.watch(tieredPricesForProductProvider(item.product.id!)).value ?? [];
-    if (tiers.isEmpty) return const SizedBox.shrink();
+    return FutureBuilder<List<ProductTierPrice>>(
+      future: ref.read(productRepositoryProvider).getProductPrices(item.product.id!),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
+        final tiers = snapshot.data!;
 
-    return PopupMenuButton<double>(
-      icon: const Icon(Icons.layers_rounded, size: 16, color: AppColors.primary),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      tooltip: 'Select Price Tier',
-      onSelected: (price) {
-        final tierName = price == item.product.sellingPrice ? 'Retail' : tiers.firstWhere((t) => t.price == price).categoryName;
-        ref.read(billingProvider.notifier).updatePrice(index, price, scaleName: tierName);
+        return PopupMenuButton<double>(
+          icon: const Icon(Icons.layers_rounded, size: 16, color: AppColors.primary),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          tooltip: 'Select Price Tier',
+          onSelected: (price) {
+            final tierName = price == item.product.sellingPrice ? 'Retail' : tiers.firstWhere((t) => t.price == price).categoryName;
+            ref.read(billingProvider.notifier).updatePrice(index, price, scaleName: tierName);
+          },
+          itemBuilder: (ctx) => [
+            PopupMenuItem(
+              value: item.product.sellingPrice,
+              child: Row(
+                children: [
+                  const Icon(Icons.shopping_cart_rounded, size: 16, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Text('Retail: ${CurrencyFormatter.format(item.product.sellingPrice)}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                ],
+              ),
+            ),
+            ...tiers.map((t) => PopupMenuItem(
+              value: t.price,
+              child: Row(
+                children: [
+                  const Icon(Icons.layers_rounded, size: 16, color: AppColors.success),
+                  const SizedBox(width: 8),
+                  Text('${t.categoryName}: ${CurrencyFormatter.format(t.price)}', style: const TextStyle(fontSize: 13)),
+                ],
+              ),
+            )),
+          ],
+        );
       },
-      itemBuilder: (ctx) => [
-        PopupMenuItem(
-          value: item.product.sellingPrice,
-          child: Row(
-            children: [
-              const Icon(Icons.shopping_cart_rounded, size: 16, color: AppColors.primary),
-              const SizedBox(width: 8),
-              Text('Retail: ${CurrencyFormatter.format(item.product.sellingPrice)}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-            ],
-          ),
-        ),
-        ...tiers.map((t) => PopupMenuItem(
-          value: t.price,
-          child: Row(
-            children: [
-              const Icon(Icons.layers_rounded, size: 16, color: AppColors.success),
-              const SizedBox(width: 8),
-              Text('${t.categoryName}: ${CurrencyFormatter.format(t.price)}', style: const TextStyle(fontSize: 13)),
-            ],
-          ),
-        )),
-      ],
     );
   }
 }
@@ -1244,10 +1323,12 @@ class _CheckoutSection extends ConsumerStatefulWidget {
 }
 
 class _CheckoutSectionState extends ConsumerState<_CheckoutSection> {
-  bool _showSummary = false;
-
   @override
   Widget build(BuildContext context) {
+    final shortcuts = ref.watch(shortcutSettingsProvider);
+    final posPayShortcut = shortcuts['pos_pay'] ?? ShortcutNotifier.defaults['pos_pay']?.defaultShortcut ?? '';
+    final finalizeBtnText = posPayShortcut.isNotEmpty ? 'FINALIZE TRANSACTION ($posPayShortcut)' : 'FINALIZE TRANSACTION';
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1264,75 +1345,86 @@ class _CheckoutSectionState extends ConsumerState<_CheckoutSection> {
       ),
       child: Column(
         children: [
-          GestureDetector(
-            onTap: () => setState(() => _showSummary = !_showSummary),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(_showSummary ? 'Hide Summary Report' : 'Show Summary Report', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.primary)),
-                Icon(_showSummary ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: AppColors.primary, size: 16),
-              ],
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: widget.isDark ? Colors.black.withValues(alpha: 0.2) : AppColors.lightBg,
+              borderRadius: BorderRadius.circular(16),
             ),
-          ),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 300),
-            crossFadeState: _showSummary ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-            firstChild: Column(
+            child: Column(
               children: [
-                const SizedBox(height: 16),
                 _BillRow(label: 'Net Subtotal', value: widget.billing.subtotal),
-                if (ref.watch(featureSettingsProvider).gstEnabled)
+                if (ref.watch(featureSettingsProvider).gstEnabled) ...[
+                  const SizedBox(height: 8),
                   _BillRow(label: 'Total GST', value: widget.billing.totalGst),
-                if (widget.billing.totalDiscounts > 0)
+                ],
+                if (widget.billing.totalDiscounts > 0) ...[
+                  const SizedBox(height: 8),
                   _BillRow(label: 'Bill Discounts', value: -widget.billing.totalDiscounts, color: AppColors.success),
+                ],
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
+                  padding: EdgeInsets.symmetric(vertical: 16),
                   child: Divider(),
+                ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'GRAND TOTAL',
+                        style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.0, color: widget.isDark ? Colors.white70 : AppColors.textLight),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          CurrencyFormatter.format(widget.billing.grandTotal),
+                          style: GoogleFonts.outfit(fontSize: 32, fontWeight: FontWeight.w900, color: AppColors.primary, letterSpacing: -1.5),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            secondChild: const SizedBox(height: 20),
           ),
-          
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('GRAND TOTAL', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.0, color: AppColors.textMuted)),
-              Text(
-                CurrencyFormatter.format(widget.billing.grandTotal),
-                style: GoogleFonts.outfit(fontSize: 26, fontWeight: FontWeight.w900, color: AppColors.primary, letterSpacing: -1.5),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           
           SizedBox(
             width: double.infinity,
             height: 56,
-            child: ElevatedButton(
+            child: AppShortcut(
+              actionId: 'pos_pay',
               onPressed: widget.billing.items.isEmpty || widget.billing.isProcessing
                   ? null
                   : () => _handleCompleteSale(context, ref, widget.billing),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                elevation: 12,
-                shadowColor: AppColors.primary.withValues(alpha: 0.5),
+              child: ElevatedButton(
+                onPressed: widget.billing.items.isEmpty || widget.billing.isProcessing
+                    ? null
+                    : () => _handleCompleteSale(context, ref, widget.billing),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                  elevation: 12,
+                  shadowColor: AppColors.primary.withValues(alpha: 0.5),
+                ),
+                child: widget.billing.isProcessing
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.check_circle_rounded, size: 24),
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: Text(finalizeBtnText, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.0)),
+                          ),
+                        ],
+                      ),
               ),
-              child: widget.billing.isProcessing
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.check_circle_rounded, size: 24),
-                        const SizedBox(width: 10),
-                        Flexible(
-                          child: Text('FINALIZE TRANSACTION', overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.0)),
-                        ),
-                      ],
-                    ),
             ),
           ),
           const SizedBox(height: 12),
@@ -1417,7 +1509,7 @@ class _CheckoutSectionState extends ConsumerState<_CheckoutSection> {
       if (saleId != null) {
         _onSaleSuccess(context, ref, saleId, isEditing);
       } else {
-        AppAlert.error(ref, 'Transaction failed. ${billing.lastError ?? ''}');
+        AppAlert.error(ref, 'Transaction failed. ${ref.read(billingProvider).lastError ?? ''}');
       }
     }
   }
@@ -1476,12 +1568,24 @@ class _BillRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textMuted, fontSize: 13)),
-          Text(
-            CurrencyFormatter.format(value),
-            style: TextStyle(fontWeight: FontWeight.w900, color: color, fontSize: 16),
+          Flexible(
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textMuted, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                CurrencyFormatter.format(value),
+                style: TextStyle(fontWeight: FontWeight.w900, color: color, fontSize: 16),
+              ),
+            ),
           ),
         ],
       ),

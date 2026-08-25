@@ -43,13 +43,13 @@ class ProductRepository {
     return result.map(Product.fromMap).toList();
   }
 
-  Future<Product?> getProductById(int id) async {
+  Future<Product?> getProductById(int id, int businessId) async {
     final result = await _db.rawQuery('''
       SELECT p.*, c.name AS category_name
       FROM ${AppConstants.tblProducts} p
       LEFT JOIN ${AppConstants.tblCategories} c ON p.category_id = c.id
-      WHERE p.id = ?
-    ''', [id]);
+      WHERE p.id = ? AND p.business_id = ?
+    ''', [id, businessId]);
     return result.isNotEmpty ? Product.fromMap(result.first) : null;
   }
 

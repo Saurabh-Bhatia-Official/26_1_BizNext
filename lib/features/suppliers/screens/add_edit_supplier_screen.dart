@@ -7,6 +7,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../models/supplier_model.dart';
 import '../providers/supplier_provider.dart';
 import '../../settings/providers/settings_provider.dart';
+import '../../../core/services/shortcut_service.dart';
 
 class AddEditSupplierScreen extends ConsumerStatefulWidget {
   final SupplierModel? supplier;
@@ -51,16 +52,23 @@ class _AddEditSupplierScreenState extends ConsumerState<AddEditSupplierScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final formState = ref.watch(supplierFormProvider);
+    final shortcuts = ref.watch(shortcutSettingsProvider);
+    final saveShortcut = shortcuts['save'] ?? ShortcutNotifier.defaults['save']?.defaultShortcut ?? '';
+    final saveBtnLabel = isEditing ? 'Save Changes' : 'Register Supplier';
+    final saveBtnText = saveShortcut.isNotEmpty ? '$saveBtnLabel ($saveShortcut)' : saveBtnLabel;
 
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
-      appBar: AppBar(
-        title: Text(isEditing ? 'Edit Supplier' : 'New Supplier'),
-        backgroundColor: Colors.transparent,
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+    return AppShortcut(
+      actionId: 'cancel',
+      onPressed: () => Navigator.maybePop(context),
+      child: Scaffold(
+        backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
+        appBar: AppBar(
+          title: Text(isEditing ? 'Edit Supplier' : 'New Supplier'),
+          backgroundColor: Colors.transparent,
+          centerTitle: true,
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
           child: Column(
@@ -142,22 +150,26 @@ class _AddEditSupplierScreenState extends ConsumerState<AddEditSupplierScreen> {
               SizedBox(
                 width: double.infinity,
                 height: 60,
-                child: ElevatedButton(
+                child: AppShortcut(
+                  actionId: 'save',
                   onPressed: formState.isLoading ? null : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  child: ElevatedButton(
+                    onPressed: formState.isLoading ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    ),
+                    child: formState.isLoading 
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(saveBtnText, style: const TextStyle(fontWeight: FontWeight.w800)),
                   ),
-                  child: formState.isLoading 
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : Text(isEditing ? 'Save Changes' : 'Register Supplier', style: const TextStyle(fontWeight: FontWeight.w800)),
                 ),
               ),
             ],
           ),
         ),
       ),
-    );
+    ),);
   }
 
   void _save() async {

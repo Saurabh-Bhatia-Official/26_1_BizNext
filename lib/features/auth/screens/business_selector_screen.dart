@@ -137,7 +137,14 @@ class _ProfileSummary extends StatelessWidget {
         title: const Text('Sign Out?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => ref.read(authProvider.notifier).logout(), style: ElevatedButton.styleFrom(backgroundColor: AppColors.error), child: const Text('Logout')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(authProvider.notifier).logout();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Logout'),
+          ),
         ],
       ),
     );
