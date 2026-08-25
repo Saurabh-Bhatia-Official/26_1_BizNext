@@ -25,7 +25,7 @@ class PurchaseRepository {
   }
 
   Future<int> recordPurchase(PurchaseModel purchase) async {
-    return await _db.transaction((txn) async {
+    final result = await _db.transaction((txn) async {
       // ── VALIDATION RULES ──
       
       // 1. Supplier Validation
@@ -247,6 +247,15 @@ class PurchaseRepository {
 
       return purchaseId;
     });
+
+    _db.notify(AppConstants.tblPurchases);
+    _db.notify(AppConstants.tblPurchaseItems);
+    _db.notify(AppConstants.tblProducts);
+    _db.notify(AppConstants.tblWarehouseStocks);
+    _db.notify(AppConstants.tblSuppliers);
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
+    return result;
   }
 
   Future<void> deletePurchase(int purchaseId) async {
@@ -255,7 +264,7 @@ class PurchaseRepository {
   }
 
   Future<int> recordPurchaseReturn(Map<String, dynamic> returnData, List<Map<String, dynamic>> items) async {
-    return await _db.transaction((txn) async {
+    final result = await _db.transaction((txn) async {
       final businessId = returnData['business_id'] as int;
 
       // 1. Validate stock availability scoped to business
@@ -424,6 +433,15 @@ class PurchaseRepository {
 
       return returnId;
     });
+
+    _db.notify(AppConstants.tblPurchaseReturns);
+    _db.notify(AppConstants.tblPurchaseReturnItems);
+    _db.notify(AppConstants.tblProducts);
+    _db.notify(AppConstants.tblWarehouseStocks);
+    _db.notify(AppConstants.tblSuppliers);
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
+    return result;
   }
 
   Future<void> addPurchasePayment(int purchaseId, double amount, String mode, {int? accountId}) async {
@@ -485,6 +503,11 @@ class PurchaseRepository {
         );
       }
     });
+
+    _db.notify(AppConstants.tblPurchases);
+    _db.notify(AppConstants.tblSuppliers);
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
   }
 
   Future<List<PurchaseItemModel>> getPurchaseItems(int purchaseId) async {

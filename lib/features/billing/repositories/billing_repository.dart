@@ -8,7 +8,7 @@ class BillingRepository {
   final DatabaseHelper _db = DatabaseHelper.instance;
 
   Future<int> completeSale(SaleHistoryModel sale) async {
-    return await _db.transaction((txn) async {
+    final result = await _db.transaction((txn) async {
       // ── VALIDATIONS ──
 
       // 1. Duplicate Invoice Number
@@ -247,10 +247,19 @@ class BillingRepository {
 
       return saleId;
     });
+    
+    _db.notify(AppConstants.tblSales);
+    _db.notify(AppConstants.tblSaleItems);
+    _db.notify(AppConstants.tblProducts);
+    _db.notify(AppConstants.tblWarehouseStocks);
+    _db.notify(AppConstants.tblCustomers);
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
+    return result;
   }
 
   Future<int> recordSalesReturn(Map<String, dynamic> returnData, List<Map<String, dynamic>> items) async {
-    return await _db.transaction((txn) async {
+    final result = await _db.transaction((txn) async {
       // 1. Insert Sales Return Header
       final returnId = await txn.insert(AppConstants.tblSalesReturns, returnData);
 
@@ -435,6 +444,15 @@ class BillingRepository {
 
       return returnId;
     });
+
+    _db.notify(AppConstants.tblSalesReturns);
+    _db.notify(AppConstants.tblSalesReturnItems);
+    _db.notify(AppConstants.tblProducts);
+    _db.notify(AppConstants.tblWarehouseStocks);
+    _db.notify(AppConstants.tblCustomers);
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
+    return result;
   }
 
   Future<void> voidSale(int saleId) async {
@@ -604,6 +622,14 @@ class BillingRepository {
         }
       }
     });
+
+    _db.notify(AppConstants.tblSales);
+    _db.notify(AppConstants.tblSaleItems);
+    _db.notify(AppConstants.tblProducts);
+    _db.notify(AppConstants.tblWarehouseStocks);
+    _db.notify(AppConstants.tblCustomers);
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
   }
 
   Future<void> updateSale(SaleHistoryModel sale) async {
@@ -667,6 +693,11 @@ class BillingRepository {
         );
       }
     });
+
+    _db.notify(AppConstants.tblSales);
+    _db.notify(AppConstants.tblCustomers);
+    _db.notify(AppConstants.tblLedger);
+    _db.notify(AppConstants.tblAccounts);
   }
 
   Future<SaleHistoryModel?> getSaleById(int id) async {

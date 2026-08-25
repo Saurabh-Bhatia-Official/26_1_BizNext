@@ -35,6 +35,8 @@ class SettingsRepository {
           VALUES (?, ?, ?)
         ''', [businessId, entry.key, entry.value]);
       }
+
+      _db.notify(AppConstants.tblAppSettings);
     });
   }
 }

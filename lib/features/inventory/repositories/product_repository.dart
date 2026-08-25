@@ -251,6 +251,7 @@ class ProductRepository {
           'price': p.price,
         });
       }
+      _db.notify(AppConstants.tblProductPrices);
     });
   }
 }

@@ -105,7 +105,7 @@ class AccountsRepository {
   }
 
   Future<int> addTransaction(TransactionModel transaction) async {
-    return await _db.transaction((txn) async {
+    final result = await _db.transaction((txn) async {
       final id = await txn.insert(AppConstants.tblTransactions, transaction.toMap());
       
       // Update Account Balance
@@ -132,6 +132,11 @@ class AccountsRepository {
       
       return id;
     });
+
+    _db.notify(AppConstants.tblTransactions);
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
+    return result;
   }
 
   Future<void> updateTransaction(TransactionModel transaction) async {
@@ -169,6 +174,10 @@ class AccountsRepository {
         'date': transaction.date.toIso8601String(),
       }, where: 'reference_id = ? AND entity_type = ?', whereArgs: [transaction.id, AppConstants.entityBusiness]);
     });
+
+    _db.notify(AppConstants.tblTransactions);
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
   }
 
   Future<void> deleteTransaction(int id) async {
@@ -190,6 +199,10 @@ class AccountsRepository {
       // Clean up consolidated ledger entry too
       await txn.delete(AppConstants.tblLedger, where: 'reference_id = ? AND entity_type = ?', whereArgs: [id, AppConstants.entityBusiness]);
     });
+
+    _db.notify(AppConstants.tblTransactions);
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
   }
 
   Future<void> deleteLedgerEntry(int id) async {
@@ -223,7 +236,7 @@ class AccountsRepository {
   }
 
   Future<int> addAccount(AccountModel account) async {
-    return await _db.transaction((txn) async {
+    final result = await _db.transaction((txn) async {
       final id = await txn.insert(AppConstants.tblAccounts, account.toMap());
       
       // Record Opening Balance in Ledger if > 0
@@ -245,6 +258,10 @@ class AccountsRepository {
       
       return id;
     });
+
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
+    return result;
   }
 
   Future<void> updateAccount(AccountModel account) async {
@@ -275,6 +292,9 @@ class AccountsRepository {
         }, where: 'account_id = ? AND description = ?', whereArgs: [account.id, 'Opening Balance']);
       }
     });
+
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
   }
 
   Future<void> deleteAccount(int id) async {
@@ -322,6 +342,9 @@ class AccountsRepository {
         'date': dateStr,
       });
     });
+
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
   }
 
   Future<void> deleteTransfer(int refId) async {
@@ -340,6 +363,9 @@ class AccountsRepository {
       }
       await txn.delete(AppConstants.tblLedger, where: 'reference_id = ?', whereArgs: [refId]);
     });
+
+    _db.notify(AppConstants.tblAccounts);
+    _db.notify(AppConstants.tblLedger);
   }
 
   Future<List<LedgerModel>> getAccountLedger(int accountId, {int limit = 100}) async {
