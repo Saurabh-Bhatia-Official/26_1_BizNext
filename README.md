@@ -5,8 +5,8 @@ A new Flutter project.
 ## Downloads
 
 - [Download APK (Android) v1.0.0+1](build/app/outputs/flutter-apk/app-release.apk)
-- [Download EXE (Windows) v1.0.0+1](build/windows/x64/runner/Release/biz_next.exe)
-- [Download ZIP (Windows Application + Dependencies) v1.0.0+1](BizNext-Windows.zip)
+- [Download Windows Installer (Setup) v1.0.0+1](build/windows/installer/BizNext_v1.0.0_Setup.exe)
+- [Download EXE (Windows Standalone) v1.0.0+1](build/windows/x64/runner/Release/biz_next.exe)
 
 ## Getting Started
 
