@@ -1,6 +1,11 @@
-# biz_next
+# BizNext (v1.0.0+1)
 
 A new Flutter project.
+
+## Downloads
+
+- [Download APK (Android) v1.0.0+1](build/app/outputs/flutter-apk/app-release.apk)
+- [Download EXE (Windows) v1.0.0+1](build/windows/x64/runner/Release/biz_next.exe)
 
 ## Getting Started
 
