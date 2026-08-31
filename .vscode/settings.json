@@ -1,4 +1,6 @@
 {
-    "java.configuration.updateBuildConfiguration": "automatic",
-    "cmake.sourceDirectory": "C:/Users/ssbha/Desktop/acccount/26_1_BizNext/windows"
+  "dart.flutterSdkPath": ".fvm/flutter_sdk",
+  "search.exclude": {
+    "**/.fvm": true
+  }
 }
