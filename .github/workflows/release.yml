@@ -2,9 +2,12 @@ name: Flutter Multi-Platform Release
 
 on:
   push:
-    branches:
-      - master
+    tags:
+      - 'v*'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-android:
@@ -31,11 +34,10 @@ jobs:
       - name: Build APK
         run: flutter build apk --release
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: app-release.apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          files: build/app/outputs/flutter-apk/app-release.apk
 
   build-windows:
     name: Build Windows EXE
@@ -51,15 +53,17 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-
+        
       - name: Build Windows
         run: flutter build windows --release
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      - name: Zip Windows Build
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath BizNext_Windows_Standalone.zip
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: biz_next-windows
-          path: build/windows/x64/runner/Release/*
+          files: BizNext_Windows_Standalone.zip
 
   build-linux:
     name: Build Linux
@@ -84,11 +88,15 @@ jobs:
       - name: Build Linux
         run: flutter build linux --release
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      - name: Zip Linux Build
+        run: |
+          cd build/linux/x64/release/bundle
+          zip -r ../../../../../BizNext_Linux_Bundle.zip *
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: biz_next-linux
-          path: build/linux/x64/release/bundle/*
+          files: BizNext_Linux_Bundle.zip
 
   build-macos:
     name: Build macOS
@@ -108,11 +116,15 @@ jobs:
       - name: Build macOS
         run: flutter build macos --release
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      - name: Zip macOS Build
+        run: |
+          cd build/macos/Build/Products/Release
+          zip -r ../../../../../BizNext_macOS.zip BizNext.app
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: biz_next-macos
-          path: build/macos/Build/Products/Release/BizNext.app
+          files: BizNext_macOS.zip
 
   build-ios:
     name: Build iOS
@@ -129,11 +141,16 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build iOS
+      - name: Build iOS Payload
         run: flutter build ios --release --no-codesign
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      - name: Package iOS IPA
+        run: |
+          mkdir -p Payload
+          mv build/ios/iphoneos/Runner.app Payload/
+          zip -qq -r BizNext_iOS_Unsigned.ipa Payload
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: biz_next-ios
-          path: build/ios/iphoneos/Runner.app
+          files: BizNext_iOS_Unsigned.ipa
