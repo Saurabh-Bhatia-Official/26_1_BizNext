@@ -136,7 +136,7 @@ jobs:
       - name: Zip macOS Build
         run: |
           cd build/macos/Build/Products/Release
-          zip -r ../../../../../BizNext_macOS.zip BizNext.app
+          zip -r ../../../../../BizNext_macOS.zip *.app
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
