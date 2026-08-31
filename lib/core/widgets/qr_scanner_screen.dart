@@ -45,25 +45,52 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         if (selectedCameraIndex >= cameras!.length) {
           selectedCameraIndex = 0;
         }
-        await camController?.dispose();
-        try {
-          camController = cam.CameraController(
-            cameras![selectedCameraIndex],
-            cam.ResolutionPreset.medium,
-          );
-          await camController!.initialize();
-        } catch (e) {
-          if (kDebugMode) debugPrint('Failed with Medium, trying Low: $e');
-          camController = cam.CameraController(
-            cameras![selectedCameraIndex],
-            cam.ResolutionPreset.low,
-          );
-          await camController!.initialize();
+
+        if (camController != null) {
+          final old = camController;
+          camController = null;
+          try {
+            await old?.dispose();
+          } catch (_) {}
         }
+
+        final cameraDesc = cameras![selectedCameraIndex];
+        cam.CameraController? newController;
+        final presets = [
+          cam.ResolutionPreset.medium,
+          cam.ResolutionPreset.low,
+          cam.ResolutionPreset.high,
+        ];
+
+        for (final preset in presets) {
+          try {
+            newController = cam.CameraController(
+              cameraDesc,
+              preset,
+              enableAudio: false,
+            );
+            await newController.initialize();
+            if (newController.value.isInitialized) {
+              break;
+            }
+          } catch (e) {
+            if (kDebugMode) debugPrint('QR Scanner Preset $preset failed: $e');
+            try {
+              await newController?.dispose();
+            } catch (_) {}
+            newController = null;
+          }
+        }
+
         if (mounted) {
           setState(() {
-            isCamInitialized = true;
+            camController = newController;
+            isCamInitialized = newController != null && newController.value.isInitialized;
           });
+        } else {
+          try {
+            await newController?.dispose();
+          } catch (_) {}
         }
       }
     } catch (e) {
@@ -74,7 +101,11 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   @override
   void dispose() {
     msController?.dispose();
-    camController?.dispose();
+    final c = camController;
+    camController = null;
+    try {
+      c?.dispose();
+    } catch (_) {}
     super.dispose();
   }
 

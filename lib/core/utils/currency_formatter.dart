@@ -17,6 +17,11 @@ class CurrencyFormatter {
 
   static String compact(double amount) => '₹${_compact.format(amount)}';
 
+  /// Cleanly rounds monetary values to 2 decimal places to eliminate floating point imprecision
+  static double round(double amount) {
+    return (amount * 100).roundToDouble() / 100.0;
+  }
+
   static String formatQty(double qty) {
     if (qty == qty.truncateToDouble()) {
       return qty.toStringAsFixed(0);

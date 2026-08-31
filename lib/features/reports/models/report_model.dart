@@ -6,7 +6,7 @@ import '../../accounts/models/transaction_model.dart';
 class ReportFilter {
   final DateTime startDate;
   final DateTime endDate;
-  final String type; // 'today', 'thisWeek', 'thisMonth', 'custom'
+  final String type; // 'today', 'yesterday', 'thisWeek', 'thisMonth', 'lastMonth', 'thisQuarter', 'thisYear', 'custom'
   final int? categoryId;
   final int? entityId;
 
@@ -18,18 +18,18 @@ class ReportFilter {
     this.entityId,
   });
 
-  factory ReportFilter.today() {
-    final now = DateTime.now();
+  factory ReportFilter.today({DateTime? now}) {
+    final n = now ?? DateTime.now();
     return ReportFilter(
-      startDate: DateTime(now.year, now.month, now.day),
-      endDate: DateTime(now.year, now.month, now.day, 23, 59, 59, 999),
+      startDate: DateTime(n.year, n.month, n.day),
+      endDate: DateTime(n.year, n.month, n.day, 23, 59, 59, 999),
       type: 'today',
     );
   }
 
-  factory ReportFilter.yesterday() {
-    final now = DateTime.now();
-    final yest = now.subtract(const Duration(days: 1));
+  factory ReportFilter.yesterday({DateTime? now}) {
+    final n = now ?? DateTime.now();
+    final yest = n.subtract(const Duration(days: 1));
     return ReportFilter(
       startDate: DateTime(yest.year, yest.month, yest.day),
       endDate: DateTime(yest.year, yest.month, yest.day, 23, 59, 59, 999),
@@ -37,42 +37,74 @@ class ReportFilter {
     );
   }
 
-  factory ReportFilter.thisWeek() {
-    final now = DateTime.now();
-    final firstDayOfWeek = now.subtract(Duration(days: now.weekday - 1));
+  factory ReportFilter.thisWeek({DateTime? now}) {
+    final n = now ?? DateTime.now();
+    final firstDayOfWeek = n.subtract(Duration(days: n.weekday - 1));
     return ReportFilter(
       startDate: DateTime(firstDayOfWeek.year, firstDayOfWeek.month, firstDayOfWeek.day),
-      endDate: DateTime(now.year, now.month, now.day, 23, 59, 59, 999),
+      endDate: DateTime(n.year, n.month, n.day, 23, 59, 59, 999),
       type: 'thisWeek',
     );
   }
 
-  factory ReportFilter.thisMonth() {
-    final now = DateTime.now();
+  factory ReportFilter.thisMonth({DateTime? now}) {
+    final n = now ?? DateTime.now();
     return ReportFilter(
-      startDate: DateTime(now.year, now.month, 1),
-      endDate: DateTime(now.year, now.month + 1, 0, 23, 59, 59, 999),
+      startDate: DateTime(n.year, n.month, 1),
+      endDate: DateTime(n.year, n.month + 1, 0, 23, 59, 59, 999),
       type: 'thisMonth',
     );
   }
 
-  factory ReportFilter.lastMonth() {
-    final now = DateTime.now();
+  factory ReportFilter.lastMonth({DateTime? now}) {
+    final n = now ?? DateTime.now();
     return ReportFilter(
-      startDate: DateTime(now.year, now.month - 1, 1),
-      endDate: DateTime(now.year, now.month, 0, 23, 59, 59, 999),
+      startDate: DateTime(n.year, n.month - 1, 1),
+      endDate: DateTime(n.year, n.month, 0, 23, 59, 59, 999),
       type: 'lastMonth',
     );
   }
 
-  factory ReportFilter.thisYear() {
-    final now = DateTime.now();
+  factory ReportFilter.thisQuarter({DateTime? now}) {
+    final n = now ?? DateTime.now();
+    final quarterMonth = ((n.month - 1) ~/ 3) * 3 + 1;
     return ReportFilter(
-      startDate: DateTime(now.year, 1, 1),
-      endDate: DateTime(now.year, 12, 31, 23, 59, 59, 999),
+      startDate: DateTime(n.year, quarterMonth, 1),
+      endDate: DateTime(n.year, quarterMonth + 3, 0, 23, 59, 59, 999),
+      type: 'thisQuarter',
+    );
+  }
+
+  factory ReportFilter.thisYear({DateTime? now}) {
+    final n = now ?? DateTime.now();
+    return ReportFilter(
+      startDate: DateTime(n.year, 1, 1),
+      endDate: DateTime(n.year, 12, 31, 23, 59, 59, 999),
       type: 'thisYear',
     );
   }
+
+  factory ReportFilter.custom(DateTime start, DateTime end) {
+    return ReportFilter(
+      startDate: DateTime(start.year, start.month, start.day),
+      endDate: DateTime(end.year, end.month, end.day, 23, 59, 59, 999),
+      type: 'custom',
+    );
+  }
+}
+
+class SalesTrendPoint {
+  final DateTime date;
+  final String label;
+  final double amount;
+  final int count;
+
+  SalesTrendPoint({
+    required this.date,
+    required this.label,
+    required this.amount,
+    required this.count,
+  });
 }
 
 class ProfitLossReport {
@@ -89,6 +121,9 @@ class ProfitLossReport {
     required this.netProfit,
     required this.margin,
   });
+
+  /// Safe calculation of margin percentage protecting against zero revenue
+  double get marginPercent => totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0.0;
 }
 
 class SalesReport {
@@ -98,8 +133,8 @@ class SalesReport {
   final double totalGst;
   final double totalDiscount;
   final int transactionCount;
-
   final Map<String, double> paymentModeBreakdown;
+  final List<SalesTrendPoint> trendPoints;
 
   SalesReport({
     required this.sales,
@@ -109,7 +144,10 @@ class SalesReport {
     required this.totalDiscount,
     required this.transactionCount,
     required this.paymentModeBreakdown,
+    this.trendPoints = const [],
   });
+
+  double get averageOrderValue => transactionCount > 0 ? totalAmount / transactionCount : 0.0;
 }
 
 class StockReport {
@@ -154,6 +192,8 @@ class TransactionReport {
     required this.totalIncome,
     required this.totalExpense,
   });
+
+  double get netCashFlow => totalIncome - totalExpense;
 }
 
 class TaxReport {

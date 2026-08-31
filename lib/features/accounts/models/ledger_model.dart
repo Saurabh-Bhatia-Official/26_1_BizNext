@@ -53,20 +53,20 @@ class LedgerModel {
 
   factory LedgerModel.fromMap(Map<String, dynamic> map) {
     return LedgerModel(
-      id: map['id'],
-      businessId: map['business_id'],
-      entityType: map['entity_type'],
-      entityId: map['entity_id'],
+      id: (map['id'] as num?)?.toInt(),
+      businessId: (map['business_id'] as num?)?.toInt() ?? 0,
+      entityType: map['entity_type'] ?? '',
+      entityId: (map['entity_id'] as num?)?.toInt() ?? 0,
       entityName: map['entity_name'],
       categoryName: map['category_name'],
-      type: map['type'],
-      amount: (map['amount'] as num).toDouble(),
-      balance: (map['balance'] as num).toDouble(),
-      referenceId: map['reference_id'],
-      accountId: map['account_id'],
+      type: map['type'] ?? '',
+      amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
+      balance: (map['balance'] as num?)?.toDouble() ?? 0.0,
+      referenceId: (map['reference_id'] as num?)?.toInt(),
+      accountId: (map['account_id'] as num?)?.toInt(),
       accountName: map['account_name'],
       description: map['description'],
-      date: DateTime.parse(map['date']),
+      date: map['date'] != null ? DateTime.tryParse(map['date']) ?? DateTime.now() : DateTime.now(),
     );
   }
 }

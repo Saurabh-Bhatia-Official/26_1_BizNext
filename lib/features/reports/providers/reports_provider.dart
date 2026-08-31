@@ -39,9 +39,9 @@ class ReportsRepository {
       WHERE business_id = ? AND date BETWEEN ? AND ? AND type = 'credit'
     ''', [businessId, filter.startDate.toIso8601String(), filter.endDate.toIso8601String()]);
 
-    final revenue = (salesRes.first['total'] as num).toDouble() + (manualIncRes.first['total'] as num).toDouble();
-    final cost = (cogsRes.first['total'] as num).toDouble();
-    final expenses = (manualExpRes.first['total'] as num).toDouble();
+    final revenue = ((salesRes.first['total'] as num?)?.toDouble() ?? 0.0) + ((manualIncRes.first['total'] as num?)?.toDouble() ?? 0.0);
+    final cost = (cogsRes.first['total'] as num?)?.toDouble() ?? 0.0;
+    final expenses = (manualExpRes.first['total'] as num?)?.toDouble() ?? 0.0;
     final profit = revenue - cost - expenses;
 
     return ProfitLossReport(
@@ -76,18 +76,51 @@ class ReportsRepository {
     final s = stats.first;
 
     final Map<String, double> paymentBreakdown = {};
+    final Map<String, ({double amount, int count, DateTime date})> dailyMap = {};
+
     for (final sale in sales) {
       paymentBreakdown[sale.paymentMode] = (paymentBreakdown[sale.paymentMode] ?? 0) + sale.grandTotal;
+      
+      final dt = sale.date;
+      final label = "${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}";
+      final existing = dailyMap[label];
+      if (existing != null) {
+        dailyMap[label] = (
+          amount: existing.amount + sale.grandTotal,
+          count: existing.count + 1,
+          date: dt,
+        );
+      } else {
+        dailyMap[label] = (
+          amount: sale.grandTotal,
+          count: 1,
+          date: dt,
+        );
+      }
     }
+
+    final sortedKeys = dailyMap.keys.toList()
+      ..sort((a, b) => dailyMap[a]!.date.compareTo(dailyMap[b]!.date));
+
+    final trendPoints = sortedKeys.map((k) {
+      final item = dailyMap[k]!;
+      return SalesTrendPoint(
+        date: item.date,
+        label: k,
+        amount: item.amount,
+        count: item.count,
+      );
+    }).toList();
 
     return SalesReport(
       sales: sales,
-      totalAmount: (s['total'] as num).toDouble(),
-      netSales: (s['net_sales'] as num).toDouble(),
-      totalGst: (s['gst'] as num).toDouble(),
-      totalDiscount: (s['discount'] as num).toDouble(),
-      transactionCount: s['count'] as int,
+      totalAmount: (s['total'] as num?)?.toDouble() ?? 0.0,
+      netSales: (s['net_sales'] as num?)?.toDouble() ?? 0.0,
+      totalGst: (s['gst'] as num?)?.toDouble() ?? 0.0,
+      totalDiscount: (s['discount'] as num?)?.toDouble() ?? 0.0,
+      transactionCount: (s['count'] as num?)?.toInt() ?? 0,
       paymentModeBreakdown: paymentBreakdown,
+      trendPoints: trendPoints,
     );
   }
 
@@ -102,19 +135,19 @@ class ReportsRepository {
     int lowStock = 0;
     
     final items = itemsRes.map((m) {
-      final stock = (m['stock'] as num).toDouble();
-      final pPrice = (m['purchase_price'] as num).toDouble();
+      final stock = (m['stock'] as num?)?.toDouble() ?? 0.0;
+      final pPrice = (m['purchase_price'] as num?)?.toDouble() ?? 0.0;
       final minLevel = (m['min_stock'] as num?)?.toDouble() ?? 5.0;
       
       if (stock <= minLevel) lowStock++;
       totalValue += stock * pPrice;
       
       return StockItemDetail(
-        productId: m['id'] as int,
-        productName: m['name'] as String,
+        productId: (m['id'] as num?)?.toInt() ?? 0,
+        productName: m['name'] as String? ?? 'Product',
         currentStock: stock,
         purchasePrice: pPrice,
-        salePrice: (m['selling_price'] as num).toDouble(),
+        salePrice: (m['selling_price'] as num?)?.toDouble() ?? 0.0,
         value: stock * pPrice,
       );
     }).toList();
@@ -139,8 +172,8 @@ class ReportsRepository {
       WHERE business_id = ? AND date BETWEEN ? AND ? AND status = 'completed'
     ''', [businessId, filter.startDate.toIso8601String(), filter.endDate.toIso8601String()]);
 
-    final coll = (collected.first['total'] as num).toDouble();
-    final pd = (paid.first['total'] as num).toDouble();
+    final coll = (collected.first['total'] as num?)?.toDouble() ?? 0.0;
+    final pd = (paid.first['total'] as num?)?.toDouble() ?? 0.0;
 
     return TaxReport(
       gstCollected: coll,
@@ -192,20 +225,20 @@ class ReportsRepository {
 
     final Map<String, double> salesByDay = {};
     for (var r in salesRes) {
-      final amt = (r['grand_total'] as num).toDouble();
+      final amt = (r['grand_total'] as num?)?.toDouble() ?? 0.0;
       totalSales += amt;
-      final dtStr = r['date'] as String;
-      final dt = DateTime.parse(dtStr);
+      final dtStr = r['date'] as String?;
+      final dt = dtStr != null ? DateTime.tryParse(dtStr) ?? DateTime.now() : DateTime.now();
       final label = "${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}";
       salesByDay[label] = (salesByDay[label] ?? 0) + amt;
     }
 
     final Map<String, double> purchasesByDay = {};
     for (var r in purchasesRes) {
-      final amt = (r['grand_total'] as num).toDouble();
+      final amt = (r['grand_total'] as num?)?.toDouble() ?? 0.0;
       totalPurchases += amt;
-      final dtStr = r['date'] as String;
-      final dt = DateTime.parse(dtStr);
+      final dtStr = r['date'] as String?;
+      final dt = dtStr != null ? DateTime.tryParse(dtStr) ?? DateTime.now() : DateTime.now();
       final label = "${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}";
       purchasesByDay[label] = (purchasesByDay[label] ?? 0) + amt;
     }
@@ -230,9 +263,79 @@ class ReportsRepository {
       dataPoints: points,
     );
   }
+
+  Future<List<Map<String, dynamic>>> getCategorySales(int businessId, ReportFilter filter) async {
+    return await _db.rawQuery('''
+      SELECT 
+        COALESCE(c.name, 'Uncategorized') as category_name,
+        SUM(si.quantity) as total_quantity,
+        SUM(si.total) as total_sales,
+        COUNT(DISTINCT s.id) as order_count
+      FROM ${AppConstants.tblSaleItems} si
+      JOIN ${AppConstants.tblSales} s ON si.sale_id = s.id
+      JOIN ${AppConstants.tblProducts} p ON si.product_id = p.id
+      LEFT JOIN ${AppConstants.tblCategories} c ON p.category_id = c.id
+      WHERE s.business_id = ? AND s.date BETWEEN ? AND ? AND s.status = 'completed'
+      GROUP BY c.id
+      ORDER BY total_sales DESC
+    ''', [businessId, filter.startDate.toIso8601String(), filter.endDate.toIso8601String()]);
+  }
+
+  Future<List<Map<String, dynamic>>> getCustomerTypeSales(int businessId, ReportFilter filter) async {
+    return await _db.rawQuery('''
+      SELECT 
+        COALESCE(ct.name, 'Direct Retail / Walk-in') as customer_type_name,
+        COUNT(DISTINCT s.id) as transaction_count,
+        SUM(s.grand_total) as total_sales,
+        SUM(s.discount) as total_discount
+      FROM ${AppConstants.tblSales} s
+      LEFT JOIN ${AppConstants.tblCustomers} c ON s.customer_id = c.id
+      LEFT JOIN ${AppConstants.tblCustomerTypes} ct ON c.customer_type_id = ct.id
+      WHERE s.business_id = ? AND s.date BETWEEN ? AND ? AND s.status = 'completed'
+      GROUP BY ct.id
+      ORDER BY total_sales DESC
+    ''', [businessId, filter.startDate.toIso8601String(), filter.endDate.toIso8601String()]);
+  }
+
+  Future<List<Map<String, dynamic>>> getSupplierPurchaseSummary(int businessId, ReportFilter filter) async {
+    return await _db.rawQuery('''
+      SELECT 
+        COALESCE(sup.name, 'Unknown Supplier') as supplier_name,
+        sup.phone as supplier_phone,
+        COUNT(p.id) as purchase_count,
+        SUM(p.grand_total) as total_purchases,
+        SUM(p.paid_amount) as total_paid,
+        SUM(p.balance_due) as total_balance_due
+      FROM ${AppConstants.tblPurchases} p
+      LEFT JOIN ${AppConstants.tblSuppliers} sup ON p.supplier_id = sup.id
+      WHERE p.business_id = ? AND p.date BETWEEN ? AND ? AND p.status = 'completed'
+      GROUP BY p.supplier_id
+      ORDER BY total_purchases DESC
+    ''', [businessId, filter.startDate.toIso8601String(), filter.endDate.toIso8601String()]);
+  }
+
+  Future<List<Map<String, dynamic>>> getProductMovementAnalysis(int businessId, ReportFilter filter) async {
+    return await _db.rawQuery('''
+      SELECT 
+        p.id as product_id,
+        p.name as product_name,
+        p.sku,
+        p.unit,
+        p.purchase_price,
+        p.selling_price,
+        p.stock as current_stock,
+        (p.stock * p.purchase_price) as inventory_value,
+        COALESCE(SUM(CASE WHEN it.transaction_type = 'PURCHASE' THEN it.quantity ELSE 0 END), 0) as purchased_qty,
+        COALESCE(SUM(CASE WHEN it.transaction_type = 'SALE' THEN it.quantity ELSE 0 END), 0) as sold_qty,
+        COALESCE(SUM(CASE WHEN it.transaction_type = 'STOCK_ADJUSTMENT' OR it.transaction_type = 'DAMAGE_WASTAGE' THEN it.quantity ELSE 0 END), 0) as adjusted_qty
+      FROM ${AppConstants.tblProducts} p
+      LEFT JOIN ${AppConstants.tblInventoryTransactions} it ON p.id = it.product_id AND it.created_date BETWEEN ? AND ?
+      WHERE p.business_id = ? AND p.is_active = 1
+      GROUP BY p.id
+      ORDER BY p.name ASC
+    ''', [filter.startDate.toIso8601String(), filter.endDate.toIso8601String(), businessId]);
+  }
 }
-
-
 
 final reportsRepositoryProvider = Provider<ReportsRepository>((ref) => ReportsRepository());
 
@@ -283,4 +386,32 @@ final salesVsPurchasesReportProvider = FutureProvider.autoDispose<SalesVsPurchas
   final businessId = ref.watch(activeBusinessIdProvider);
   final filter = ref.watch(reportFilterProvider);
   return ref.watch(reportsRepositoryProvider).getSalesVsPurchasesReport(businessId, filter);
+});
+
+final categorySalesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  ref.watch(databaseVersionProvider);
+  final businessId = ref.watch(activeBusinessIdProvider);
+  final filter = ref.watch(reportFilterProvider);
+  return ref.watch(reportsRepositoryProvider).getCategorySales(businessId, filter);
+});
+
+final customerTypeSalesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  ref.watch(databaseVersionProvider);
+  final businessId = ref.watch(activeBusinessIdProvider);
+  final filter = ref.watch(reportFilterProvider);
+  return ref.watch(reportsRepositoryProvider).getCustomerTypeSales(businessId, filter);
+});
+
+final supplierPurchaseSummaryProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  ref.watch(databaseVersionProvider);
+  final businessId = ref.watch(activeBusinessIdProvider);
+  final filter = ref.watch(reportFilterProvider);
+  return ref.watch(reportsRepositoryProvider).getSupplierPurchaseSummary(businessId, filter);
+});
+
+final productMovementAnalysisProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  ref.watch(databaseVersionProvider);
+  final businessId = ref.watch(activeBusinessIdProvider);
+  final filter = ref.watch(reportFilterProvider);
+  return ref.watch(reportsRepositoryProvider).getProductMovementAnalysis(businessId, filter);
 });

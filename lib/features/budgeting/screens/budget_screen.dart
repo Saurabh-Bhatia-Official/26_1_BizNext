@@ -223,8 +223,8 @@ class _BudgetSummaryPanel extends StatelessWidget {
               ),
               Text(
                 remaining >= 0
-                    ? '₹${CurrencyFormatter.format(remaining)} remaining'
-                    : '₹${CurrencyFormatter.format(-remaining)} over budget',
+                    ? '${CurrencyFormatter.format(remaining)} remaining'
+                    : '${CurrencyFormatter.format(-remaining)} over budget',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -367,8 +367,8 @@ class _BudgetCard extends ConsumerWidget {
               ),
               Text(
                 remaining >= 0
-                    ? '₹${CurrencyFormatter.format(remaining)} left'
-                    : 'Over by ₹${CurrencyFormatter.format(-remaining)}',
+                    ? '${CurrencyFormatter.format(remaining)} left'
+                    : 'Over by ${CurrencyFormatter.format(-remaining)}',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -397,7 +397,7 @@ class _BudgetCard extends ConsumerWidget {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Forecast: ₹${CurrencyFormatter.format(forecastedTotal)}',
+                      'Forecast: ${CurrencyFormatter.format(forecastedTotal)}',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,

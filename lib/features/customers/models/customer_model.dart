@@ -8,6 +8,8 @@ class CustomerModel {
   final String? email;
   final String? address;
   final String? gstNumber;
+  final int? customerTypeId;
+  final String? customerTypeName;
   final double balance;
   final double loyaltyPoints;
   final DateTime createdAt;
@@ -20,6 +22,8 @@ class CustomerModel {
     this.email,
     this.address,
     this.gstNumber,
+    this.customerTypeId,
+    this.customerTypeName,
     this.balance = 0,
     this.loyaltyPoints = 0,
     DateTime? createdAt,
@@ -34,6 +38,7 @@ class CustomerModel {
       'email': email,
       'address': address,
       'gst_number': gstNumber,
+      'customer_type_id': customerTypeId,
       'balance': balance,
       'loyalty_points': loyaltyPoints,
       'created_at': createdAt.toIso8601String(),
@@ -43,15 +48,17 @@ class CustomerModel {
   factory CustomerModel.fromMap(Map<String, dynamic> map) {
     return CustomerModel(
       id: map['id'],
-      businessId: map['business_id'],
-      name: map['name'],
+      businessId: map['business_id'] ?? 1,
+      name: map['name'] ?? '',
       phone: map['phone'],
       email: map['email'],
       address: map['address'],
       gstNumber: map['gst_number'],
-      balance: (map['balance'] as num).toDouble(),
+      customerTypeId: map['customer_type_id'] as int?,
+      customerTypeName: map['customer_type_name'] as String?,
+      balance: (map['balance'] as num?)?.toDouble() ?? 0.0,
       loyaltyPoints: (map['loyalty_points'] as num?)?.toDouble() ?? 0.0,
-      createdAt: DateTime.parse(map['created_at']),
+      createdAt: map['created_at'] != null ? DateTime.parse(map['created_at']) : DateTime.now(),
     );
   }
 
@@ -63,6 +70,8 @@ class CustomerModel {
     String? email,
     String? address,
     String? gstNumber,
+    int? customerTypeId,
+    String? customerTypeName,
     double? balance,
     double? loyaltyPoints,
     DateTime? createdAt,
@@ -75,6 +84,8 @@ class CustomerModel {
       email: email ?? this.email,
       address: address ?? this.address,
       gstNumber: gstNumber ?? this.gstNumber,
+      customerTypeId: customerTypeId ?? this.customerTypeId,
+      customerTypeName: customerTypeName ?? this.customerTypeName,
       balance: balance ?? this.balance,
       loyaltyPoints: loyaltyPoints ?? this.loyaltyPoints,
       createdAt: createdAt ?? this.createdAt,

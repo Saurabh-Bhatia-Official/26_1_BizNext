@@ -1,5 +1,6 @@
 // lib/features/billing/models/pos_model.dart
 
+import '../../../core/utils/currency_formatter.dart';
 import '../../inventory/models/product_model.dart';
 import 'sale_history_model.dart';
 
@@ -9,8 +10,9 @@ class PosItemModel {
   final Product product;
   final double quantity;
   final double discount;
-  final double manualPrice; // U10: Allow manual price override in POS
-  final String? priceScaleName; // U14: Track which scale was selected
+  final double manualPrice; // Allow manual price override in POS
+  final String? priceScaleName; // Track which price tier / scale was selected
+  final bool isTaxInclusive;
 
   const PosItemModel({
     required this.product,
@@ -18,6 +20,7 @@ class PosItemModel {
     this.discount = 0,
     this.manualPrice = 0,
     this.priceScaleName,
+    this.isTaxInclusive = false,
   });
 
   factory PosItemModel.fromSaleItem(SaleHistoryItemModel item) {
@@ -34,14 +37,31 @@ class PosItemModel {
       quantity: item.quantity,
       discount: item.discount,
       manualPrice: item.price, // Preserve the price from history as manual override
-      priceScaleName: 'Previous Order', // Or determine from price if possible
+      priceScaleName: 'Previous Order',
     );
   }
 
   double get effectivePrice => manualPrice > 0 ? manualPrice : product.sellingPrice;
-  double get subtotal => effectivePrice * quantity;
-  double get gstAmount => (subtotal - discount) * (product.gstPercent / 100);
-  double get total => subtotal - discount + gstAmount;
+  double get subtotal => CurrencyFormatter.round(effectivePrice * quantity);
+  
+  double get gstAmount {
+    if (product.gstPercent <= 0) return 0.0;
+    if (isTaxInclusive) {
+      // Reverse calculate GST component from inclusive price
+      final taxableAmount = (subtotal - discount);
+      return CurrencyFormatter.round(taxableAmount - (taxableAmount / (1 + (product.gstPercent / 100))));
+    } else {
+      return CurrencyFormatter.round((subtotal - discount) * (product.gstPercent / 100));
+    }
+  }
+
+  double get total {
+    if (isTaxInclusive) {
+      return CurrencyFormatter.round(subtotal - discount);
+    } else {
+      return CurrencyFormatter.round(subtotal - discount + gstAmount);
+    }
+  }
 
   PosItemModel copyWith({
     Product? product,
@@ -49,6 +69,7 @@ class PosItemModel {
     double? discount,
     double? manualPrice,
     String? priceScaleName,
+    bool? isTaxInclusive,
   }) {
     return PosItemModel(
       product: product ?? this.product,
@@ -56,6 +77,7 @@ class PosItemModel {
       discount: discount ?? this.discount,
       manualPrice: manualPrice ?? this.manualPrice,
       priceScaleName: priceScaleName ?? this.priceScaleName,
+      isTaxInclusive: isTaxInclusive ?? this.isTaxInclusive,
     );
   }
 
@@ -74,6 +96,32 @@ class PosItemModel {
   }
 }
 
+/// Model representing a parked / held order in the POS session.
+class HeldOrderModel {
+  final String id;
+  final String? customerName;
+  final int? customerId;
+  final List<PosItemModel> items;
+  final double manualDiscount;
+  final String paymentMode;
+  final String? notes;
+  final DateTime createdAt;
+
+  HeldOrderModel({
+    required this.id,
+    this.customerName,
+    this.customerId,
+    required this.items,
+    this.manualDiscount = 0,
+    this.paymentMode = 'Cash',
+    this.notes,
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  double get grandTotal => items.fold(0.0, (sum, i) => sum + i.total) - manualDiscount;
+  int get itemCount => items.fold(0, (sum, i) => sum + i.quantity.toInt());
+}
+
 /// Model representing an active POS session/cart state.
 /// This separates the interactive POS state from the finalized Sale History.
 class PosModel {
@@ -87,7 +135,7 @@ class PosModel {
   final int? editingSaleId;
   final String? customInvoiceNo;
   final String? originalInvoiceNo;
-   final String? notes;
+  final String? notes;
   final bool isTaxInclusive;
   final double pointsEarned;
   final double pointsRedeemed;
@@ -117,7 +165,7 @@ class PosModel {
       selectedCustomerId: sale.customerId,
       selectedCustomerName: sale.customerName,
       paymentMode: sale.paymentMode,
-      manualDiscount: 0, // Manual discount is usually recalculatable or reset
+      manualDiscount: 0,
       selectedAccountId: sale.accountId,
       editingSaleId: sale.id,
       originalInvoiceNo: sale.invoiceNo,
@@ -129,11 +177,19 @@ class PosModel {
     );
   }
 
-  double get subtotal => items.fold(0, (sum, item) => sum + item.subtotal);
-  double get totalGst => items.fold(0, (sum, item) => sum + item.gstAmount);
-  double get itemDiscounts => items.fold(0, (sum, item) => sum + item.discount);
+  double get subtotal => items.fold(0.0, (sum, item) => sum + item.subtotal);
+  double get totalGst => items.fold(0.0, (sum, item) => sum + item.gstAmount);
+  double get itemDiscounts => items.fold(0.0, (sum, item) => sum + item.discount);
   double get totalDiscounts => itemDiscounts + manualDiscount + autoBillDiscount + loyaltyDiscount;
-  double get grandTotal => subtotal + totalGst - totalDiscounts;
+  
+  double get grandTotal {
+    if (isTaxInclusive) {
+      return (subtotal - totalDiscounts).clamp(0.0, double.infinity);
+    } else {
+      return (subtotal + totalGst - totalDiscounts).clamp(0.0, double.infinity);
+    }
+  }
+  
   int get totalItemCount => items.fold(0, (sum, item) => sum + item.quantity.toInt());
 
   PosModel copyWith({
@@ -149,6 +205,7 @@ class PosModel {
     String? originalInvoiceNo,
     String? notes,
     bool? isTaxInclusive,
+    double? autoBillDiscount,
     double? pointsEarned,
     double? pointsRedeemed,
     double? loyaltyDiscount,
@@ -165,7 +222,7 @@ class PosModel {
       originalInvoiceNo: originalInvoiceNo ?? this.originalInvoiceNo,
       notes: notes ?? this.notes,
       isTaxInclusive: isTaxInclusive ?? this.isTaxInclusive,
-      autoBillDiscount: autoBillDiscount ?? autoBillDiscount,
+      autoBillDiscount: autoBillDiscount ?? this.autoBillDiscount,
       pointsEarned: pointsEarned ?? this.pointsEarned,
       pointsRedeemed: pointsRedeemed ?? this.pointsRedeemed,
       loyaltyDiscount: loyaltyDiscount ?? this.loyaltyDiscount,
@@ -196,6 +253,7 @@ class PosModel {
       notes: notesOverride ?? notes,
       pointsEarned: pointsEarned,
       pointsRedeemed: pointsRedeemed,
+      loyaltyDiscount: loyaltyDiscount,
       date: date,
       items: items.map((i) => i.toSaleItem()).toList(),
     );

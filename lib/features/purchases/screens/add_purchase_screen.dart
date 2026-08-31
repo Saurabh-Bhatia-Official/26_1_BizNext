@@ -79,57 +79,74 @@ class _AddPurchaseScreenState extends ConsumerState<AddPurchaseScreen> {
       backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final isSmallScreen = constraints.maxHeight < 700;
+          final isMobile = constraints.maxWidth < 800 || constraints.maxHeight < 700;
 
-          Widget mainContent = Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Main Entry Area ──
-              Expanded(
-                flex: 7,
-                child: Column(
-                  children: [
-                    _buildProductSearch(context, ref, isDark),
-                    if (isSmallScreen)
-                      SizedBox(height: 400, child: _PurchaseItemTable(isDark: isDark))
-                    else
-                      Expanded(child: _PurchaseItemTable(isDark: isDark)),
-                  ],
-                ),
-              ),
-
-              // ── Summary & Payment Panel ──
-              Expanded(
-                flex: 3,
-                child: Container(
-                  margin: const EdgeInsets.fromLTRB(0, 0, 24, 24),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppColors.darkCard : Colors.white,
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-                    boxShadow: isDark ? [] : [const BoxShadow(color: Color(0x08000000), blurRadius: 30, offset: Offset(0, 10))],
+          Widget mainContent = isMobile 
+            ? Column(
+                children: [
+                  _buildProductSearch(context, ref, isDark),
+                  SizedBox(height: 400, child: _PurchaseItemTable(isDark: isDark)),
+                  const SizedBox(height: 24),
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 24),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkCard : Colors.white,
+                      borderRadius: BorderRadius.circular(32),
+                      border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                      boxShadow: isDark ? [] : [const BoxShadow(color: Color(0x08000000), blurRadius: 30, offset: Offset(0, 10))],
+                    ),
+                    child: SizedBox(
+                      height: 600,
+                      child: _SummaryDetailsPanel(isDark: isDark, onComplete: () => _handleCompletePurchase(context, ref)),
+                    ),
                   ),
-                  child: isSmallScreen
-                      ? SizedBox(height: 600, child: _SummaryDetailsPanel(isDark: isDark, onComplete: () => _handleCompletePurchase(context, ref)))
-                      : _SummaryDetailsPanel(isDark: isDark, onComplete: () => _handleCompletePurchase(context, ref)),
-                ),
-              ),
-            ],
-          );
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Main Entry Area ──
+                  Expanded(
+                    flex: 7,
+                    child: Column(
+                      children: [
+                        _buildProductSearch(context, ref, isDark),
+                        Expanded(child: _PurchaseItemTable(isDark: isDark)),
+                      ],
+                    ),
+                  ),
+
+                  // ── Summary & Payment Panel ──
+                  Expanded(
+                    flex: 3,
+                    child: Container(
+                      margin: const EdgeInsets.fromLTRB(0, 0, 24, 24),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkCard : Colors.white,
+                        borderRadius: BorderRadius.circular(32),
+                        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                        boxShadow: isDark ? [] : [const BoxShadow(color: Color(0x08000000), blurRadius: 30, offset: Offset(0, 10))],
+                      ),
+                      child: _SummaryDetailsPanel(isDark: isDark, onComplete: () => _handleCompletePurchase(context, ref)),
+                    ),
+                  ),
+                ],
+              );
 
           Widget body = Column(
             children: [
               // ── Header Bar ──
               _buildHeader(context, ref, isDark, form),
 
-              if (isSmallScreen)
+              if (isMobile)
                 mainContent
               else
                 Expanded(child: mainContent),
             ],
           );
 
-          if (isSmallScreen) {
+          if (isMobile) {
             return SingleChildScrollView(child: body);
           }
 
@@ -141,6 +158,7 @@ class _AddPurchaseScreenState extends ConsumerState<AddPurchaseScreen> {
 
   Widget _buildHeader(BuildContext context, WidgetRef ref, bool isDark, PurchaseFormState form) {
     final suppliersAsync = ref.watch(suppliersProvider);
+    final isMobile = MediaQuery.of(context).size.width < 800;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
@@ -171,44 +189,78 @@ class _AddPurchaseScreenState extends ConsumerState<AddPurchaseScreen> {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
-              if (form.isProcessing)
-                const Padding(
-                  padding: EdgeInsets.only(right: 16),
-                  child: CircularProgressIndicator(),
+              if (isMobile)
+                Expanded(
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (form.isProcessing) const CircularProgressIndicator(),
+                      _HeaderActionButton(
+                        label: 'Reset Form',
+                        icon: Icons.refresh_rounded,
+                        color: AppColors.error,
+                        onPressed: () {
+                          _billNoController.clear();
+                          ref.read(purchaseFormProvider.notifier).reset();
+                        },
+                        isDark: isDark,
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: form.items.isEmpty || form.supplierId == null || form.isProcessing
+                            ? null
+                            : () => _handleCompletePurchase(context, ref),
+                        icon: const Icon(Icons.check_circle_rounded, size: 20),
+                        label: const Text('Complete Purchase'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else ...[
+                if (form.isProcessing)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 16),
+                    child: CircularProgressIndicator(),
+                  ),
+                _HeaderActionButton(
+                  label: 'Reset Form',
+                  icon: Icons.refresh_rounded,
+                  color: AppColors.error,
+                  onPressed: () {
+                    _billNoController.clear();
+                    ref.read(purchaseFormProvider.notifier).reset();
+                  },
+                  isDark: isDark,
                 ),
-              _HeaderActionButton(
-                label: 'Reset Form',
-                icon: Icons.refresh_rounded,
-                color: AppColors.error,
-                onPressed: () {
-                  _billNoController.clear();
-                  ref.read(purchaseFormProvider.notifier).reset();
-                },
-                isDark: isDark,
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: form.items.isEmpty || form.supplierId == null || form.isProcessing
-                    ? null
-                    : () => _handleCompletePurchase(context, ref),
-                icon: const Icon(Icons.check_circle_rounded, size: 20),
-                label: const Text('Complete Purchase'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: form.items.isEmpty || form.supplierId == null || form.isProcessing
+                      ? null
+                      : () => _handleCompletePurchase(context, ref),
+                  icon: const Icon(Icons.check_circle_rounded, size: 20),
+                  label: const Text('Complete Purchase'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: suppliersAsync.when(
+          if (isMobile)
+            Column(
+              children: [
+                suppliersAsync.when(
                   data: (suppliers) => AppSearchableDropdown<int?>(
                     value: form.supplierId,
                     labelText: 'Select Supplier*',
@@ -227,20 +279,14 @@ class _AddPurchaseScreenState extends ConsumerState<AddPurchaseScreen> {
                   loading: () => const LinearProgressIndicator(),
                   error: (_, _) => const SizedBox.shrink(),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 2,
-                child: TextField(
+                const SizedBox(height: 16),
+                TextField(
                   controller: _billNoController,
                   onChanged: (v) => ref.read(purchaseFormProvider.notifier).setBillNo(v),
                   decoration: const InputDecoration(labelText: 'Bill Number', prefixIcon: Icon(Icons.receipt_long_rounded)),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 2,
-                child: InkWell(
+                const SizedBox(height: 16),
+                InkWell(
                   onTap: () async {
                     final date = await showDatePicker(
                       context: context,
@@ -255,9 +301,63 @@ class _AddPurchaseScreenState extends ConsumerState<AddPurchaseScreen> {
                     child: Text(DateFormat('dd MMM yyyy').format(form.date), style: const TextStyle(fontWeight: FontWeight.w600)),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: suppliersAsync.when(
+                    data: (suppliers) => AppSearchableDropdown<int?>(
+                      value: form.supplierId,
+                      labelText: 'Select Supplier*',
+                      prefixIcon: Icons.business_rounded,
+                      isDark: isDark,
+                      addLabel: 'Quick Add Supplier',
+                      onAdd: (name) => _quickAddSupplier(context, ref, name),
+                      items: suppliers.map((s) => SearchableDropdownItem(value: s.id, label: s.name)).toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          final s = suppliers.firstWhere((sup) => sup.id == v);
+                          ref.read(purchaseFormProvider.notifier).selectSupplier(v, s.name);
+                        }
+                      },
+                    ),
+                    loading: () => const LinearProgressIndicator(),
+                    error: (_, _) => const SizedBox.shrink(),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: _billNoController,
+                    onChanged: (v) => ref.read(purchaseFormProvider.notifier).setBillNo(v),
+                    decoration: const InputDecoration(labelText: 'Bill Number', prefixIcon: Icon(Icons.receipt_long_rounded)),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 2,
+                  child: InkWell(
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: form.date,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (date != null) ref.read(purchaseFormProvider.notifier).setDate(date);
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Purchase Date', prefixIcon: Icon(Icons.calendar_today_rounded)),
+                      child: Text(DateFormat('dd MMM yyyy').format(form.date), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -326,14 +426,23 @@ class _AddPurchaseScreenState extends ConsumerState<AddPurchaseScreen> {
                         title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700)),
                         subtitle: Text('Current Stock: ${p.stock} | Last Cost: ₹${p.purchasePrice}'),
                         trailing: const Icon(Icons.add_circle_outline_rounded, color: AppColors.primary),
-                        onTap: () {
+                        onTap: () async {
+                          final currentForm = ref.read(purchaseFormProvider);
+                          final businessId = ref.read(activeBusinessIdProvider);
+                          double itemPrice = p.purchasePrice;
+                          if (currentForm.supplierId != null) {
+                            final lastPrice = await ref.read(purchaseRepositoryProvider).getLastPurchasePrice(currentForm.supplierId!, p.id!, businessId);
+                            if (lastPrice != null && lastPrice > 0) {
+                              itemPrice = lastPrice;
+                            }
+                          }
                           ref.read(purchaseFormProvider.notifier).addItem(PurchaseItemModel(
                             productId: p.id!,
                             productName: p.name,
                             quantity: 1,
-                            purchasePrice: p.purchasePrice,
+                            purchasePrice: itemPrice,
                             gstPercent: p.gstPercent,
-                            total: p.purchasePrice,
+                            total: itemPrice,
                           ));
                           setState(() {
                             _searchController.clear();
@@ -457,51 +566,61 @@ class _PurchaseItemTable extends ConsumerWidget {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
       ),
-      child: Column(
-        children: [
-          // Table Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white.withValues(alpha: 0.03) : AppColors.lightBg,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            child: Row(
-              children: [
-                const Expanded(flex: 4, child: Text('Product Name', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
-                const Expanded(flex: 2, child: Text('Quantity', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
-                const Expanded(flex: 2, child: Text('Cost Price', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
-                const Expanded(flex: 1, child: Text('GST%', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
-                const Expanded(flex: 2, child: Text('Total', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
-                const SizedBox(width: 48), // Action space
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: items.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: constraints.maxWidth < 800 ? 800 : constraints.maxWidth,
+              child: Column(
+                children: [
+                  // Table Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withValues(alpha: 0.03) : AppColors.lightBg,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    ),
+                    child: Row(
                       children: [
-                        Icon(Icons.inventory_rounded, size: 64, color: AppColors.textMuted.withValues(alpha: 0.1)),
-                        const SizedBox(height: 16),
-                        const Text('No items added yet.', style: TextStyle(color: AppColors.textMuted, fontSize: 16, fontWeight: FontWeight.w600)),
-                        const Text('Search and select products to start recording.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                        const Expanded(flex: 4, child: Text('Product Name', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
+                        const Expanded(flex: 2, child: Text('Quantity', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
+                        const Expanded(flex: 2, child: Text('Cost Price', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
+                        const Expanded(flex: 1, child: Text('GST%', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
+                        const Expanded(flex: 2, child: Text('Total', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13))),
+                        const SizedBox(width: 48), // Action space
                       ],
                     ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(0),
-                    itemCount: items.length,
-                    separatorBuilder: (context, index) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      return _EditablePurchaseRow(item: item, index: index, isDark: isDark);
-                    },
                   ),
-          ),
-        ],
+                  const Divider(height: 1),
+                  Expanded(
+                    child: items.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.inventory_rounded, size: 64, color: AppColors.textMuted.withValues(alpha: 0.1)),
+                                const SizedBox(height: 16),
+                                const Text('No items added yet.', style: TextStyle(color: AppColors.textMuted, fontSize: 16, fontWeight: FontWeight.w600)),
+                                const Text('Search and select products to start recording.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(0),
+                            itemCount: items.length,
+                            separatorBuilder: (context, index) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final item = items[index];
+                              return _EditablePurchaseRow(item: item, index: index, isDark: isDark);
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
       ),
     );
   }

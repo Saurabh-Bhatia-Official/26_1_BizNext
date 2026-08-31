@@ -12,8 +12,8 @@ class LoyaltyRepository {
       final customer = await txn.query(AppConstants.tblCustomers, where: 'id = ?', whereArgs: [customerId]);
       if (customer.isEmpty) return;
       
-      final currentPoints = (customer.first['loyalty_points'] as num).toDouble();
-      final newPoints = currentPoints + adjustment;
+      final currentPoints = (customer.first['loyalty_points'] as num?)?.toDouble() ?? 0.0;
+      final newPoints = (currentPoints + adjustment).clamp(0.0, double.infinity);
 
       // 2. Update customer
       await txn.update(

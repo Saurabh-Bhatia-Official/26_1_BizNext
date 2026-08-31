@@ -51,11 +51,14 @@ class ProductDiscount {
     );
   }
 
-  bool get isCurrentlyValid {
+  bool get isCurrentlyValid => isCurrentlyValidAt(DateTime.now());
+
+  /// Deterministically checks if product discount is valid at given timestamp
+  bool isCurrentlyValidAt([DateTime? now]) {
     if (!isActive) return false;
-    final now = DateTime.now();
-    if (startDate != null && now.isBefore(startDate!)) return false;
-    if (endDate != null && now.isAfter(endDate!)) return false;
+    final current = now ?? DateTime.now();
+    if (startDate != null && current.isBefore(startDate!)) return false;
+    if (endDate != null && current.isAfter(endDate!)) return false;
     return true;
   }
 
@@ -67,6 +70,7 @@ class ProductDiscount {
     double? discountValue,
     DateTime? startDate,
     DateTime? endDate,
+    bool clearDates = false,
     bool? isActive,
     DateTime? createdAt,
   }) {
@@ -76,8 +80,8 @@ class ProductDiscount {
       productId: productId ?? this.productId,
       discountType: discountType ?? this.discountType,
       discountValue: discountValue ?? this.discountValue,
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
+      startDate: clearDates ? null : (startDate ?? this.startDate),
+      endDate: clearDates ? null : (endDate ?? this.endDate),
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
     );

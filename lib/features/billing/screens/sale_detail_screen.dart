@@ -65,6 +65,31 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
 
     return Row(
       children: [
+        if (widget.sale.paymentMode == 'Credit' && widget.sale.balanceDue > 0)
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.check_circle_outline, size: 16),
+              label: const Text('Settle Payment'),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.success, foregroundColor: Colors.white),
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: const Text('Settle Payment'),
+                    content: Text('Are you sure you want to mark this invoice as fully paid? This will settle ₹${CurrencyFormatter.format(widget.sale.balanceDue)}.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                      ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('Settle')),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await ref.read(billingProvider.notifier).settleInvoice(widget.sale.id!, widget.sale.balanceDue);
+                }
+              },
+            ),
+          ),
         DropdownButton<int>(
           value: _selectedTemplateId,
           dropdownColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF112A4A) : Colors.white,
@@ -329,12 +354,12 @@ class SaleContent extends ConsumerWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: (sale.status == 'completed' ? AppColors.success : AppColors.warning).withValues(alpha: 0.1),
+                                color: (sale.status == 'completed' || sale.status == 'Payment Completed' ? AppColors.success : AppColors.warning).withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 sale.status.toUpperCase(),
-                                style: TextStyle(fontWeight: FontWeight.w900, color: sale.status == 'completed' ? AppColors.success : AppColors.warning, fontSize: 11),
+                                style: TextStyle(fontWeight: FontWeight.w900, color: sale.status == 'completed' || sale.status == 'Payment Completed' ? AppColors.success : AppColors.warning, fontSize: 11),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -463,6 +488,19 @@ class SaleContent extends ConsumerWidget {
                               ),
                             ],
                           ),
+                          if (sale.paymentMode == 'Credit') ...[
+                            const SizedBox(height: 16),
+                            _TotalRow(
+                              label: 'Settled Amount', 
+                              value: sale.grandTotal - sale.balanceDue, 
+                              highlightColor: AppColors.success
+                            ),
+                            _TotalRow(
+                              label: 'Balance Due', 
+                              value: sale.balanceDue, 
+                              highlightColor: sale.balanceDue > 0 ? AppColors.error : AppColors.success,
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -510,7 +548,13 @@ class _TotalRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: highlightColor ?? AppColors.textMuted)),
+          Expanded(
+            child: Text(
+              label, 
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: highlightColor ?? AppColors.textMuted),
+            ),
+          ),
+          const SizedBox(width: 8),
           Text(
             CurrencyFormatter.format(value),
             style: TextStyle(

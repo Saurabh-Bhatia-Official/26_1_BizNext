@@ -19,7 +19,7 @@ import '../../features/reports/screens/reports_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/discounts/screens/offers_screen.dart';
 import '../../features/coming_soon/loyalty_screen.dart';
-import '../../features/coming_soon/notifications_screen.dart';
+import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/settings/screens/profile_screen.dart';
 import '../../features/ai_chatbot/screens/chatbot_screen.dart';
 import '../../features/budgeting/screens/budget_screen.dart';

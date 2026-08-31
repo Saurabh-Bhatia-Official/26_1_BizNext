@@ -215,6 +215,13 @@ class InvoiceService {
                         pw.Text('Phone: ${sale.customerPhone}', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                       if (sale.customerAddress != null && sale.customerAddress!.isNotEmpty)
                         pw.Text('Address: ${sale.customerAddress}', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      if (sale.pointsEarned > 0 || sale.pointsRedeemed > 0) ...[
+                        pw.SizedBox(height: 6),
+                        if (sale.pointsEarned > 0)
+                          pw.Text('Points Earned: ${sale.pointsEarned.toStringAsFixed(0)}', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700, font: fontBold)),
+                        if (sale.pointsRedeemed > 0)
+                          pw.Text('Points Redeemed: ${sale.pointsRedeemed.toStringAsFixed(0)}', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700, font: fontBold)),
+                      ],
                     ],
                   ),
                   pw.Column(
@@ -225,7 +232,7 @@ class InvoiceService {
                       pw.Container(
                         padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: pw.BoxDecoration(
-                          color: sale.status == 'completed' ? PdfColors.green100 : PdfColors.orange100,
+                          color: (sale.status == 'completed' || sale.status == 'Payment Completed') ? PdfColors.green100 : PdfColors.orange100,
                           borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
                         ),
                         child: pw.Text(
@@ -233,7 +240,7 @@ class InvoiceService {
                           style: pw.TextStyle(
                             font: fontBold,
                             fontSize: 10,
-                            color: sale.status == 'completed' ? PdfColors.green800 : PdfColors.orange800,
+                            color: (sale.status == 'completed' || sale.status == 'Payment Completed') ? PdfColors.green800 : PdfColors.orange800,
                           ),
                         ),
                       ),
@@ -309,6 +316,9 @@ class InvoiceService {
                       _buildTotalRow('Tax (GST):', CurrencyFormatter.format(sale.gstAmount), fontRegular),
                       if (sale.discount > 0) ...[
                         _buildTotalRow('Discounts & Offers:', '-${CurrencyFormatter.format(sale.discount)}', fontRegular),
+                      ],
+                      if (sale.loyaltyDiscount > 0) ...[
+                        _buildTotalRow('Loyalty Discount:', '-${CurrencyFormatter.format(sale.loyaltyDiscount)}', fontRegular),
                       ],
                       pw.Divider(color: PdfColors.grey400),
                       _buildTotalRow('Grand Total:', CurrencyFormatter.format(sale.grandTotal), fontBold, isLarge: true, primaryColor: primaryColor),

@@ -13,13 +13,15 @@ import '../../discounts/providers/discount_provider.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../loyalty/providers/loyalty_provider.dart';
 import '../../customers/providers/customer_provider.dart';
+import '../../customers/models/customer_model.dart';
 import '../../inventory/models/product_discount.dart';
 import '../../customers/models/customer_discount.dart';
 import '../../accounts/providers/accounts_provider.dart';
 
 final billingRepositoryProvider = Provider<BillingRepository>((ref) => BillingRepository());
 
-
+/// State provider for holding parked carts in the active session
+final heldOrdersProvider = StateProvider<List<HeldOrderModel>>((ref) => []);
 
 class BillingState extends PosModel {
   final String? lastError;
@@ -128,12 +130,64 @@ class BillingNotifier extends StateNotifier<BillingState> {
     });
   }
 
-  /// Add product with stock validation
+  double _resolveProductPrice(Product product, String scale, {CustomerModel? customer, double quantity = 1.0}) {
+    final effectiveScale = (customer?.customerTypeName != null && customer!.customerTypeName!.trim().isNotEmpty)
+        ? customer.customerTypeName!
+        : scale;
+    final lowerScale = effectiveScale.toLowerCase();
+
+    // 1. Check allProductTierPricesProvider if available
+    final tierMap = _ref.read(allProductTierPricesProvider).value;
+    if (tierMap != null && product.id != null && tierMap.containsKey(product.id)) {
+      final tiers = tierMap[product.id!]!;
+      final matchingTier = tiers.firstWhere(
+        (t) =>
+            ((customer?.customerTypeId != null && t.categoryId == customer!.customerTypeId) ||
+             (t.categoryName != null && t.categoryName!.toLowerCase() == lowerScale)) &&
+            quantity >= t.minQty &&
+            (quantity <= t.maxQty),
+        orElse: () => tiers.firstWhere(
+          (t) =>
+              (customer?.customerTypeId != null && t.categoryId == customer!.customerTypeId) ||
+              (t.categoryName != null && t.categoryName!.toLowerCase() == lowerScale),
+          orElse: () => const ProductTierPrice(productId: 0, categoryId: 0, price: -1),
+        ),
+      );
+      if (matchingTier.price >= 0) {
+        return matchingTier.price;
+      }
+    }
+
+    // 2. Check Wholesale price
+    if (lowerScale.contains('wholesale') && product.wholesalePrice > 0) {
+      return product.wholesalePrice;
+    }
+
+    // 3. Check Dealer price
+    if (lowerScale.contains('dealer') && product.dealerPrice > 0) {
+      return product.dealerPrice;
+    }
+
+    // 4. Standard selling price
+    return product.sellingPrice;
+  }
+
+  /// Add product with stock validation and customer-tier pricing
   String? addProduct(Product product, {double? overridePrice, String? priceScaleName}) {
-    final priceToAdd = overridePrice ?? product.sellingPrice;
-    final scale = priceScaleName ?? (overridePrice == null ? 'Retail' : 'Custom');
+    final customers = _ref.read(customersProvider).value ?? [];
+    final customer = state.selectedCustomerId != null
+        ? customers.where((c) => c.id == state.selectedCustomerId).firstOrNull
+        : null;
+
+    final activeScale = priceScaleName ??
+        (customer?.customerTypeName?.trim().isNotEmpty == true ? customer!.customerTypeName! : 'Standard');
+
+    final double priceToAdd = overridePrice ??
+        _resolveProductPrice(product, activeScale, customer: customer, quantity: 1.0);
+
+    final scale = (priceToAdd != product.sellingPrice) ? activeScale : (priceScaleName ?? 'Standard');
     
-    // U14 FIX: Merge only if product ID AND the price we are adding at match
+    // Merge only if product ID AND the price we are adding at match
     final existingIndex = state.items.indexWhere((item) => 
       item.product.id == product.id && 
       item.effectivePrice == priceToAdd
@@ -154,7 +208,12 @@ class BillingNotifier extends StateNotifier<BillingState> {
       state = state.copyWith(items: updatedItems);
     } else {
       state = state.copyWith(
-        items: [...state.items, PosItemModel(product: product, manualPrice: overridePrice ?? 0, priceScaleName: scale)]
+        items: [...state.items, PosItemModel(
+          product: product, 
+          manualPrice: overridePrice ?? (priceToAdd != product.sellingPrice ? priceToAdd : 0), 
+          priceScaleName: scale,
+          isTaxInclusive: state.isTaxInclusive,
+        )]
       );
     }
     _applyAutomatedDiscounts();
@@ -205,13 +264,73 @@ class BillingNotifier extends StateNotifier<BillingState> {
     _applyAutomatedDiscounts(); // Price change might affect bulk discounts
   }
 
+  /// Set global price scale / category pricing for the active cart
+  void setPriceScale(String scale) {
+    final customers = _ref.read(customersProvider).value ?? [];
+    final customer = state.selectedCustomerId != null
+        ? customers.where((c) => c.id == state.selectedCustomerId).firstOrNull
+        : null;
+
+    final updatedItems = state.items.map((item) {
+      if (item.priceScaleName == 'Retail' ||
+          item.priceScaleName == 'Standard' ||
+          item.priceScaleName == 'Wholesale' ||
+          item.priceScaleName == 'Dealer' ||
+          item.priceScaleName == null ||
+          item.priceScaleName == scale) {
+        final newPrice = _resolveProductPrice(item.product, scale, customer: customer, quantity: item.quantity);
+        return item.copyWith(
+          manualPrice: newPrice != item.product.sellingPrice ? newPrice : 0,
+          priceScaleName: newPrice != item.product.sellingPrice ? scale : 'Standard',
+        );
+      }
+      return item;
+    }).toList();
+
+    state = state.copyWith(items: updatedItems);
+    _applyAutomatedDiscounts();
+  }
+
   void selectCustomer(int id, String name) {
-    state = state.copyWith(selectedCustomerId: id, selectedCustomerName: name);
+    // Check if customer has a special customer type and recalculate cart prices
+    final customers = _ref.read(customersProvider).value ?? [];
+    final customer = customers.where((c) => c.id == id).firstOrNull;
+    final customerScale = customer?.customerTypeName?.trim().isNotEmpty == true
+        ? customer!.customerTypeName!
+        : 'Standard';
+
+    final updatedItems = state.items.map((item) {
+      if (item.priceScaleName == 'Retail' ||
+          item.priceScaleName == 'Standard' ||
+          item.priceScaleName == 'Wholesale' ||
+          item.priceScaleName == 'Dealer' ||
+          item.priceScaleName == null ||
+          item.priceScaleName == customerScale) {
+        final newPrice = _resolveProductPrice(item.product, customerScale, customer: customer, quantity: item.quantity);
+        return item.copyWith(
+          manualPrice: newPrice != item.product.sellingPrice ? newPrice : 0,
+          priceScaleName: newPrice != item.product.sellingPrice ? customerScale : 'Standard',
+        );
+      }
+      return item;
+    }).toList();
+
+    state = state.copyWith(
+      selectedCustomerId: id, 
+      selectedCustomerName: name,
+      items: updatedItems,
+    );
     _applyAutomatedDiscounts();
   }
 
   void clearCustomer() {
-    state = state.copyWith(clearCustomer: true);
+    // Revert items back to standard prices
+    final updatedItems = state.items.map((item) {
+      return item.copyWith(manualPrice: 0, priceScaleName: 'Standard');
+    }).toList();
+
+    state = state.copyWith(clearCustomer: true, items: updatedItems);
+    _applyAutomatedDiscounts();
   }
 
   void setPaymentMode(String mode) {
@@ -220,6 +339,63 @@ class BillingNotifier extends StateNotifier<BillingState> {
 
   void setDiscount(double discount) {
     state = state.copyWith(manualDiscount: discount);
+  }
+
+  void setTaxInclusive(bool isInclusive) {
+    final updatedItems = state.items.map((i) => i.copyWith(isTaxInclusive: isInclusive)).toList();
+    state = state.copyWith(isTaxInclusive: isInclusive, items: updatedItems);
+    _applyAutomatedDiscounts();
+  }
+
+  void setNotes(String notes) {
+    state = state.copyWith(notes: notes);
+  }
+
+  /// Hold current cart / session
+  String? holdCurrentOrder({String? note}) {
+    if (state.items.isEmpty) return 'Cannot hold an empty cart';
+    
+    final heldOrder = HeldOrderModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      customerId: state.selectedCustomerId,
+      customerName: state.selectedCustomerName,
+      items: List.from(state.items),
+      manualDiscount: state.manualDiscount,
+      paymentMode: state.paymentMode,
+      notes: note ?? state.notes,
+    );
+
+    final currentHeld = _ref.read(heldOrdersProvider);
+    _ref.read(heldOrdersProvider.notifier).state = [...currentHeld, heldOrder];
+    
+    reset();
+    return null;
+  }
+
+  /// Resume a held / parked cart
+  void resumeHeldOrder(HeldOrderModel order) {
+    // If current cart already has items, auto-hold it
+    if (state.items.isNotEmpty) {
+      holdCurrentOrder(note: 'Auto-held prior cart');
+    }
+
+    state = BillingState(
+      items: List.from(order.items),
+      selectedCustomerId: order.customerId,
+      selectedCustomerName: order.customerName,
+      paymentMode: order.paymentMode,
+      manualDiscount: order.manualDiscount,
+      notes: order.notes,
+    );
+
+    discardHeldOrder(order.id);
+    _applyAutomatedDiscounts();
+  }
+
+  /// Discard a held order by id
+  void discardHeldOrder(String orderId) {
+    final currentHeld = _ref.read(heldOrdersProvider);
+    _ref.read(heldOrdersProvider.notifier).state = currentHeld.where((o) => o.id != orderId).toList();
   }
 
   void clearCart() {
@@ -234,12 +410,10 @@ class BillingNotifier extends StateNotifier<BillingState> {
     final settings = _ref.read(loyaltySettingsProvider);
     if (settings == null || !settings.isActive) return;
     
-    double finalPoints = points;
-    if (settings.maxRedeemLimit > 0 && points > settings.maxRedeemLimit) {
-      finalPoints = settings.maxRedeemLimit;
-    }
-
-    final discount = finalPoints * settings.redeemValue;
+    final discount = settings.calculateDiscount(points);
+    final finalPoints = settings.maxRedeemLimit > 0 && points > settings.maxRedeemLimit 
+        ? settings.maxRedeemLimit 
+        : points;
     state = state.copyWith(pointsRedeemed: finalPoints, loyaltyDiscount: discount);
   }
 
@@ -263,6 +437,14 @@ class BillingNotifier extends StateNotifier<BillingState> {
     state = state.copyWith(selectedAccountId: id);
   }
 
+  Future<void> settleInvoice(int saleId, double amount) async {
+    final repo = _ref.read(billingRepositoryProvider);
+    await repo.settleCreditInvoice(saleId, amount);
+    _ref.invalidate(saleDetailProvider(saleId));
+    _ref.invalidate(saleHistoryProvider);
+    _ref.invalidate(salesStatsProvider);
+  }
+
   Future<int?> completeSale() async {
     if (state.items.isEmpty) return null;
 
@@ -279,12 +461,8 @@ class BillingNotifier extends StateNotifier<BillingState> {
         invoiceNo = isEditing ? state.originalInvoiceNo! : await _repo.getNextInvoiceNumber(businessId);
       }
 
-      final isCredit = state.paymentMode == AppConstants.paymentCredit;
-      final paidAmount = isCredit ? 0.0 : state.grandTotal;
-      final balanceDue = isCredit ? state.grandTotal : 0.0;
-
       int? finalAccountId = state.selectedAccountId;
-      if (paidAmount > 0 && finalAccountId == null) {
+      if (state.paymentMode != AppConstants.paymentCredit && finalAccountId == null) {
         try {
           final accountsList = await _ref.read(accountsProvider.future);
           if (accountsList.isNotEmpty) {
@@ -344,7 +522,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
     }
   }
 
-    Future<void> _applyAutomatedDiscounts() async {
+  Future<void> _applyAutomatedDiscounts() async {
     final settings = _ref.read(featureSettingsProvider);
     if (!settings.productDiscountEnabled && !settings.customerDiscountEnabled && !settings.offersEnabled) {
       if (state.autoBillDiscount != 0) state = state.copyWith(autoBillDiscount: 0);
@@ -355,7 +533,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
     bool changed = false;
 
     // --- 1. Product & Customer Discounts (Item Level) ---
-    // Pre-fetch all active product discounts in parallel to avoid N+1 problem for large carts
     List<ProductDiscount?> productDiscounts = [];
     if (settings.productDiscountEnabled) {
       productDiscounts = await Future.wait(
@@ -363,7 +540,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
       );
     }
 
-    // Pre-fetch active customer discount
     CustomerDiscount? cDisc;
     if (settings.customerDiscountEnabled && state.selectedCustomerId != null) {
       try {
@@ -414,7 +590,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
       
       for (final offer in validOffers) {
         bool offerApplied = false;
-        // Buy X Get Y (e.g., Buy 2 Get 1 Free means total 3 units, 1 is free)
         if (offer.offerType == 'buy_x_get_y') {
           for (int i = 0; i < updatedItems.length; i++) {
             final item = updatedItems[i];
@@ -435,7 +610,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
           }
         }
         
-        // Product Discount Offer Type
         if (offer.offerType == 'product_discount') {
           for (int i = 0; i < updatedItems.length; i++) {
             final item = updatedItems[i];
@@ -454,7 +628,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
           }
         }
         
-        // Bill Amount Discount
         if (offer.offerType == 'bill_amount' || offer.offerType == 'festival') {
           final currentSubtotal = updatedItems.fold(0.0, (sum, item) => sum + item.subtotal);
           if (currentSubtotal >= offer.minAmount) {
@@ -490,8 +663,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
     if (settings.loyaltyEnabled) {
       final loyaltySettings = _ref.read(loyaltySettingsProvider);
       if (loyaltySettings != null && loyaltySettings.isActive) {
-        final earnSpend = loyaltySettings.earnSpendAmount > 0 ? loyaltySettings.earnSpendAmount : 1.0;
-        final earned = (state.grandTotal / earnSpend) * loyaltySettings.earnRate;
+        final earned = loyaltySettings.calculateEarnedPoints(state.grandTotal);
         if (state.pointsEarned != earned) {
           state = state.copyWith(pointsEarned: earned);
         }
@@ -500,7 +672,6 @@ class BillingNotifier extends StateNotifier<BillingState> {
   }
 }
 
-// C2 FIX: Removed autoDispose so cart persists across tab switches
 final billingProvider = StateNotifierProvider<BillingNotifier, BillingState>((ref) {
   return BillingNotifier(ref.watch(billingRepositoryProvider), ref);
 });

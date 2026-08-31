@@ -9,7 +9,7 @@ import '../models/business_model.dart';
 import '../models/user_model.dart';
 import '../repositories/auth_repository.dart';
 
-final splashCompleteProvider = StateProvider<bool>((ref) => true);
+final splashCompleteProvider = StateProvider<bool>((ref) => false);
 
 // ── Repository Provider ───────────────────────────────────────────────────────
 final authRepositoryProvider = Provider<AuthRepository>((ref) => AuthRepository());

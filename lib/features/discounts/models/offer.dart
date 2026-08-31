@@ -64,21 +64,21 @@ class Offer {
   factory Offer.fromMap(Map<String, dynamic> map) {
     return Offer(
       id: map['id'],
-      businessId: map['business_id'],
-      name: map['name'],
-      offerType: map['offer_type'],
-      discountType: map['discount_type'],
-      discountValue: map['discount_value'],
-      minQty: (map['min_qty'] as num).toDouble(),
-      minAmount: (map['min_amount'] as num).toDouble(),
-      applyTo: map['apply_to'],
+      businessId: (map['business_id'] as num?)?.toInt() ?? 0,
+      name: map['name'] ?? '',
+      offerType: map['offer_type'] ?? '',
+      discountType: map['discount_type'] ?? '',
+      discountValue: (map['discount_value'] as num?)?.toDouble() ?? 0.0,
+      minQty: (map['min_qty'] as num?)?.toDouble() ?? 0.0,
+      minAmount: (map['min_amount'] as num?)?.toDouble() ?? 0.0,
+      applyTo: map['apply_to'] ?? '',
       targetId: map['target_id'],
-      buyQty: (map['buy_qty'] as num).toDouble(),
-      getQty: (map['get_qty'] as num).toDouble(),
-      startDate: map['start_date'] != null ? DateTime.parse(map['start_date']) : null,
-      endDate: map['end_date'] != null ? DateTime.parse(map['end_date']) : null,
-      isActive: map['is_active'] == 1,
-      createdAt: DateTime.parse(map['created_at']),
+      buyQty: (map['buy_qty'] as num?)?.toDouble() ?? 0.0,
+      getQty: (map['get_qty'] as num?)?.toDouble() ?? 0.0,
+      startDate: map['start_date'] != null ? DateTime.tryParse(map['start_date']) : null,
+      endDate: map['end_date'] != null ? DateTime.tryParse(map['end_date']) : null,
+      isActive: (map['is_active'] as int? ?? 1) == 1,
+      createdAt: map['created_at'] != null ? DateTime.tryParse(map['created_at']) ?? DateTime.now() : DateTime.now(),
       posterPath: map['poster_path'],
     );
   }
@@ -101,11 +101,14 @@ class Offer {
     }
   }
 
-  bool get isCurrentlyValid {
+  bool get isCurrentlyValid => isCurrentlyValidAt(DateTime.now());
+
+  /// Deterministically checks if offer is valid at given timestamp
+  bool isCurrentlyValidAt([DateTime? now]) {
     if (!isActive) return false;
-    final now = DateTime.now();
-    if (startDate != null && now.isBefore(startDate!)) return false;
-    if (endDate != null && now.isAfter(endDate!)) return false;
+    final current = now ?? DateTime.now();
+    if (startDate != null && current.isBefore(startDate!)) return false;
+    if (endDate != null && current.isAfter(endDate!)) return false;
     return true;
   }
 
@@ -124,6 +127,7 @@ class Offer {
     double? getQty,
     DateTime? startDate,
     DateTime? endDate,
+    bool clearDates = false,
     bool? isActive,
     DateTime? createdAt,
     String? posterPath,
@@ -141,8 +145,8 @@ class Offer {
       targetId: targetId ?? this.targetId,
       buyQty: buyQty ?? this.buyQty,
       getQty: getQty ?? this.getQty,
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
+      startDate: clearDates ? null : (startDate ?? this.startDate),
+      endDate: clearDates ? null : (endDate ?? this.endDate),
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       posterPath: posterPath ?? this.posterPath,

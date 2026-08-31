@@ -73,6 +73,23 @@ class DatabaseHelper {
         try {
           await db.execute('ALTER TABLE ${AppConstants.tblOffers} ADD COLUMN poster_path TEXT');
         } catch (_) {}
+        try {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS ${AppConstants.tblNotifications} (
+              id           INTEGER PRIMARY KEY AUTOINCREMENT,
+              business_id  INTEGER NOT NULL DEFAULT 1,
+              title        TEXT    NOT NULL,
+              message      TEXT    NOT NULL,
+              type         TEXT    NOT NULL DEFAULT 'system',
+              priority     TEXT    NOT NULL DEFAULT 'medium',
+              is_read      INTEGER NOT NULL DEFAULT 0,
+              action_type  TEXT,
+              action_data  TEXT,
+              timestamp    TEXT    NOT NULL DEFAULT (datetime('now')),
+              created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+            )
+          ''');
+        } catch (_) {}
       },
     );
   }
@@ -155,41 +172,80 @@ class DatabaseHelper {
     // Categories
     await _safeExecute(txn, '''
       CREATE TABLE IF NOT EXISTS ${AppConstants.tblCategories} (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id   INTEGER NOT NULL DEFAULT 1,
+        name          TEXT    NOT NULL,
+        code          TEXT,
+        description   TEXT,
+        image_path    TEXT,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        is_active     INTEGER NOT NULL DEFAULT 1,
+        created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(business_id, name)
+      )
+    ''');
+
+    // Subcategories
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblSubcategories} (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         business_id INTEGER NOT NULL DEFAULT 1,
+        category_id INTEGER NOT NULL REFERENCES ${AppConstants.tblCategories}(id) ON DELETE CASCADE,
         name        TEXT    NOT NULL,
+        code        TEXT,
         description TEXT,
+        is_active   INTEGER NOT NULL DEFAULT 1,
         created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
-        UNIQUE(business_id, name)
+        UNIQUE(business_id, category_id, name)
       )
     ''');
 
     // Products
     await _safeExecute(txn, '''
       CREATE TABLE IF NOT EXISTS ${AppConstants.tblProducts} (
-        id             INTEGER PRIMARY KEY AUTOINCREMENT,
-        business_id    INTEGER NOT NULL DEFAULT 1,
-        name           TEXT    NOT NULL,
-        sku            TEXT,
-        barcode        TEXT,
-        description    TEXT,
-        category_id    INTEGER REFERENCES ${AppConstants.tblCategories}(id) ON DELETE SET NULL,
-        purchase_price REAL    NOT NULL DEFAULT 0,
-        selling_price  REAL    NOT NULL DEFAULT 0,
-        wholesale_price REAL   NOT NULL DEFAULT 0,
-        dealer_price   REAL    NOT NULL DEFAULT 0,
-        stock          REAL    NOT NULL DEFAULT 0,
-        min_stock      REAL    NOT NULL DEFAULT 5,
-        unit           TEXT    NOT NULL DEFAULT 'pcs',
-        gst_percent    REAL    NOT NULL DEFAULT 0,
-        is_active      INTEGER NOT NULL DEFAULT 1,
-        image_path     TEXT,
-        created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-        updated_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id         INTEGER NOT NULL DEFAULT 1,
+        name                TEXT    NOT NULL,
+        sku                 TEXT,
+        barcode             TEXT,
+        description         TEXT,
+        category_id         INTEGER REFERENCES ${AppConstants.tblCategories}(id) ON DELETE SET NULL,
+        subcategory_id      INTEGER REFERENCES ${AppConstants.tblSubcategories}(id) ON DELETE SET NULL,
+        brand               TEXT,
+        unit                TEXT    NOT NULL DEFAULT 'pcs',
+        hsn_sac             TEXT,
+        gst_percent         REAL    NOT NULL DEFAULT 0,
+        purchase_price      REAL    NOT NULL DEFAULT 0,
+        mrp                 REAL    NOT NULL DEFAULT 0,
+        selling_price       REAL    NOT NULL DEFAULT 0,
+        min_selling_price   REAL    NOT NULL DEFAULT 0,
+        wholesale_price     REAL    NOT NULL DEFAULT 0,
+        dealer_price        REAL    NOT NULL DEFAULT 0,
+        stock               REAL    NOT NULL DEFAULT 0,
+        min_stock           REAL    NOT NULL DEFAULT 5,
+        default_supplier_id INTEGER REFERENCES ${AppConstants.tblSuppliers}(id) ON DELETE SET NULL,
+        is_active           INTEGER NOT NULL DEFAULT 1,
+        image_path          TEXT,
+        created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+        updated_at          TEXT    NOT NULL DEFAULT (datetime('now'))
       )
     ''');
  
-    // Price Categories
+    // Customer Types (Pricing Categories)
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblCustomerTypes} (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER NOT NULL DEFAULT 1,
+        name        TEXT    NOT NULL,
+        code        TEXT,
+        description TEXT,
+        is_active   INTEGER NOT NULL DEFAULT 1,
+        created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(business_id, name)
+      )
+    ''');
+
+    // Price Categories (Legacy Compatibility alias)
     await _safeExecute(txn, '''
       CREATE TABLE IF NOT EXISTS ${AppConstants.tblPriceCategories} (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -200,45 +256,93 @@ class DatabaseHelper {
       )
     ''');
  
-    // Product Tiered Prices
+    // Product Tiered Prices (Quantity Brackets)
     await _safeExecute(txn, '''
       CREATE TABLE IF NOT EXISTS ${AppConstants.tblProductPrices} (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        product_id  INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE CASCADE,
-        category_id INTEGER NOT NULL REFERENCES ${AppConstants.tblPriceCategories}(id) ON DELETE CASCADE,
-        price       REAL    NOT NULL DEFAULT 0,
-        UNIQUE(product_id, category_id)
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id       INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE CASCADE,
+        category_id      INTEGER NOT NULL REFERENCES ${AppConstants.tblPriceCategories}(id) ON DELETE CASCADE,
+        min_qty          REAL    NOT NULL DEFAULT 1,
+        max_qty          REAL    NOT NULL DEFAULT 999999,
+        price            REAL    NOT NULL DEFAULT 0,
+        discount_percent REAL    NOT NULL DEFAULT 0,
+        UNIQUE(product_id, category_id, min_qty)
       )
     ''');
 
     // Customers
     await _safeExecute(txn, '''
       CREATE TABLE IF NOT EXISTS ${AppConstants.tblCustomers} (
-        id             INTEGER PRIMARY KEY AUTOINCREMENT,
-        business_id    INTEGER NOT NULL DEFAULT 1,
-        name           TEXT    NOT NULL,
-        phone          TEXT,
-        email          TEXT,
-        address        TEXT,
-        gst_number     TEXT,
-        balance        REAL    NOT NULL DEFAULT 0,
-        loyalty_points REAL    NOT NULL DEFAULT 0,
-        created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id      INTEGER NOT NULL DEFAULT 1,
+        name             TEXT    NOT NULL,
+        phone            TEXT,
+        email            TEXT,
+        address          TEXT,
+        gst_number       TEXT,
+        customer_type_id INTEGER REFERENCES ${AppConstants.tblCustomerTypes}(id) ON DELETE SET NULL,
+        balance          REAL    NOT NULL DEFAULT 0,
+        loyalty_points   REAL    NOT NULL DEFAULT 0,
+        created_at       TEXT    NOT NULL DEFAULT (datetime('now'))
       )
     ''');
 
     // Suppliers
     await _safeExecute(txn, '''
       CREATE TABLE IF NOT EXISTS ${AppConstants.tblSuppliers} (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        business_id INTEGER NOT NULL DEFAULT 1,
-        name        TEXT    NOT NULL,
-        phone       TEXT,
-        email       TEXT,
-        address     TEXT,
-        gst_number  TEXT,
-        balance     REAL    NOT NULL DEFAULT 0,
-        created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id     INTEGER NOT NULL DEFAULT 1,
+        name            TEXT    NOT NULL,
+        company_name    TEXT,
+        gst_number      TEXT,
+        pan             TEXT,
+        contact_person  TEXT,
+        phone           TEXT,
+        email           TEXT,
+        address         TEXT,
+        state           TEXT,
+        payment_terms   TEXT,
+        credit_limit    REAL    NOT NULL DEFAULT 0,
+        opening_balance REAL    NOT NULL DEFAULT 0,
+        balance         REAL    NOT NULL DEFAULT 0,
+        bank_details    TEXT,
+        notes           TEXT,
+        is_active       INTEGER NOT NULL DEFAULT 1,
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+      )
+    ''');
+
+    // Supplier Product Mapping
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblSupplierProducts} (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id         INTEGER NOT NULL DEFAULT 1,
+        supplier_id         INTEGER NOT NULL REFERENCES ${AppConstants.tblSuppliers}(id) ON DELETE CASCADE,
+        product_id          INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE CASCADE,
+        supplier_sku        TEXT,
+        supplier_barcode    TEXT,
+        last_purchase_price REAL    NOT NULL DEFAULT 0,
+        last_purchase_date  TEXT,
+        last_purchase_qty   REAL    NOT NULL DEFAULT 0,
+        created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(business_id, supplier_id, product_id)
+      )
+    ''');
+
+    // Product Batches (FEFO & Expiry Management)
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblProductBatches} (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id   INTEGER NOT NULL DEFAULT 1,
+        product_id    INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE CASCADE,
+        batch_number  TEXT    NOT NULL,
+        mfg_date      TEXT,
+        expiry_date   TEXT,
+        purchase_rate REAL    NOT NULL DEFAULT 0,
+        quantity      REAL    NOT NULL DEFAULT 0,
+        supplier_id   INTEGER REFERENCES ${AppConstants.tblSuppliers}(id) ON DELETE SET NULL,
+        warehouse_id  INTEGER REFERENCES ${AppConstants.tblWarehouses}(id) ON DELETE SET NULL,
+        created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
       )
     ''');
 
@@ -482,44 +586,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // Restaurant Tables
-    await _safeExecute(txn, '''
-      CREATE TABLE IF NOT EXISTS ${AppConstants.tblRestaurantTables} (
-        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        business_id  INTEGER NOT NULL DEFAULT 1,
-        table_number TEXT    NOT NULL,
-        capacity     INTEGER NOT NULL DEFAULT 4,
-        status       TEXT    NOT NULL DEFAULT 'Available',
-        qr_code      TEXT,
-        created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
-        UNIQUE(business_id, table_number)
-      )
-    ''');
 
-    await _safeExecute(txn, '''
-      CREATE TABLE IF NOT EXISTS ${AppConstants.tblKot} (
-        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        business_id  INTEGER NOT NULL DEFAULT 1,
-        sale_id      INTEGER REFERENCES ${AppConstants.tblSales}(id) ON DELETE CASCADE,
-        table_id     INTEGER REFERENCES ${AppConstants.tblRestaurantTables}(id) ON DELETE SET NULL,
-        status       TEXT    NOT NULL DEFAULT 'Pending',
-        notes        TEXT,
-        created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
-        updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
-      )
-    ''');
-
-    await _safeExecute(txn, '''
-      CREATE TABLE IF NOT EXISTS ${AppConstants.tblKotItems} (
-        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        kot_id       INTEGER NOT NULL REFERENCES ${AppConstants.tblKot}(id) ON DELETE CASCADE,
-        product_id   INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE RESTRICT,
-        product_name TEXT    NOT NULL,
-        quantity     REAL    NOT NULL,
-        status       TEXT    NOT NULL DEFAULT 'Pending',
-        notes        TEXT
-      )
-    ''');
 
     // Budgets Table
     await _safeExecute(txn, '''
@@ -534,6 +601,23 @@ class DatabaseHelper {
         period       TEXT NOT NULL,
         start_date   TEXT NOT NULL,
         end_date     TEXT NOT NULL
+      )
+    ''');
+
+    // Notifications Table
+    await _safeExecute(txn, '''
+      CREATE TABLE IF NOT EXISTS ${AppConstants.tblNotifications} (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id  INTEGER NOT NULL DEFAULT 1,
+        title        TEXT    NOT NULL,
+        message      TEXT    NOT NULL,
+        type         TEXT    NOT NULL DEFAULT 'system',
+        priority     TEXT    NOT NULL DEFAULT 'medium',
+        is_read      INTEGER NOT NULL DEFAULT 0,
+        action_type  TEXT,
+        action_data  TEXT,
+        timestamp    TEXT    NOT NULL DEFAULT (datetime('now')),
+        created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
       )
     ''');
 
@@ -723,6 +807,8 @@ class DatabaseHelper {
   Future<void> _createIndexes(Transaction txn) async {
     await txn.execute('CREATE INDEX IF NOT EXISTS idx_products_business ON ${AppConstants.tblProducts}(business_id)');
     await txn.execute('CREATE INDEX IF NOT EXISTS idx_products_barcode ON ${AppConstants.tblProducts}(barcode)');
+    await txn.execute('CREATE INDEX IF NOT EXISTS idx_subcategories_cat ON ${AppConstants.tblSubcategories}(category_id)');
+    await txn.execute('CREATE INDEX IF NOT EXISTS idx_supplier_products ON ${AppConstants.tblSupplierProducts}(supplier_id, product_id)');
     await txn.execute('CREATE INDEX IF NOT EXISTS idx_sales_business ON ${AppConstants.tblSales}(business_id)');
     await txn.execute('CREATE INDEX IF NOT EXISTS idx_sales_date ON ${AppConstants.tblSales}(date)');
     await txn.execute('CREATE INDEX IF NOT EXISTS idx_ledger_entity ON ${AppConstants.tblLedger}(entity_type, entity_id)');
@@ -1163,43 +1249,6 @@ class DatabaseHelper {
 
     if (oldVersion < 19) {
       await db.transaction((txn) async {
-        await txn.execute('''
-          CREATE TABLE IF NOT EXISTS ${AppConstants.tblRestaurantTables} (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            business_id  INTEGER NOT NULL DEFAULT 1,
-            table_number TEXT    NOT NULL,
-            capacity     INTEGER NOT NULL DEFAULT 4,
-            status       TEXT    NOT NULL DEFAULT 'Available',
-            qr_code      TEXT,
-            created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
-            UNIQUE(business_id, table_number)
-          )
-        ''');
-
-        await txn.execute('''
-          CREATE TABLE IF NOT EXISTS ${AppConstants.tblKot} (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            business_id  INTEGER NOT NULL DEFAULT 1,
-            sale_id      INTEGER REFERENCES ${AppConstants.tblSales}(id) ON DELETE CASCADE,
-            table_id     INTEGER REFERENCES ${AppConstants.tblRestaurantTables}(id) ON DELETE SET NULL,
-            status       TEXT    NOT NULL DEFAULT 'Pending',
-            notes        TEXT,
-            created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
-            updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
-          )
-        ''');
-
-        await txn.execute('''
-          CREATE TABLE IF NOT EXISTS ${AppConstants.tblKotItems} (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            kot_id       INTEGER NOT NULL REFERENCES ${AppConstants.tblKot}(id) ON DELETE CASCADE,
-            product_id   INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE RESTRICT,
-            product_name TEXT    NOT NULL,
-            quantity     REAL    NOT NULL,
-            status       TEXT    NOT NULL DEFAULT 'Pending',
-            notes        TEXT
-          )
-        ''');
       });
     }
     if (oldVersion < 20) {
@@ -1254,6 +1303,87 @@ class DatabaseHelper {
         }
       });
     }
+
+    if (oldVersion < 23) {
+      await db.transaction((txn) async {
+        // 1. Safe ALTER TABLE on categories
+        for (final colSql in [
+          'ALTER TABLE ${AppConstants.tblCategories} ADD COLUMN code TEXT',
+          'ALTER TABLE ${AppConstants.tblCategories} ADD COLUMN image_path TEXT',
+          'ALTER TABLE ${AppConstants.tblCategories} ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0',
+          'ALTER TABLE ${AppConstants.tblCategories} ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1',
+        ]) {
+          try { await txn.execute(colSql); } catch (_) {}
+        }
+
+        // 2. Safe ALTER TABLE on products
+        for (final colSql in [
+          'ALTER TABLE ${AppConstants.tblProducts} ADD COLUMN subcategory_id INTEGER REFERENCES ${AppConstants.tblSubcategories}(id) ON DELETE SET NULL',
+          'ALTER TABLE ${AppConstants.tblProducts} ADD COLUMN brand TEXT',
+          'ALTER TABLE ${AppConstants.tblProducts} ADD COLUMN hsn_sac TEXT',
+          'ALTER TABLE ${AppConstants.tblProducts} ADD COLUMN mrp REAL NOT NULL DEFAULT 0',
+          'ALTER TABLE ${AppConstants.tblProducts} ADD COLUMN min_selling_price REAL NOT NULL DEFAULT 0',
+          'ALTER TABLE ${AppConstants.tblProducts} ADD COLUMN default_supplier_id INTEGER REFERENCES ${AppConstants.tblSuppliers}(id) ON DELETE SET NULL',
+        ]) {
+          try { await txn.execute(colSql); } catch (_) {}
+        }
+
+        // 3. Safe ALTER TABLE on suppliers
+        for (final colSql in [
+          'ALTER TABLE ${AppConstants.tblSuppliers} ADD COLUMN company_name TEXT',
+          'ALTER TABLE ${AppConstants.tblSuppliers} ADD COLUMN pan TEXT',
+          'ALTER TABLE ${AppConstants.tblSuppliers} ADD COLUMN contact_person TEXT',
+          'ALTER TABLE ${AppConstants.tblSuppliers} ADD COLUMN state TEXT',
+          'ALTER TABLE ${AppConstants.tblSuppliers} ADD COLUMN payment_terms TEXT',
+          'ALTER TABLE ${AppConstants.tblSuppliers} ADD COLUMN credit_limit REAL NOT NULL DEFAULT 0',
+          'ALTER TABLE ${AppConstants.tblSuppliers} ADD COLUMN opening_balance REAL NOT NULL DEFAULT 0',
+          'ALTER TABLE ${AppConstants.tblSuppliers} ADD COLUMN bank_details TEXT',
+          'ALTER TABLE ${AppConstants.tblSuppliers} ADD COLUMN notes TEXT',
+          'ALTER TABLE ${AppConstants.tblSuppliers} ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1',
+        ]) {
+          try { await txn.execute(colSql); } catch (_) {}
+        }
+
+        // 4. Safe ALTER TABLE on customers
+        for (final colSql in [
+          'ALTER TABLE ${AppConstants.tblCustomers} ADD COLUMN customer_type_id INTEGER REFERENCES ${AppConstants.tblCustomerTypes}(id) ON DELETE SET NULL',
+        ]) {
+          try { await txn.execute(colSql); } catch (_) {}
+        }
+
+        // 5. Safe ALTER TABLE on product_tiered_prices
+        for (final colSql in [
+          'ALTER TABLE ${AppConstants.tblProductPrices} ADD COLUMN min_qty REAL NOT NULL DEFAULT 1',
+          'ALTER TABLE ${AppConstants.tblProductPrices} ADD COLUMN max_qty REAL NOT NULL DEFAULT 999999',
+          'ALTER TABLE ${AppConstants.tblProductPrices} ADD COLUMN discount_percent REAL NOT NULL DEFAULT 0',
+        ]) {
+          try { await txn.execute(colSql); } catch (_) {}
+        }
+
+        // 6. Create new tables
+        await _createDataTables(txn);
+        await _createIndexes(txn);
+
+        // 7. Seed default customer types for existing businesses
+        final businesses = await txn.query(AppConstants.tblBusinesses);
+        for (var b in businesses) {
+          final bId = b['id'] as int;
+          final types = [
+            {'name': 'Retail', 'code': 'RET'},
+            {'name': 'Wholesale', 'code': 'WHOLE'},
+            {'name': 'Dealer', 'code': 'DEAL'},
+            {'name': 'Distributor', 'code': 'DIST'},
+            {'name': 'Special', 'code': 'SPEC'},
+          ];
+          for (var t in types) {
+            await txn.rawInsert(
+              'INSERT OR IGNORE INTO ${AppConstants.tblCustomerTypes} (business_id, name, code) VALUES (?, ?, ?)',
+              [bId, t['name'], t['code']],
+            );
+          }
+        }
+      });
+    }
   }
 
   Future<void> _createSyncTable(Transaction txn) async {
@@ -1278,10 +1408,15 @@ class DatabaseHelper {
   bool _isBusinessScopedTable(String table) {
     const scopedTables = {
       AppConstants.tblCategories,
+      AppConstants.tblSubcategories,
       AppConstants.tblProducts,
       AppConstants.tblPriceCategories,
+      AppConstants.tblProductPrices,
+      AppConstants.tblCustomerTypes,
       AppConstants.tblCustomers,
       AppConstants.tblSuppliers,
+      AppConstants.tblSupplierProducts,
+      AppConstants.tblProductBatches,
       AppConstants.tblSales,
       AppConstants.tblPurchases,
       AppConstants.tblLedger,
@@ -1300,8 +1435,6 @@ class DatabaseHelper {
       AppConstants.tblPurchaseReturns,
       AppConstants.tblSalesReturns,
       AppConstants.tblWarehouses,
-      AppConstants.tblRestaurantTables,
-      AppConstants.tblKot,
     };
     return scopedTables.contains(table);
   }
@@ -1540,7 +1673,7 @@ class DatabaseHelper {
 
       // Find all businesses owned by this user
       final businesses = await txn.query(AppConstants.tblBusinesses, where: 'owner_id = ?', whereArgs: [userId]);
-      final businessIds = businesses.map((b) => b['id'] as int).toList();
+      final businessIds = businesses.map((b) => (b['id'] as num?)?.toInt()).whereType<int>().toList();
 
       // Delete all data for these businesses
       for (final bid in businessIds) {
@@ -1566,9 +1699,7 @@ class DatabaseHelper {
           AppConstants.tblCustomerDiscounts,
           AppConstants.tblProductDiscounts,
           AppConstants.tblOffers,
-          AppConstants.tblRestaurantTables,
-          AppConstants.tblKot,
-          AppConstants.tblKotItems,
+          AppConstants.tblWarehouses,
         ];
 
         for (final table in tables) {
@@ -1615,9 +1746,7 @@ class DatabaseHelper {
         AppConstants.tblCustomerDiscounts,
         AppConstants.tblProductDiscounts,
         AppConstants.tblOffers,
-        AppConstants.tblRestaurantTables,
-        AppConstants.tblKot,
-        AppConstants.tblKotItems,
+        AppConstants.tblWarehouses,
       ];
 
       // Disable foreign keys temporarily to avoid constraint errors during bulk delete
@@ -1643,15 +1772,39 @@ class DatabaseHelper {
   Future<void> seedBusinessDefaults(int businessId, {Transaction? txn}) async {
     final database = txn ?? await this.database;
 
-    // 1. Product Categories
+    // 1. Product Categories & Subcategories
     for (final cat in ['Electronics', 'Clothing', 'Food & Beverages', 'Stationery', 'General']) {
-      await database.rawInsert(
-        'INSERT OR IGNORE INTO ${AppConstants.tblCategories} (business_id, name) VALUES (?, ?)',
+      final catId = await database.rawInsert(
+        'INSERT OR IGNORE INTO ${AppConstants.tblCategories} (business_id, name, is_active) VALUES (?, ?, 1)',
         [businessId, cat],
+      );
+      if (cat == 'Electronics') {
+        final actualCatId = catId > 0 ? catId : 1;
+        for (final sub in ['Mobile', 'Accessories', 'Computers']) {
+          await database.rawInsert(
+            'INSERT OR IGNORE INTO ${AppConstants.tblSubcategories} (business_id, category_id, name, is_active) VALUES (?, ?, ?, 1)',
+            [businessId, actualCatId, sub],
+          );
+        }
+      }
+    }
+
+    // 2. Default Customer Types
+    final defaultTypes = [
+      {'name': 'Retail', 'code': 'RET'},
+      {'name': 'Wholesale', 'code': 'WHOLE'},
+      {'name': 'Dealer', 'code': 'DEAL'},
+      {'name': 'Distributor', 'code': 'DIST'},
+      {'name': 'Special', 'code': 'SPEC'},
+    ];
+    for (final t in defaultTypes) {
+      await database.rawInsert(
+        'INSERT OR IGNORE INTO ${AppConstants.tblCustomerTypes} (business_id, name, code, is_active) VALUES (?, ?, ?, 1)',
+        [businessId, t['name'], t['code']],
       );
     }
 
-    // 2. Default Accounts
+    // 3. Default Accounts
     await database.rawInsert('''
       INSERT OR IGNORE INTO ${AppConstants.tblAccounts} (business_id, name, type, balance, is_default)
       VALUES (?, ?, ?, ?, ?)
@@ -1662,7 +1815,7 @@ class DatabaseHelper {
       VALUES (?, ?, ?, ?, ?)
     ''', [businessId, 'Primary Bank', 'Bank', 0.0, 0]);
 
-    // 3. Expense Categories
+    // 4. Expense Categories
     for (final cat in ['Rent', 'Salary', 'Utilities', 'Transport', 'Maintenance', 'Marketing', 'Other']) {
       await database.rawInsert(
         'INSERT OR IGNORE INTO ${AppConstants.tblExpenseCategories} (business_id, name) VALUES (?, ?)',
@@ -1670,7 +1823,7 @@ class DatabaseHelper {
       );
     }
 
-    // 4. App Settings
+    // 5. App Settings
     final defaultSettings = {
       'customer_discount_enabled': '1',
       'product_discount_enabled': '1',
@@ -1679,6 +1832,7 @@ class DatabaseHelper {
       'gst_enabled': '1',
       'inventory_tracking_enabled': '1',
       'notifications_enabled': '0',
+      'allow_negative_stock': '0',
     };
     for (var entry in defaultSettings.entries) {
       await database.insert(AppConstants.tblAppSettings, {
@@ -1688,7 +1842,7 @@ class DatabaseHelper {
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
 
-    // 5. Loyalty Settings
+    // 6. Loyalty Settings
     await database.insert(AppConstants.tblLoyaltySettings, {
       'business_id': businessId,
       'earn_rate': 1.0,
@@ -1697,7 +1851,7 @@ class DatabaseHelper {
       'is_active': 1,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
-    // 6. Default Warehouse
+    // 7. Default Warehouse
     await database.insert(AppConstants.tblWarehouses, {
       'business_id': businessId,
       'name': 'Default Warehouse',
@@ -1784,7 +1938,7 @@ class MockDatabase implements Database {
     final list = await _getTable(table);
     final row = Map<String, dynamic>.from(values);
     if (!row.containsKey('id')) {
-      row['id'] = list.isEmpty ? 1 : (list.map((e) => e['id'] as int).reduce((a, b) => a > b ? a : b) + 1);
+      row['id'] = list.isEmpty ? 1 : (list.map((e) => (e['id'] as num?)?.toInt() ?? 0).reduce((a, b) => a > b ? a : b) + 1);
     } else {
       final existingIndex = list.indexWhere((e) => e['id'] == row['id']);
       if (existingIndex != -1) {
@@ -1894,13 +2048,13 @@ class MockDatabase implements Database {
     String? matchedTable;
     for (var table in [
       AppConstants.tblUsers, AppConstants.tblBusinesses, AppConstants.tblUserBusinesses,
-      AppConstants.tblCategories, AppConstants.tblProducts, AppConstants.tblPriceCategories,
-      AppConstants.tblCustomers, AppConstants.tblSuppliers, AppConstants.tblSales,
+      AppConstants.tblCategories, AppConstants.tblSubcategories, AppConstants.tblProducts, AppConstants.tblPriceCategories,
+      AppConstants.tblProductPrices, AppConstants.tblCustomerTypes, AppConstants.tblCustomers, AppConstants.tblSuppliers,
+      AppConstants.tblSupplierProducts, AppConstants.tblProductBatches, AppConstants.tblSales,
       AppConstants.tblSaleItems, AppConstants.tblPurchases, AppConstants.tblPurchaseItems,
       AppConstants.tblLedger, AppConstants.tblAccounts, AppConstants.tblExpenses,
-      AppConstants.tblAppSettings, AppConstants.tblBudgets, AppConstants.tblLoyaltySettings,
-      AppConstants.tblOffers, AppConstants.tblRestaurantTables, AppConstants.tblKot,
-      AppConstants.tblTransactions
+      AppConstants.tblAppSettings, AppConstants.tblBudgets, AppConstants.tblOffers,
+      AppConstants.tblLoyaltySettings, AppConstants.tblTransactions, AppConstants.tblInventoryTransactions,
     ]) {
       if (lowerSql.contains(table)) {
         matchedTable = table;

@@ -12,6 +12,13 @@ enum AppPermission {
   manageCredentials,
   performBilling,
   deleteData,
+  overridePrice,
+  approveMinPriceOverride,
+  manageSuppliers,
+  managePurchases,
+  recordStockAdjustment,
+  editBasePrice,
+  editPurchaseCost,
 }
 
 class RbacService {
@@ -24,25 +31,40 @@ class RbacService {
       case AppPermission.viewReports:
         return role == AppConstants.roleOwner ||
             role == AppConstants.roleAdmin ||
-            role == AppConstants.roleManager;
+            role == AppConstants.roleManager ||
+            role == AppConstants.rolePurchaseManager ||
+            role == AppConstants.roleInventoryManager;
       case AppPermission.manageSettings:
-        return role == AppConstants.roleOwner ||
-            role == AppConstants.roleAdmin ||
-            role == AppConstants.roleManager;
       case AppPermission.manageBudgets:
         return role == AppConstants.roleOwner ||
             role == AppConstants.roleAdmin ||
             role == AppConstants.roleManager;
       case AppPermission.manageInventory:
+      case AppPermission.recordStockAdjustment:
         return role == AppConstants.roleOwner ||
             role == AppConstants.roleAdmin ||
-            role == AppConstants.roleManager;
+            role == AppConstants.roleManager ||
+            role == AppConstants.roleInventoryManager;
+      case AppPermission.manageSuppliers:
+      case AppPermission.managePurchases:
+        return role == AppConstants.roleOwner ||
+            role == AppConstants.roleAdmin ||
+            role == AppConstants.roleManager ||
+            role == AppConstants.rolePurchaseManager;
       case AppPermission.manageCredentials:
         return role == AppConstants.roleOwner || role == AppConstants.roleAdmin;
       case AppPermission.performBilling:
         return true; // All roles can perform billing
       case AppPermission.deleteData:
         return role == AppConstants.roleOwner || role == AppConstants.roleAdmin;
+      case AppPermission.overridePrice:
+        return true; // Cashier can request override, managers can execute directly
+      case AppPermission.approveMinPriceOverride:
+      case AppPermission.editBasePrice:
+      case AppPermission.editPurchaseCost:
+        return role == AppConstants.roleOwner ||
+            role == AppConstants.roleAdmin ||
+            role == AppConstants.roleManager;
     }
   }
 
@@ -51,10 +73,27 @@ class RbacService {
   
   bool get isManager => role == AppConstants.roleManager;
   
-  bool get isStaff =>
-      role == AppConstants.roleCashier ||
-      role == AppConstants.roleWaiter ||
-      role == AppConstants.roleKitchen;
+  bool get isPurchaseManager => role == AppConstants.rolePurchaseManager;
+  
+  bool get isInventoryManager => role == AppConstants.roleInventoryManager;
+
+  bool get isCashier => role == AppConstants.roleCashier;
+
+  bool get canApproveMinPriceOverride =>
+      role == AppConstants.roleOwner ||
+      role == AppConstants.roleAdmin ||
+      role == AppConstants.roleManager;
+
+  bool get canEditBasePrice =>
+      role == AppConstants.roleOwner ||
+      role == AppConstants.roleAdmin ||
+      role == AppConstants.roleManager;
+
+  bool get canEditPurchaseCost =>
+      role == AppConstants.roleOwner ||
+      role == AppConstants.roleAdmin ||
+      role == AppConstants.roleManager ||
+      role == AppConstants.rolePurchaseManager;
 
   String get displayName {
     switch (role) {
@@ -64,12 +103,12 @@ class RbacService {
         return 'Admin';
       case AppConstants.roleManager:
         return 'Manager';
+      case AppConstants.rolePurchaseManager:
+        return 'Purchase Manager';
+      case AppConstants.roleInventoryManager:
+        return 'Inventory Manager';
       case AppConstants.roleCashier:
         return 'Cashier';
-      case AppConstants.roleWaiter:
-        return 'Waiter';
-      case AppConstants.roleKitchen:
-        return 'Kitchen';
       default:
         return 'Staff';
     }

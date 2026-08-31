@@ -13,6 +13,7 @@ class ProductRepository {
     required int businessId,
     String? searchQuery,
     int? categoryId,
+    int? subcategoryId,
     bool? lowStockOnly,
     bool includeInactive = false,
   }) async {
@@ -24,18 +25,28 @@ class ProductRepository {
       conditions.add('p.category_id = ?');
       args.add(categoryId);
     }
+    if (subcategoryId != null) {
+      conditions.add('p.subcategory_id = ?');
+      args.add(subcategoryId);
+    }
     if (searchQuery != null && searchQuery.isNotEmpty) {
-      conditions.add('(p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)');
-      args.addAll(['%$searchQuery%', '%$searchQuery%', '%$searchQuery%']);
+      conditions.add('(p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ? OR p.brand LIKE ?)');
+      args.addAll(['%$searchQuery%', '%$searchQuery%', '%$searchQuery%', '%$searchQuery%']);
     }
     if (lowStockOnly == true) conditions.add('p.stock <= p.min_stock');
 
     final where = 'WHERE ${conditions.join(' AND ')}';
 
     final result = await _db.rawQuery('''
-      SELECT p.*, c.name AS category_name
+      SELECT 
+        p.*, 
+        c.name AS category_name,
+        sc.name AS subcategory_name,
+        s.name AS default_supplier_name
       FROM ${AppConstants.tblProducts} p
       LEFT JOIN ${AppConstants.tblCategories} c ON p.category_id = c.id
+      LEFT JOIN ${AppConstants.tblSubcategories} sc ON p.subcategory_id = sc.id
+      LEFT JOIN ${AppConstants.tblSuppliers} s ON p.default_supplier_id = s.id
       $where
       ORDER BY p.name ASC
     ''', args);
@@ -45,9 +56,15 @@ class ProductRepository {
 
   Future<Product?> getProductById(int id, int businessId) async {
     final result = await _db.rawQuery('''
-      SELECT p.*, c.name AS category_name
+      SELECT 
+        p.*, 
+        c.name AS category_name,
+        sc.name AS subcategory_name,
+        s.name AS default_supplier_name
       FROM ${AppConstants.tblProducts} p
       LEFT JOIN ${AppConstants.tblCategories} c ON p.category_id = c.id
+      LEFT JOIN ${AppConstants.tblSubcategories} sc ON p.subcategory_id = sc.id
+      LEFT JOIN ${AppConstants.tblSuppliers} s ON p.default_supplier_id = s.id
       WHERE p.id = ? AND p.business_id = ?
     ''', [id, businessId]);
     return result.isNotEmpty ? Product.fromMap(result.first) : null;
@@ -55,9 +72,15 @@ class ProductRepository {
 
   Future<Product?> getProductByBarcode(String barcode, int businessId) async {
     final result = await _db.rawQuery('''
-      SELECT p.*, c.name AS category_name
+      SELECT 
+        p.*, 
+        c.name AS category_name,
+        sc.name AS subcategory_name,
+        s.name AS default_supplier_name
       FROM ${AppConstants.tblProducts} p
       LEFT JOIN ${AppConstants.tblCategories} c ON p.category_id = c.id
+      LEFT JOIN ${AppConstants.tblSubcategories} sc ON p.subcategory_id = sc.id
+      LEFT JOIN ${AppConstants.tblSuppliers} s ON p.default_supplier_id = s.id
       WHERE p.barcode = ? AND p.business_id = ?
     ''', [barcode, businessId]);
     return result.isNotEmpty ? Product.fromMap(result.first) : null;
@@ -78,7 +101,7 @@ class ProductRepository {
       args.add(excludeId);
     }
     final result = await _db.rawQuery(query, args);
-    final count = result.isNotEmpty ? (result.first['cnt'] as int? ?? 0) : 0;
+    final count = result.isNotEmpty ? ((result.first['cnt'] as num?)?.toInt() ?? 0) : 0;
     return count > 0;
   }
 
@@ -92,7 +115,7 @@ class ProductRepository {
         "SELECT COUNT(*) AS count FROM ${AppConstants.tblProducts} WHERE sku = ? AND business_id = ? AND is_active = 1",
         [product.sku, businessId],
       );
-      if (skuResult.isNotEmpty && (skuResult.first['count'] as int) > 0) {
+      if (skuResult.isNotEmpty && (((skuResult.first['count'] as num?)?.toInt() ?? 0) > 0)) {
         throw Exception("Duplicate SKU Error: A product with SKU '${product.sku}' already exists.");
       }
     }
@@ -101,14 +124,51 @@ class ProductRepository {
         "SELECT COUNT(*) AS count FROM ${AppConstants.tblProducts} WHERE barcode = ? AND business_id = ? AND is_active = 1",
         [product.barcode, businessId],
       );
-      if (barcodeResult.isNotEmpty && (barcodeResult.first['count'] as int) > 0) {
+      if (barcodeResult.isNotEmpty && (((barcodeResult.first['count'] as num?)?.toInt() ?? 0) > 0)) {
         throw Exception("Duplicate Barcode Error: A product with barcode '${product.barcode}' already exists.");
       }
     }
 
     final data = product.toMap();
     data['business_id'] = businessId;
-    return _db.insert(AppConstants.tblProducts, data);
+
+    return await _db.transaction((txn) async {
+      final productId = await txn.insert(AppConstants.tblProducts, data);
+
+      // Get Default Warehouse
+      final warehouseResult = await txn.query(
+        AppConstants.tblWarehouses,
+        columns: ['id'],
+        where: 'business_id = ?',
+        whereArgs: [businessId],
+        limit: 1,
+      );
+      final warehouseId = warehouseResult.isNotEmpty ? (warehouseResult.first['id'] as int?) ?? 1 : 1;
+
+      // Initialize warehouse stock
+      await txn.insert(AppConstants.tblWarehouseStocks, {
+        'warehouse_id': warehouseId,
+        'product_id': productId,
+        'stock': product.stock,
+      });
+
+      // If initial opening stock was specified, log an immutable OPENING_STOCK inventory transaction
+      if (product.stock > 0) {
+        await txn.insert(AppConstants.tblInventoryTransactions, {
+          'product_id': productId,
+          'warehouse_id': warehouseId,
+          'transaction_type': AppConstants.transactionTypeOpeningStock,
+          'reference_number': 'OPENING-STOCK',
+          'quantity': product.stock,
+          'unit_cost': product.purchasePrice,
+          'opening_stock': 0,
+          'closing_stock': product.stock,
+          'remarks': 'Initial product opening stock balance',
+        });
+      }
+
+      return productId;
+    });
   }
 
   Future<int> updateProduct(Product product) async {
@@ -119,15 +179,16 @@ class ProductRepository {
       throw Exception("Price Error: Prices cannot be negative.");
     }
     
-    final businessIdResult = await _db.rawQuery("SELECT business_id FROM ${AppConstants.tblProducts} WHERE id = ?", [product.id]);
-    final businessId = businessIdResult.isNotEmpty ? businessIdResult.first['business_id'] as int : 1;
+    final businessIdResult = await _db.rawQuery("SELECT business_id, stock FROM ${AppConstants.tblProducts} WHERE id = ?", [product.id]);
+    final businessId = businessIdResult.isNotEmpty ? (businessIdResult.first['business_id'] as num?)?.toInt() ?? 1 : 1;
+    final existingStock = businessIdResult.isNotEmpty ? (businessIdResult.first['stock'] as num?)?.toDouble() ?? 0.0 : 0.0;
 
     if (product.sku != null && product.sku!.trim().isNotEmpty) {
       final skuResult = await _db.rawQuery(
         "SELECT COUNT(*) AS count FROM ${AppConstants.tblProducts} WHERE sku = ? AND business_id = ? AND id != ? AND is_active = 1",
         [product.sku, businessId, product.id],
       );
-      if (skuResult.isNotEmpty && (skuResult.first['count'] as int) > 0) {
+      if (skuResult.isNotEmpty && (((skuResult.first['count'] as num?)?.toInt() ?? 0) > 0)) {
         throw Exception("Duplicate SKU Error: Another product with SKU '${product.sku}' already exists.");
       }
     }
@@ -136,12 +197,16 @@ class ProductRepository {
         "SELECT COUNT(*) AS count FROM ${AppConstants.tblProducts} WHERE barcode = ? AND business_id = ? AND id != ? AND is_active = 1",
         [product.barcode, businessId, product.id],
       );
-      if (barcodeResult.isNotEmpty && (barcodeResult.first['count'] as int) > 0) {
+      if (barcodeResult.isNotEmpty && (((barcodeResult.first['count'] as num?)?.toInt() ?? 0) > 0)) {
         throw Exception("Duplicate Barcode Error: Another product with barcode '${product.barcode}' already exists.");
       }
     }
 
-    return _db.update(AppConstants.tblProducts, product.toMap(), product.id!);
+    final data = product.toMap();
+    // Rule: Never allow overwriting stock from normal product screen
+    data['stock'] = existingStock;
+
+    return _db.update(AppConstants.tblProducts, data, product.id!);
   }
 
   Future<int> deleteProduct(int id) async {
@@ -153,18 +218,129 @@ class ProductRepository {
     return _db.update(AppConstants.tblProducts, {'is_active': 1}, id);
   }
 
-  Future<void> adjustStock(int productId, double adjustment) async {
-    await _db.rawUpdate(
-      "UPDATE ${AppConstants.tblProducts} SET stock = stock + ?, updated_at = datetime('now') WHERE id = ?",
-      [adjustment, productId],
-    );
+  // ── Stock Adjustments & Stock Movement Ledger ─────────────────────────────
+
+  Future<int> recordStockAdjustment({
+    required int businessId,
+    required int productId,
+    required double adjustedQty, // Positive to increase, negative to decrease
+    required String adjustmentType, // 'PHYSICAL_DISCREPANCY', 'DAMAGE', 'WASTAGE', 'EXPIRED', 'RETURN_TO_STOCK'
+    required String reason,
+    int? userId,
+    int? warehouseId,
+  }) async {
+    return await _db.transaction((txn) async {
+      final productRes = await txn.query(
+        AppConstants.tblProducts,
+        columns: ['stock', 'purchase_price', 'name'],
+        where: 'id = ? AND business_id = ?',
+        whereArgs: [productId, businessId],
+      );
+      if (productRes.isEmpty) throw Exception("Product ID $productId not found.");
+
+      final currentStock = (productRes.first['stock'] as num?)?.toDouble() ?? 0.0;
+      final unitCost = (productRes.first['purchase_price'] as num?)?.toDouble() ?? 0.0;
+      final newStock = currentStock + adjustedQty;
+
+      if (newStock < 0) {
+        throw Exception("Stock Error: Stock adjustment would result in negative stock ($newStock).");
+      }
+
+      final wId = warehouseId ?? 1;
+
+      // Update product stock
+      await txn.rawUpdate(
+        "UPDATE ${AppConstants.tblProducts} SET stock = ?, updated_at = datetime('now') WHERE id = ? AND business_id = ?",
+        [newStock, productId, businessId],
+      );
+
+      // Update warehouse stock
+      await txn.rawUpdate(
+        "UPDATE ${AppConstants.tblWarehouseStocks} SET stock = stock + ? WHERE warehouse_id = ? AND product_id = ?",
+        [adjustedQty, wId, productId],
+      );
+
+      // Log Stock Ledger Transaction
+      final txType = (adjustmentType == 'DAMAGE' || adjustmentType == 'WASTAGE')
+          ? AppConstants.transactionTypeDamageWastage
+          : AppConstants.transactionTypeStockAdjustment;
+
+      final txId = await txn.insert(AppConstants.tblInventoryTransactions, {
+        'product_id': productId,
+        'warehouse_id': wId,
+        'transaction_type': txType,
+        'reference_number': 'ADJ-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+        'quantity': adjustedQty,
+        'unit_cost': unitCost,
+        'opening_stock': currentStock,
+        'closing_stock': newStock,
+        'created_by': userId,
+        'remarks': '$adjustmentType: $reason',
+      });
+
+      // Log Audit Trail
+      await txn.insert(AppConstants.tblAuditLogs, {
+        'user_id': userId,
+        'module': 'INVENTORY',
+        'action_type': 'STOCK_ADJUSTMENT',
+        'record_id': productId,
+        'previous_state': '{"stock": $currentStock}',
+        'new_state': '{"stock": $newStock, "adjustment": $adjustedQty, "type": "$adjustmentType"}',
+      });
+
+      return txId;
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getStockLedger(
+    int businessId, {
+    int? productId,
+    String? transactionType,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final conditions = <String>['p.business_id = ?'];
+    final args = <dynamic>[businessId];
+
+    if (productId != null) {
+      conditions.add('it.product_id = ?');
+      args.add(productId);
+    }
+    if (transactionType != null && transactionType.isNotEmpty) {
+      conditions.add('it.transaction_type = ?');
+      args.add(transactionType);
+    }
+    if (startDate != null) {
+      conditions.add('it.created_date >= ?');
+      args.add(startDate.toIso8601String());
+    }
+    if (endDate != null) {
+      conditions.add('it.created_date <= ?');
+      args.add(endDate.toIso8601String());
+    }
+
+    final where = 'WHERE ${conditions.join(' AND ')}';
+
+    return await _db.rawQuery('''
+      SELECT 
+        it.*,
+        p.name AS product_name,
+        p.unit AS product_unit,
+        p.sku AS product_sku,
+        w.name AS warehouse_name
+      FROM ${AppConstants.tblInventoryTransactions} it
+      JOIN ${AppConstants.tblProducts} p ON it.product_id = p.id
+      LEFT JOIN ${AppConstants.tblWarehouses} w ON it.warehouse_id = w.id
+      $where
+      ORDER BY it.id DESC
+    ''', args);
   }
 
   Future<Map<String, dynamic>> getInventoryStats(int businessId) async {
     final result = await _db.rawQuery('''
       SELECT
         COUNT(*) AS total_products,
-        SUM(CASE WHEN stock <= min_stock THEN 1 ELSE 0 END) AS low_stock_count,
+        SUM(CASE WHEN stock <= min_stock AND stock > 0 THEN 1 ELSE 0 END) AS low_stock_count,
         SUM(CASE WHEN stock <= 0 THEN 1 ELSE 0 END) AS out_of_stock_count,
         SUM(stock * purchase_price) AS inventory_value
       FROM ${AppConstants.tblProducts}
@@ -180,7 +356,7 @@ class ProductRepository {
       AppConstants.tblCategories,
       where: 'business_id = ?',
       whereArgs: [businessId],
-      orderBy: 'name ASC',
+      orderBy: 'display_order ASC, name ASC',
     );
     return result.map(Category.fromMap).toList();
   }
@@ -200,7 +376,62 @@ class ProductRepository {
     return _db.delete(AppConstants.tblCategories, id);
   }
 
-  // ── Price Categories ───────────────────────────────────────────────────────
+  // ── Subcategories ──────────────────────────────────────────────────────────
+
+  Future<List<Subcategory>> getSubcategories(int businessId, {int? categoryId}) async {
+    String where = 'business_id = ?';
+    List<dynamic> whereArgs = [businessId];
+    if (categoryId != null) {
+      where += ' AND category_id = ?';
+      whereArgs.add(categoryId);
+    }
+    final result = await _db.queryAll(
+      AppConstants.tblSubcategories,
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: 'name ASC',
+    );
+    return result.map(Subcategory.fromMap).toList();
+  }
+
+  Future<int> addSubcategory(Subcategory subcategory, int businessId) async {
+    final data = subcategory.toMap();
+    data['business_id'] = businessId;
+    return _db.insert(AppConstants.tblSubcategories, data);
+  }
+
+  Future<int> updateSubcategory(Subcategory subcategory) async {
+    if (subcategory.id == null) throw ArgumentError('Subcategory id is required');
+    return _db.update(AppConstants.tblSubcategories, subcategory.toMap(), subcategory.id!);
+  }
+
+  Future<int> deleteSubcategory(int id) async {
+    return _db.delete(AppConstants.tblSubcategories, id);
+  }
+
+  // ── Customer Types (Price Lists) ───────────────────────────────────────────
+
+  Future<List<CustomerType>> getCustomerTypes(int businessId) async {
+    final result = await _db.queryAll(
+      AppConstants.tblCustomerTypes,
+      where: 'business_id = ?',
+      whereArgs: [businessId],
+      orderBy: 'name ASC',
+    );
+    return result.map(CustomerType.fromMap).toList();
+  }
+
+  Future<int> addCustomerType(CustomerType customerType, int businessId) async {
+    final data = customerType.toMap();
+    data['business_id'] = businessId;
+    return _db.insert(AppConstants.tblCustomerTypes, data);
+  }
+
+  Future<int> deleteCustomerType(int id) async {
+    return _db.delete(AppConstants.tblCustomerTypes, id);
+  }
+
+  // ── Price Categories (Legacy Compatibility) ────────────────────────────────
 
   Future<List<PriceCategory>> getPriceCategories(int businessId) async {
     final result = await _db.queryAll(
@@ -226,32 +457,71 @@ class ProductRepository {
 
   Future<List<ProductTierPrice>> getProductPrices(int productId) async {
     final result = await _db.rawQuery('''
-      SELECT tp.*, pc.name as category_name
+      SELECT tp.*, COALESCE(ct.name, pc.name) as category_name
       FROM ${AppConstants.tblProductPrices} tp
-      JOIN ${AppConstants.tblPriceCategories} pc ON tp.category_id = pc.id
+      LEFT JOIN ${AppConstants.tblCustomerTypes} ct ON tp.category_id = ct.id
+      LEFT JOIN ${AppConstants.tblPriceCategories} pc ON tp.category_id = pc.id
       WHERE tp.product_id = ?
+      ORDER BY tp.min_qty ASC
     ''', [productId]);
     return result.map(ProductTierPrice.fromMap).toList();
   }
 
+  Future<Map<int, List<ProductTierPrice>>> getAllProductPrices(int businessId) async {
+    final result = await _db.rawQuery('''
+      SELECT tp.*, COALESCE(ct.name, pc.name) as category_name
+      FROM ${AppConstants.tblProductPrices} tp
+      JOIN ${AppConstants.tblProducts} p ON tp.product_id = p.id
+      LEFT JOIN ${AppConstants.tblCustomerTypes} ct ON tp.category_id = ct.id
+      LEFT JOIN ${AppConstants.tblPriceCategories} pc ON tp.category_id = pc.id
+      WHERE p.business_id = ?
+      ORDER BY tp.min_qty ASC
+    ''', [businessId]);
+    final Map<int, List<ProductTierPrice>> map = {};
+    for (final row in result) {
+      final item = ProductTierPrice.fromMap(row);
+      map.putIfAbsent(item.productId, () => []).add(item);
+    }
+    return map;
+  }
+
   Future<void> updateProductPrices(int productId, List<ProductTierPrice> prices) async {
     await _db.transaction((txn) async {
-      // Clear existing
       await txn.delete(
         AppConstants.tblProductPrices,
         where: 'product_id = ?',
         whereArgs: [productId],
       );
       
-      // Insert new
       for (final p in prices) {
         await txn.insert(AppConstants.tblProductPrices, {
           'product_id': productId,
           'category_id': p.categoryId,
+          'min_qty': p.minQty,
+          'max_qty': p.maxQty,
           'price': p.price,
+          'discount_percent': p.discountPercent,
         });
       }
       _db.notify(AppConstants.tblProductPrices);
     });
+  }
+
+  // ── Product Batches ────────────────────────────────────────────────────────
+
+  Future<List<ProductBatch>> getProductBatches(int productId) async {
+    final result = await _db.queryAll(
+      AppConstants.tblProductBatches,
+      where: 'product_id = ? AND quantity > 0',
+      whereArgs: [productId],
+      orderBy: 'expiry_date ASC', // FEFO
+    );
+    return result.map(ProductBatch.fromMap).toList();
+  }
+
+  Future<int> addProductBatch(ProductBatch batch, int businessId) async {
+    final data = batch.toMap();
+    data['business_id'] = businessId;
+    return _db.insert(AppConstants.tblProductBatches, data);
   }
 }

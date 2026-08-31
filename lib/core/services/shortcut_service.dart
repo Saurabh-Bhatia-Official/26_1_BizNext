@@ -120,30 +120,40 @@ class AppShortcut extends ConsumerStatefulWidget {
 }
 
 class _AppShortcutState extends ConsumerState<AppShortcut> {
+  ShortcutRegistry? _registry;
+
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _registry = ref.read(shortcutRegistryProvider);
     _register();
   }
 
   @override
   void didUpdateWidget(AppShortcut oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.onPressed != oldWidget.onPressed) {
-      ref.read(shortcutRegistryProvider).unregister(widget.actionId);
+    if (widget.onPressed != oldWidget.onPressed || widget.actionId != oldWidget.actionId) {
+      _registry?.unregister(oldWidget.actionId);
       _register();
     }
   }
 
   @override
   void dispose() {
-    ref.read(shortcutRegistryProvider).unregister(widget.actionId);
+    _registry?.unregister(widget.actionId);
     super.dispose();
   }
 
   void _register() {
+    if (_registry == null && mounted) {
+      try {
+        _registry = ref.read(shortcutRegistryProvider);
+      } catch (_) {}
+    }
     if (widget.onPressed != null) {
-      ref.read(shortcutRegistryProvider).register(widget.actionId, widget.onPressed!);
+      _registry?.register(widget.actionId, widget.onPressed!);
+    } else {
+      _registry?.unregister(widget.actionId);
     }
   }
 

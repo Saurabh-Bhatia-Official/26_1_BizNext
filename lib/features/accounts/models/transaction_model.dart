@@ -48,17 +48,17 @@ class TransactionModel {
 
   factory TransactionModel.fromMap(Map<String, dynamic> map) {
     return TransactionModel(
-      id: map['id'],
-      businessId: map['business_id'],
-      categoryId: map['category_id'],
+      id: (map['id'] as num?)?.toInt(),
+      businessId: (map['business_id'] as num?)?.toInt() ?? 0,
+      categoryId: (map['category_id'] as num?)?.toInt(),
       categoryName: map['category_name'],
       type: map['type'] ?? 'debit',
-      amount: (map['amount'] as num).toDouble(),
+      amount: (map['amount'] as num?)?.toDouble() ?? 0.0,
       description: map['description'],
       paymentMode: map['payment_mode'] ?? 'Cash',
-      accountId: map['account_id'],
+      accountId: (map['account_id'] as num?)?.toInt(),
       accountName: map['account_name'],
-      date: DateTime.parse(map['date']),
+      date: map['date'] != null ? DateTime.tryParse(map['date']) ?? DateTime.now() : DateTime.now(),
     );
   }
 }

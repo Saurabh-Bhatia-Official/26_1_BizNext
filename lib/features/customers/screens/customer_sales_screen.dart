@@ -183,7 +183,7 @@ class _SaleItemCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        DateFormatter.toDisplay(DateTime.parse(sale['date'])),
+                        sale['date'] != null ? DateFormatter.toDisplay(DateTime.tryParse(sale['date']) ?? DateTime.now()) : '',
                         style: const TextStyle(color: AppColors.textMuted, fontSize: 13, fontWeight: FontWeight.w500),
                       ),
                     ],
@@ -193,12 +193,12 @@ class _SaleItemCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      CurrencyFormatter.format((sale['grand_total'] as num).toDouble()),
+                      CurrencyFormatter.format((sale['grand_total'] as num?)?.toDouble() ?? 0.0),
                       style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: AppColors.primary),
                     ),
                     if (isCredit)
                        Text(
-                        'Due: ${CurrencyFormatter.format((sale['balance_due'] as num).toDouble())}',
+                        'Due: ${CurrencyFormatter.format((sale['balance_due'] as num?)?.toDouble() ?? 0.0)}',
                         style: const TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.w700),
                       ),
                   ],

@@ -43,7 +43,7 @@ class AIChatbotService {
           periodText = 'this past week';
         }
 
-        sql = "SELECT SUM(grand_total) as total_sales, COUNT(id) as invoice_count FROM sale_history WHERE business_id = $businessId $dateFilter";
+        sql = "SELECT SUM(grand_total) as total_sales, COUNT(id) as invoice_count FROM sales WHERE business_id = $businessId $dateFilter";
         
         final result = await db.rawQuery(sql);
         resultStr = jsonEncode(result);
@@ -101,7 +101,7 @@ class AIChatbotService {
 
       // 4. Inventory Intent
       else if (query.contains('stock') || query.contains('inventory') || query.contains('product')) {
-        sql = "SELECT name, stock FROM inventory WHERE business_id = $businessId ORDER BY stock ASC LIMIT 5";
+        sql = "SELECT name, stock FROM products WHERE business_id = $businessId ORDER BY stock ASC LIMIT 5";
         final result = await db.rawQuery(sql);
         resultStr = jsonEncode(result);
         

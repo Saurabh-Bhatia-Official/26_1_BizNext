@@ -214,7 +214,8 @@ class _SalesList extends ConsumerWidget {
       itemBuilder: (ctx, i) {
         final s = sales[i];
         final isCredit = s['payment_mode'] == AppConstants.paymentCredit;
-        final statusColor = isCredit ? AppColors.warning : AppColors.success;
+        final isPendingCredit = isCredit && ((s['balance_due'] as num?) ?? 0) > 0;
+        final statusColor = isPendingCredit ? AppColors.warning : AppColors.success;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -242,7 +243,7 @@ class _SalesList extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Icon(
-                        isCredit ? Icons.timer_outlined : Icons.check_circle_outline_rounded,
+                        isPendingCredit ? Icons.timer_outlined : Icons.check_circle_outline_rounded,
                         color: statusColor,
                         size: 24,
                       ),
@@ -267,7 +268,7 @@ class _SalesList extends ConsumerWidget {
                                   style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.textMuted),
                                 ),
                               ),
-                              if (s['discount'] != null && (s['discount'] as num) > 0) ...[
+                              if (s['discount'] != null && ((s['discount'] as num?) ?? 0) > 0) ...[
                                 const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -296,11 +297,11 @@ class _SalesList extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          CurrencyFormatter.format((s['grand_total'] as num).toDouble()),
+                          CurrencyFormatter.format((s['grand_total'] as num?)?.toDouble() ?? 0.0),
                           style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: AppColors.primary),
                         ),
                         Text(
-                          DateFormatter.toDisplay(DateTime.parse(s['date'])),
+                          s['date'] != null ? DateFormatter.toDisplay(DateTime.tryParse(s['date']) ?? DateTime.now()) : '',
                           style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600),
                         ),
                       ],
@@ -318,7 +319,7 @@ class _SalesList extends ConsumerWidget {
                       },
                       itemBuilder: (ctx) => [
                         const PopupMenuItem(value: 'print', child: Row(children: [Icon(Icons.print_rounded, size: 18), SizedBox(width: 12), Text('Print Invoice')])),
-                        if (isCredit && (s['balance_due'] as num) > 0)
+                        if (isCredit && ((s['balance_due'] as num?) ?? 0) > 0)
                           const PopupMenuItem(value: 'pay', child: Row(children: [Icon(Icons.payments_outlined, size: 18, color: AppColors.success), SizedBox(width: 12), Text('Collect Payment', style: TextStyle(color: AppColors.success))])),
                         const PopupMenuItem(value: 'duplicate', child: Row(children: [Icon(Icons.copy_rounded, size: 18, color: AppColors.accent), SizedBox(width: 12), Text('Duplicate to POS', style: TextStyle(color: AppColors.accent))])),
                         const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_rounded, size: 18, color: AppColors.primary), SizedBox(width: 12), Text('Edit Invoice', style: TextStyle(color: AppColors.primary))])),
@@ -415,7 +416,7 @@ class _SalesList extends ConsumerWidget {
   }
 
   void _showPaymentDialog(BuildContext context, WidgetRef ref, Map<String, dynamic> sale) {
-    final balance = (sale['balance_due'] as num).toDouble();
+    final balance = (sale['balance_due'] as num?)?.toDouble() ?? 0.0;
     final amountCtrl = TextEditingController(text: balance.toString());
     String mode = 'Cash';
     int? selectedAccountId;

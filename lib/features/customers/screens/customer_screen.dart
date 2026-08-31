@@ -410,11 +410,47 @@ class _CustomerCardState extends State<_CustomerCard> {
                         }
                       },
                       itemBuilder: (ctx) => [
-                        const PopupMenuItem(value: 'history', child: ListTile(leading: Icon(Icons.history_rounded, size: 18), title: Text('Sale History'), dense: true)),
-                        const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_rounded, size: 18), title: Text('Edit'), dense: true)),
+                        const PopupMenuItem(
+                          value: 'history',
+                          child: Row(
+                            children: [
+                              Icon(Icons.history_rounded, size: 18),
+                              SizedBox(width: 12),
+                              Text('Sale History'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit_rounded, size: 18),
+                              SizedBox(width: 12),
+                              Text('Edit'),
+                            ],
+                          ),
+                        ),
                         if (ref.watch(featureSettingsProvider).customerDiscountEnabled)
-                          const PopupMenuItem(value: 'discount', child: ListTile(leading: Icon(Icons.local_offer_rounded, size: 18), title: Text('Manage Discount'), dense: true)),
-                        PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error), title: const Text('Delete', style: TextStyle(color: AppColors.error)), dense: true)),
+                          const PopupMenuItem(
+                            value: 'discount',
+                            child: Row(
+                              children: [
+                                Icon(Icons.local_offer_rounded, size: 18),
+                                SizedBox(width: 12),
+                                Text('Manage Discount'),
+                              ],
+                            ),
+                          ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error),
+                              SizedBox(width: 12),
+                              Text('Delete', style: TextStyle(color: AppColors.error)),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ],

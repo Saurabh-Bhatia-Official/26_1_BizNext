@@ -76,7 +76,7 @@ class SyncService {
 
       if (response.statusCode == 200) {
         // Clear successful records from sync_queue
-        final idsToDelete = queueItems.map((item) => item['id'] as int).toList();
+        final idsToDelete = queueItems.map((item) => (item['id'] as num?)?.toInt()).whereType<int>().toList();
         for (final id in idsToDelete) {
           await _db.delete('sync_queue', id);
         }

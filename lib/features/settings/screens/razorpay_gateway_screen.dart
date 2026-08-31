@@ -1062,18 +1062,21 @@ class _RazorpayGatewayScreenState extends ConsumerState<RazorpayGatewayScreen> {
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
+      child: Material(
         color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.08)),
-      ),
-      child: ListTile(
-        onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-        leading: Icon(icon, color: const Color(0xFF0B72E7), size: 28),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-        trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.08)),
+        ),
+        child: ListTile(
+          onTap: onTap,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          leading: Icon(icon, color: const Color(0xFF0B72E7), size: 28),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+          trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+        ),
       ),
     );
   }

@@ -102,11 +102,12 @@ class CredentialsScreen extends ConsumerWidget {
                     child: Text('No users found', style: TextStyle(color: AppColors.textMuted, fontSize: 16)),
                   ));
                 }
-                return Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? AppColors.darkCard : Colors.white,
+                return Material(
+                  color: isDark ? AppColors.darkCard : Colors.white,
+                  clipBehavior: Clip.antiAlias,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                    side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
                   ),
                   child: Column(
                     children: [
@@ -114,45 +115,47 @@ class CredentialsScreen extends ConsumerWidget {
                       ...List.generate(users.length, (i) {
                         final user = users[i];
                         final isDefault = user.username == 'admin';
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: isDefault ? AppColors.primary.withValues(alpha: 0.05) : null,
-                            border: Border(top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)),
-                          ),
-                          child: ListTile(
-                            title: Text(user.fullName, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: isDark ? Colors.white : AppColors.textLight)),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('@${user.username}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                                if (user.email != null) Text(user.email!, style: const TextStyle(fontSize: 12)),
-                                if (user.phone != null) Text(user.phone!, style: const TextStyle(fontSize: 12)),
-                              ],
+                        return Material(
+                          color: isDefault ? AppColors.primary.withValues(alpha: 0.05) : Colors.transparent,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: Border(top: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder)),
                             ),
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: isDefault ? Colors.amber.withValues(alpha: 0.2) : AppColors.primary.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
+                            child: ListTile(
+                              title: Text(user.fullName, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: isDark ? Colors.white : AppColors.textLight)),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('@${user.username}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                                  if (user.email != null) Text(user.email!, style: const TextStyle(fontSize: 12)),
+                                  if (user.phone != null) Text(user.phone!, style: const TextStyle(fontSize: 12)),
+                                ],
                               ),
-                              child: Icon(
-                                isDefault ? Icons.star_rounded : Icons.person_rounded,
-                                color: isDefault ? Colors.amber : AppColors.primary,
-                                size: 20,
+                              leading: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: isDefault ? Colors.amber.withValues(alpha: 0.2) : AppColors.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  isDefault ? Icons.star_rounded : Icons.person_rounded,
+                                  color: isDefault ? Colors.amber : AppColors.primary,
+                                  size: 20,
+                                ),
                               ),
-                            ),
-                            trailing: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: user.role == 'owner' ? AppColors.primary.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                user.role.toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: user.role == 'owner' ? AppColors.primary : Colors.green,
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: user.role == 'owner' ? AppColors.primary.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  user.role.toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: user.role == 'owner' ? AppColors.primary : Colors.green,
+                                  ),
                                 ),
                               ),
                             ),

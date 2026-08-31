@@ -64,22 +64,22 @@ class PurchaseModel {
   factory PurchaseModel.fromMap(Map<String, dynamic> map) {
     return PurchaseModel(
       id: map['id'],
-      businessId: map['business_id'],
-      billNo: map['bill_no'],
+      businessId: (map['business_id'] as num?)?.toInt() ?? 0,
+      billNo: map['bill_no'] ?? '',
       supplierId: map['supplier_id'],
       supplierName: map['supplier_name'],
-      subtotal: (map['subtotal'] as num).toDouble(),
-      discount: (map['discount'] as num).toDouble(),
-      gstAmount: (map['gst_amount'] as num).toDouble(),
-      grandTotal: (map['grand_total'] as num).toDouble(),
-      paidAmount: (map['paid_amount'] as num).toDouble(),
-      balanceDue: (map['balance_due'] as num).toDouble(),
-      paymentMode: map['payment_mode'],
+      subtotal: (map['subtotal'] as num?)?.toDouble() ?? 0.0,
+      discount: (map['discount'] as num?)?.toDouble() ?? 0.0,
+      gstAmount: (map['gst_amount'] as num?)?.toDouble() ?? 0.0,
+      grandTotal: (map['grand_total'] as num?)?.toDouble() ?? 0.0,
+      paidAmount: (map['paid_amount'] as num?)?.toDouble() ?? 0.0,
+      balanceDue: (map['balance_due'] as num?)?.toDouble() ?? 0.0,
+      paymentMode: map['payment_mode'] ?? 'Cash',
       accountId: map['account_id'],
       accountName: map['account_name'],
       notes: map['notes'],
-      status: map['status'],
-      date: DateTime.parse(map['date']),
+      status: map['status'] ?? 'completed',
+      date: map['date'] != null ? DateTime.tryParse(map['date']) ?? DateTime.now() : DateTime.now(),
     );
   }
 }
@@ -123,12 +123,12 @@ class PurchaseItemModel {
     return PurchaseItemModel(
       id: map['id'],
       purchaseId: map['purchase_id'],
-      productId: map['product_id'],
-      productName: map['product_name'],
-      quantity: (map['quantity'] as num).toDouble(),
-      purchasePrice: (map['price'] as num).toDouble(), // Use 'price' from DB
-      gstPercent: (map['gst_percent'] as num).toDouble(),
-      total: (map['total'] as num).toDouble(),
+      productId: (map['product_id'] as num?)?.toInt() ?? 0,
+      productName: map['product_name'] ?? '',
+      quantity: (map['quantity'] as num?)?.toDouble() ?? 1.0,
+      purchasePrice: (map['price'] as num?)?.toDouble() ?? 0.0, // Use 'price' from DB
+      gstPercent: (map['gst_percent'] as num?)?.toDouble() ?? 0.0,
+      total: (map['total'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }

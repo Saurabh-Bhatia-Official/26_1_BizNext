@@ -93,11 +93,12 @@ class _CategoryManagerScreenState extends ConsumerState<CategoryManagerScreen> {
                     final name = widget.nameExtractor?.call(item) ?? item.name;
                     final id = item.id;
 
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: isDark ? AppColors.darkCard : Colors.white,
+                    return Material(
+                      color: isDark ? AppColors.darkCard : Colors.white,
+                      clipBehavior: Clip.antiAlias,
+                      shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                        side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
                       ),
                       child: ListTile(
                         title: Text(

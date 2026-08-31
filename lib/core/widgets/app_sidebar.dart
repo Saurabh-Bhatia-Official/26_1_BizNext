@@ -11,6 +11,7 @@ import 'app_shell.dart';
 import '../services/sync_service.dart';
 import '../database/database_providers.dart';
 import '../services/rbac_service.dart';
+import '../../features/notifications/providers/notifications_provider.dart';
 
 import '../constants/app_constants.dart';
 
@@ -23,10 +24,10 @@ class NavDestination {
 }
 
 const navDestinations = [
-  NavDestination(label: 'Dashboard', icon: Icons.grid_view_rounded, activeIcon: Icons.grid_view_rounded),
-  NavDestination(label: 'POS Billing', icon: Icons.shopping_cart_outlined, activeIcon: Icons.shopping_cart_rounded),
+  NavDestination(label: 'Dashboard', icon: Icons.grid_view_outlined, activeIcon: Icons.grid_view_rounded),
+  NavDestination(label: 'POS Billing', icon: Icons.point_of_sale_outlined, activeIcon: Icons.point_of_sale_rounded),
   NavDestination(label: 'Sales History', icon: Icons.receipt_long_outlined, activeIcon: Icons.receipt_long_rounded),
-  NavDestination(label: 'Record Purchase', icon: Icons.add_business_outlined, activeIcon: Icons.add_business_rounded),
+  NavDestination(label: 'Quick Purchase', icon: Icons.add_shopping_cart_rounded, activeIcon: Icons.add_shopping_cart_rounded),
   NavDestination(label: 'Purchase History', icon: Icons.shopping_bag_outlined, activeIcon: Icons.shopping_bag_rounded),
   NavDestination(label: 'Inventory', icon: Icons.inventory_2_outlined, activeIcon: Icons.inventory_2_rounded),
   NavDestination(label: 'Customers', icon: Icons.people_outline_rounded, activeIcon: Icons.people_rounded),
@@ -36,7 +37,7 @@ const navDestinations = [
   NavDestination(label: 'Budgeting & Goals', icon: Icons.pie_chart_outline_rounded, activeIcon: Icons.pie_chart_rounded),
   NavDestination(label: 'Offers & Promotions', icon: Icons.local_offer_outlined, activeIcon: Icons.local_offer_rounded),
   NavDestination(label: 'Loyalty Program', icon: Icons.stars_rounded, activeIcon: Icons.stars_rounded),
-  NavDestination(label: 'Notifications', icon: Icons.chat_bubble_rounded, activeIcon: Icons.chat_bubble_rounded),
+  NavDestination(label: 'Notifications', icon: Icons.notifications_none_rounded, activeIcon: Icons.notifications_rounded),
   NavDestination(label: 'AI Assistant', icon: Icons.insights_rounded, activeIcon: Icons.insights_rounded),
   NavDestination(label: 'Settings', icon: Icons.settings_outlined, activeIcon: Icons.settings_rounded),
 ];
@@ -259,12 +260,18 @@ class AppSidebar extends ConsumerWidget {
       return const SizedBox.shrink(); // Hide the nav item completely for unauthorized roles
     }
 
+    int badgeCount = 0;
+    if (index == 13) {
+      badgeCount = ref.watch(unreadNotificationsCountProvider);
+    }
+
     return _SidebarItem(
       label: d.label,
       icon: active ? d.activeIcon : d.icon,
       isSelected: active,
       isCollapsed: isCollapsed,
       isLocked: false,
+      badgeCount: badgeCount,
       onTap: () {
         onDestinationSelected(index);
       },
@@ -358,9 +365,18 @@ class _SidebarItem extends StatelessWidget {
   final bool isSelected;
   final bool isCollapsed;
   final bool isLocked;
+  final int badgeCount;
   final VoidCallback onTap;
 
-  const _SidebarItem({required this.label, required this.icon, required this.isSelected, required this.isCollapsed, this.isLocked = false, required this.onTap});
+  const _SidebarItem({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.isCollapsed,
+    this.isLocked = false,
+    this.badgeCount = 0,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -388,13 +404,27 @@ class _SidebarItem extends StatelessWidget {
             child: Row(
               mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
               children: [
-                Icon(
-                  icon,
-                  color: isLocked
-                      ? Colors.grey.withValues(alpha: 0.5)
-                      : (isSelected ? AppColors.primary : (isDark ? Colors.white.withValues(alpha: 0.35) : AppColors.textLight.withValues(alpha: 0.5))),
-                  size: 20,
-                ),
+                badgeCount > 0 && isCollapsed
+                    ? Badge.count(
+                        count: badgeCount,
+                        backgroundColor: AppColors.primary,
+                        textColor: Colors.white,
+                        textStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900),
+                        child: Icon(
+                          icon,
+                          color: isLocked
+                              ? Colors.grey.withValues(alpha: 0.5)
+                              : (isSelected ? AppColors.primary : (isDark ? Colors.white.withValues(alpha: 0.35) : AppColors.textLight.withValues(alpha: 0.5))),
+                          size: 20,
+                        ),
+                      )
+                    : Icon(
+                        icon,
+                        color: isLocked
+                            ? Colors.grey.withValues(alpha: 0.5)
+                            : (isSelected ? AppColors.primary : (isDark ? Colors.white.withValues(alpha: 0.35) : AppColors.textLight.withValues(alpha: 0.5))),
+                        size: 20,
+                      ),
                 if (!isCollapsed) ...[
                   const SizedBox(width: 14),
                   Expanded(
@@ -415,6 +445,22 @@ class _SidebarItem extends StatelessWidget {
                       Icons.lock_outline_rounded,
                       size: 16,
                       color: Colors.amber.shade800.withValues(alpha: 0.7),
+                    )
+                  else if (badgeCount > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        badgeCount > 99 ? '99+' : '$badgeCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                     )
                   else if (isSelected)
                     Container(

@@ -205,20 +205,23 @@ class _SearchDialogState<T> extends State<_SearchDialog<T>> {
                   itemBuilder: (context, index) {
                     final item = _filteredItems[index];
                     final isSelected = item.value == widget.initialValue;
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                      title: Text(
-                        item.label,
-                        style: TextStyle(
-                          color: widget.isDark ? Colors.white : Colors.black87,
-                          fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500,
+                    return Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                        title: Text(
+                          item.label,
+                          style: TextStyle(
+                            color: widget.isDark ? Colors.white : Colors.black87,
+                            fontWeight: isSelected ? FontWeight.w900 : FontWeight.w500,
+                          ),
                         ),
+                        trailing: isSelected
+                            ? Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 20)
+                            : null,
+                        onTap: () => widget.onSelected(item.value),
+                        hoverColor: AppColors.primary.withValues(alpha: 0.05),
                       ),
-                      trailing: isSelected
-                          ? Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 20)
-                          : null,
-                      onTap: () => widget.onSelected(item.value),
-                      hoverColor: AppColors.primary.withValues(alpha: 0.05),
                     );
                   },
                 ),

@@ -38,25 +38,29 @@ class LoyaltyScreen extends ConsumerWidget {
                   child: const Icon(Icons.stars_rounded, color: AppColors.primary, size: 32),
                 ),
                 const SizedBox(width: 24),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Loyalty & Rewards',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -1,
-                        color: isDark ? Colors.white : AppColors.textLight,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Loyalty & Rewards',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -1,
+                          color: isDark ? Colors.white : AppColors.textLight,
+                        ),
                       ),
-                    ),
-                    const Text(
-                      'Configure earning rules, redemption limits and reward branding',
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 14, fontWeight: FontWeight.w600),
-                    ),
-                  ],
+                      const Text(
+                        'Configure earning rules, redemption limits and reward branding',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 14, fontWeight: FontWeight.w600),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 16),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -90,11 +94,11 @@ class LoyaltyScreen extends ConsumerWidget {
                     GridView(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 24,
-                        mainAxisSpacing: 24,
-                        childAspectRatio: 1.4,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: MediaQuery.of(context).size.width < 600 ? 2 : 3,
+                        crossAxisSpacing: MediaQuery.of(context).size.width < 600 ? 12 : 24,
+                        mainAxisSpacing: MediaQuery.of(context).size.width < 600 ? 12 : 24,
+                        childAspectRatio: MediaQuery.of(context).size.width < 600 ? 0.85 : 1.4,
                       ),
                       children: [
                         _buildSettingCard(
@@ -212,16 +216,16 @@ class LoyaltyScreen extends ConsumerWidget {
             children: [
               Icon(icon, color: AppColors.primary),
               const SizedBox(width: 12),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+              Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w800), maxLines: 2, overflow: TextOverflow.ellipsis)),
             ],
           ),
           const SizedBox(height: 8),
-          Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+          Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
           const Spacer(),
           Row(
             children: [
-              Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-              const Spacer(),
+              Flexible(child: Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900), maxLines: 1, overflow: TextOverflow.ellipsis)),
+              const SizedBox(width: 4),
               IconButton(
                 icon: const Icon(Icons.edit_rounded, size: 20),
                 onPressed: () => _showEditDialog(context, title, value, onSave, isText: isText),
@@ -256,11 +260,11 @@ class LoyaltyScreen extends ConsumerWidget {
             children: [
               Icon(icon, color: AppColors.primary),
               const SizedBox(width: 12),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+              Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w800), maxLines: 2, overflow: TextOverflow.ellipsis)),
             ],
           ),
           const SizedBox(height: 8),
-          Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+          Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
           const Spacer(),
           SizedBox(
             width: double.infinity,

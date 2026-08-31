@@ -9,6 +9,7 @@ import '../../../core/utils/currency_formatter.dart';
 import '../../../core/widgets/layout_toggle.dart';
 import '../models/supplier_model.dart';
 import '../providers/supplier_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 import 'add_edit_supplier_screen.dart';
 
 class SupplierScreen extends ConsumerStatefulWidget {
@@ -70,40 +71,72 @@ class _SupplierHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 32, 24, 20),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Suppliers',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? Colors.white : AppColors.textLight,
+      child: isMobile 
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Supplier Directory',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  color: isDark ? Colors.white : AppColors.textLight,
+                ),
+              ),
+              const Text('Vendor masters, purchasing history & payables', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      onChanged: (v) => ref.read(supplierSearchQueryProvider.notifier).state = v,
+                      decoration: const InputDecoration(
+                        hintText: 'Search vendor or phone...',
+                        prefixIcon: Icon(Icons.search_rounded, size: 20),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  LayoutToggle(current: layoutMode, onChanged: onLayoutChanged, isDark: isDark),
+                ],
+              ),
+            ],
+          )
+        : Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Supplier Management',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        color: isDark ? Colors.white : AppColors.textLight,
+                      ),
+                    ),
+                    const Text('Vendor masters, purchasing ledger & accounts payable', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 260,
+                child: TextField(
+                  onChanged: (v) => ref.read(supplierSearchQueryProvider.notifier).state = v,
+                  decoration: const InputDecoration(
+                    hintText: 'Search vendors...',
+                    prefixIcon: Icon(Icons.search_rounded, size: 20),
                   ),
                 ),
-                const Text('Manage vendors and purchase balances', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
-              ],
-            ),
-          ),
-          SizedBox(
-            width: 240,
-            child: TextField(
-              onChanged: (v) => ref.read(supplierSearchQueryProvider.notifier).state = v,
-              decoration: const InputDecoration(
-                hintText: 'Search suppliers...',
-                prefixIcon: Icon(Icons.search_rounded, size: 20),
               ),
-            ),
+              const SizedBox(width: 12),
+              LayoutToggle(current: layoutMode, onChanged: onLayoutChanged, isDark: isDark),
+            ],
           ),
-          const SizedBox(width: 12),
-          LayoutToggle(current: layoutMode, onChanged: onLayoutChanged, isDark: isDark),
-        ],
-      ),
     );
   }
 }
@@ -125,7 +158,7 @@ class _SupplierGrid extends StatelessWidget {
             crossAxisCount: crossCount,
             crossAxisSpacing: 20,
             mainAxisSpacing: 20,
-            childAspectRatio: 1.4,
+            childAspectRatio: constraints.maxWidth < 600 ? 0.9 : 1.35,
           ),
           itemCount: suppliers.length,
           itemBuilder: (_, i) => _SupplierCard(supplier: suppliers[i], isDark: isDark)
@@ -172,7 +205,7 @@ class _SupplierTableState extends State<_SupplierTable> {
       switch (_sortColumn) {
         case 0: cmp = a.name.compareTo(b.name); break;
         case 1: cmp = (a.phone ?? '').compareTo(b.phone ?? ''); break;
-        case 2: cmp = (a.email ?? '').compareTo(b.email ?? ''); break;
+        case 2: cmp = (a.gstNumber ?? '').compareTo(b.gstNumber ?? ''); break;
         case 3: cmp = a.balance.compareTo(b.balance); break;
         default: cmp = 0;
       }
@@ -212,10 +245,11 @@ class _SupplierTableState extends State<_SupplierTable> {
             dividerThickness: 1,
             columnSpacing: 28,
             columns: [
-              DataColumn(label: const Text('Supplier'), onSort: _onSort),
-              DataColumn(label: const Text('Phone'), onSort: _onSort),
-              DataColumn(label: const Text('Email'), onSort: _onSort),
-              DataColumn(label: const Text('Balance'), numeric: true, onSort: _onSort),
+              DataColumn(label: const Text('Supplier / Company'), onSort: _onSort),
+              DataColumn(label: const Text('Contact & Phone'), onSort: _onSort),
+              DataColumn(label: const Text('GSTIN / State'), onSort: _onSort),
+              DataColumn(label: const Text('Terms'), onSort: _onSort),
+              DataColumn(label: const Text('Payable Balance'), numeric: true, onSort: _onSort),
               const DataColumn(label: Text('Actions')),
             ],
             rows: _sorted.asMap().entries.map((entry) {
@@ -241,16 +275,25 @@ class _SupplierTableState extends State<_SupplierTable> {
                           child: Text(s.name[0].toUpperCase(), style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800, fontSize: 13)),
                         ),
                         const SizedBox(width: 12),
-                        Text(s.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(s.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            if (s.companyName != null && s.companyName!.isNotEmpty)
+                              Text(s.companyName!, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                          ],
+                        ),
                       ],
                     ),
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddEditSupplierScreen(supplier: s))),
                   ),
-                  DataCell(Text(s.phone ?? '—', style: const TextStyle(color: AppColors.textMuted))),
-                  DataCell(Text(s.email ?? '—', style: const TextStyle(color: AppColors.textMuted))),
+                  DataCell(Text(s.phone ?? (s.contactPerson ?? '—'), style: const TextStyle(color: AppColors.textMuted))),
+                  DataCell(Text(s.gstNumber ?? (s.state ?? '—'), style: const TextStyle(color: AppColors.textMuted))),
+                  DataCell(Text(s.paymentTerms ?? 'Net 30', style: const TextStyle(fontSize: 11))),
                   DataCell(Text(
                     CurrencyFormatter.format(s.balance),
-                    style: TextStyle(color: balanceColor, fontWeight: FontWeight.w700),
+                    style: TextStyle(color: balanceColor, fontWeight: FontWeight.w800),
                   )),
                   DataCell(_SupplierTableActions(supplier: s)),
                 ],
@@ -272,6 +315,12 @@ class _SupplierTableActions extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        IconButton(
+          icon: const Icon(Icons.history_rounded, size: 16, color: AppColors.primary),
+          tooltip: 'Purchase Orders',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _showSupplierPurchases(context, ref, supplier),
+        ),
         IconButton(
           icon: const Icon(Icons.edit_rounded, size: 16, color: AppColors.primary),
           tooltip: 'Edit',
@@ -301,7 +350,7 @@ class _SupplierTableActions extends ConsumerWidget {
             onPressed: () async {
               final success = await ref.read(supplierFormProvider.notifier).deleteSupplier(supplier.id!);
               if (ctx.mounted) Navigator.pop(ctx);
-              if (context.mounted && success) AppAlert.success(ref, 'Supplier deleted successfully');
+              if (context.mounted && success) AppAlert.success(ref, 'Supplier removed');
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             child: const Text('Delete'),
@@ -337,7 +386,7 @@ class _SupplierCardState extends State<_SupplierCard> {
         child: Consumer(
           builder: (context, ref, child) => AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: widget.isDark ? AppColors.darkCard : Colors.white,
               borderRadius: BorderRadius.circular(24),
@@ -362,13 +411,32 @@ class _SupplierCardState extends State<_SupplierCard> {
                       onSelected: (val) {
                         if (val == 'edit') {
                           Navigator.push(context, MaterialPageRoute(builder: (_) => AddEditSupplierScreen(supplier: widget.supplier)));
+                        } else if (val == 'purchases') {
+                          _showSupplierPurchases(context, ref, widget.supplier);
                         } else if (val == 'delete') {
                           _confirmDelete(context, ref);
                         }
                       },
                       itemBuilder: (ctx) => [
-                        const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_rounded, size: 18), title: Text('Edit'), dense: true)),
-                        PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error), title: const Text('Delete', style: TextStyle(color: AppColors.error)), dense: true)),
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [Icon(Icons.edit_rounded, size: 18), SizedBox(width: 12), Text('Edit Details')],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'purchases',
+                          child: Row(
+                            children: [Icon(Icons.history_rounded, size: 18, color: AppColors.primary), SizedBox(width: 12), Text('Purchase History')],
+                          ),
+                        ),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error), SizedBox(width: 12), Text('Delete', style: TextStyle(color: AppColors.error))],
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -376,22 +444,24 @@ class _SupplierCardState extends State<_SupplierCard> {
                 const Spacer(),
                 Text(
                   widget.supplier.name,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  widget.supplier.phone ?? 'No phone',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  widget.supplier.companyName ?? (widget.supplier.phone ?? 'No phone'),
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Balance', style: TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+                    Text(widget.supplier.paymentTerms ?? 'Net 30', style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600)),
                     Text(
                       CurrencyFormatter.format(balance),
-                      style: TextStyle(color: balanceColor, fontWeight: FontWeight.w900, fontSize: 16),
+                      style: TextStyle(color: balanceColor, fontWeight: FontWeight.w900, fontSize: 15),
                     ),
                   ],
                 ),
@@ -409,7 +479,7 @@ class _SupplierCardState extends State<_SupplierCard> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Delete Supplier?', style: TextStyle(fontWeight: FontWeight.w800)),
-        content: Text('Are you sure you want to delete ${widget.supplier.name}? This action cannot be undone.'),
+        content: Text('Are you sure you want to delete ${widget.supplier.name}?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
@@ -429,6 +499,58 @@ class _SupplierCardState extends State<_SupplierCard> {
   }
 }
 
+void _showSupplierPurchases(BuildContext context, WidgetRef ref, SupplierModel supplier) async {
+  final businessId = ref.read(activeBusinessIdProvider);
+  final purchases = await ref.read(supplierRepositoryProvider).getSupplierPurchases(supplier.id!, businessId);
+
+  if (!context.mounted) return;
+
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: Row(
+        children: [
+          const Icon(Icons.history_rounded, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Expanded(child: Text('Purchase History: ${supplier.name}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
+        ],
+      ),
+      content: SizedBox(
+        width: 600,
+        height: 380,
+        child: purchases.isEmpty
+            ? const Center(child: Text('No purchase records found for this vendor.', style: TextStyle(color: AppColors.textMuted)))
+            : ListView.separated(
+                itemCount: purchases.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (ctx, i) {
+                  final p = purchases[i];
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    leading: const CircleAvatar(backgroundColor: Color(0xFFEEF2FF), child: Icon(Icons.receipt_rounded, color: AppColors.primary, size: 20)),
+                    title: Text(p['bill_no'] ?? 'PO #${p['id']}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                    subtitle: Text((p['date'] as String? ?? '').substring(0, 10), style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(CurrencyFormatter.format((p['grand_total'] as num?)?.toDouble() ?? 0.0), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                        if (((p['balance_due'] as num?)?.toDouble() ?? 0.0) > 0)
+                          Text('Due: ${CurrencyFormatter.format((p['balance_due'] as num?)?.toDouble() ?? 0.0)}', style: const TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+      ],
+    ),
+  );
+}
+
 class _EmptyState extends StatelessWidget {
   final bool isDark;
   const _EmptyState({required this.isDark});
@@ -440,8 +562,8 @@ class _EmptyState extends StatelessWidget {
         children: [
           Icon(Icons.local_shipping_outlined, size: 80, color: AppColors.primary.withValues(alpha: 0.2)),
           const SizedBox(height: 20),
-          const Text('No Suppliers Yet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          const Text('Connect with vendors to manage purchases.', style: TextStyle(color: AppColors.textMuted)),
+          const Text('No Suppliers Found', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          const Text('Add vendor partners to record incoming goods and stock invoices.', style: TextStyle(color: AppColors.textMuted)),
         ],
       ),
     );

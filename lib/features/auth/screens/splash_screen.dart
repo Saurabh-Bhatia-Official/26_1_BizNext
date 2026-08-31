@@ -21,8 +21,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _initializeApp() async {
-    // Artificial delay for branding impact
-    await Future.delayed(const Duration(milliseconds: 3000));
+    // Elegant branding display duration
+    await Future.delayed(const Duration(milliseconds: 2000));
     if (mounted) {
       ref.read(splashCompleteProvider.notifier).state = true;
     }
@@ -60,7 +60,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                     borderRadius: BorderRadius.circular(28),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.15),
+                        color: AppColors.primary.withValues(alpha: 0.25),
                         blurRadius: 30,
                         offset: const Offset(0, 10),
                       )
@@ -71,6 +71,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                     child: Image.asset(
                       'assets/logo.png',
                       fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [AppColors.primary, AppColors.accent],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.storefront_rounded, size: 50, color: Colors.white),
+                        ),
+                      ),
                     ),
                   ),
                 ).animate()

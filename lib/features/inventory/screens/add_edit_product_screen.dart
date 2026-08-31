@@ -10,6 +10,7 @@ import '../../../core/providers/notification_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/product_model.dart';
 import '../providers/inventory_provider.dart';
+import '../../suppliers/providers/supplier_provider.dart';
 import '../../../core/widgets/searchable_dropdown.dart';
 import '../../../core/widgets/category_manager_screen.dart';
 import '../../settings/providers/settings_provider.dart';
@@ -31,9 +32,15 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _skuCtrl;
   late final TextEditingController _barcodeCtrl;
+  late final TextEditingController _brandCtrl;
+  late final TextEditingController _hsnSacCtrl;
   late final TextEditingController _descCtrl;
   late final TextEditingController _purchasePriceCtrl;
+  late final TextEditingController _mrpCtrl;
   late final TextEditingController _sellingPriceCtrl;
+  late final TextEditingController _minSellingPriceCtrl;
+  late final TextEditingController _wholesalePriceCtrl;
+  late final TextEditingController _dealerPriceCtrl;
   late final TextEditingController _stockCtrl;
   late final TextEditingController _minStockCtrl;
 
@@ -41,16 +48,17 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   final Map<int, TextEditingController> _tieredPriceCtrls = {};
 
   int? _selectedCategoryId;
+  int? _selectedSubcategoryId;
+  int? _selectedSupplierId;
   String _selectedUnit = 'pcs';
   double _selectedGst = 0;
   bool _isActive = true;
   String? _selectedImagePath;
 
-  // Holds a duplicate-name error message from the server-side uniqueness check
   String? _nameError;
 
   bool get isEditing => widget.product != null;
-  static const _units = ['pcs', 'kg', 'g', 'l', 'ml', 'box', 'pack', 'm'];
+  static const _units = ['pcs', 'kg', 'g', 'l', 'ml', 'box', 'pack', 'm', 'bundle', 'pair'];
 
   @override
   void initState() {
@@ -59,18 +67,26 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     _nameCtrl = TextEditingController(text: p?.name ?? widget.initialName ?? '');
     _skuCtrl = TextEditingController(text: p?.sku ?? '');
     _barcodeCtrl = TextEditingController(text: p?.barcode ?? '');
+    _brandCtrl = TextEditingController(text: p?.brand ?? '');
+    _hsnSacCtrl = TextEditingController(text: p?.hsnSac ?? '');
     _descCtrl = TextEditingController(text: p?.description ?? '');
     _purchasePriceCtrl = TextEditingController(text: p != null ? p.purchasePrice.toString() : '');
+    _mrpCtrl = TextEditingController(text: p != null && p.mrp > 0 ? p.mrp.toString() : '');
     _sellingPriceCtrl = TextEditingController(text: p != null ? p.sellingPrice.toString() : '');
+    _minSellingPriceCtrl = TextEditingController(text: p != null && p.minSellingPrice > 0 ? p.minSellingPrice.toString() : '');
+    _wholesalePriceCtrl = TextEditingController(text: p != null && p.wholesalePrice > 0 ? p.wholesalePrice.toString() : '');
+    _dealerPriceCtrl = TextEditingController(text: p != null && p.dealerPrice > 0 ? p.dealerPrice.toString() : '');
     _stockCtrl = TextEditingController(text: p != null ? p.stock.toString() : '0');
     _minStockCtrl = TextEditingController(text: p != null ? p.minStock.toString() : '5');
+    
     _selectedCategoryId = p?.categoryId;
+    _selectedSubcategoryId = p?.subcategoryId;
+    _selectedSupplierId = p?.defaultSupplierId;
     _selectedUnit = p?.unit ?? 'pcs';
     _selectedGst = p?.gstPercent ?? 0;
     _isActive = p?.isActive ?? true;
     _selectedImagePath = p?.imagePath;
 
-    // Fetch existing tiered prices if editing
     if (isEditing) {
       _loadTieredPrices();
     }
@@ -88,7 +104,11 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
 
   @override
   void dispose() {
-    for (final c in [_nameCtrl, _skuCtrl, _barcodeCtrl, _descCtrl, _purchasePriceCtrl, _sellingPriceCtrl, _stockCtrl, _minStockCtrl]) {
+    for (final c in [
+      _nameCtrl, _skuCtrl, _barcodeCtrl, _brandCtrl, _hsnSacCtrl, _descCtrl,
+      _purchasePriceCtrl, _mrpCtrl, _sellingPriceCtrl, _minSellingPriceCtrl,
+      _wholesalePriceCtrl, _dealerPriceCtrl, _stockCtrl, _minStockCtrl
+    ]) {
       c.dispose();
     }
     for (final c in _tieredPriceCtrls.values) {
@@ -101,6 +121,8 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final categoriesAsync = ref.watch(categoriesProvider);
+    final subcategoriesAsync = ref.watch(subcategoriesProvider(_selectedCategoryId));
+    final suppliersAsync = ref.watch(suppliersProvider);
     final priceCatsAsync = ref.watch(priceCategoriesProvider);
     final shortcuts = ref.watch(shortcutSettingsProvider);
     final saveShortcut = shortcuts['save'] ?? ShortcutNotifier.defaults['save']?.defaultShortcut ?? '';
@@ -114,295 +136,451 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       onPressed: () => Navigator.maybePop(context),
       child: Scaffold(
         backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
-      appBar: AppBar(
-        title: Text(isEditing ? 'Edit Product' : 'New Product'),
-        backgroundColor: Colors.transparent,
-        centerTitle: true,
-        actions: [
-          if (isEditing)
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
-              onPressed: _confirmDelete,
-            ),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              _ImagePicker(imagePath: _selectedImagePath, onPick: _pickImage, isDark: isDark),
-              const SizedBox(height: 24),
-
-              _FormCard(
-                title: 'General Details',
-                isDark: isDark,
-                children: [
-                  _PremiumField(
-                    controller: _nameCtrl,
-                    label: 'Product Name',
-                    hint: 'Enter product title',
-                    icon: Icons.title_rounded,
-                    externalError: _nameError,
-                    onChanged: (_) {
-                      if (_nameError != null) setState(() => _nameError = null);
-                    },
-                    validator: (v) => v?.isEmpty == true ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _PremiumField(
-                          controller: _skuCtrl,
-                          label: 'SKU',
-                          hint: 'Stock keeping unit',
-                          icon: Icons.tag_rounded,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _PremiumField(
-                          controller: _barcodeCtrl,
-                          label: 'Barcode',
-                          hint: 'Scan or type',
-                          icon: Icons.qr_code_scanner_rounded,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  _PremiumField(
-                    controller: _descCtrl,
-                    label: 'Description',
-                    hint: 'Brief product info',
-                    maxLines: 2,
-                    icon: Icons.description_rounded,
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: categoriesAsync.when(
-                          data: (cats) => _PremiumDropdown<int?>(
-                            value: _selectedCategoryId,
-                            label: 'Category',
-                            addLabel: 'Add New Category',
-                            onAdd: (name) => _quickAddCategory(context, ref, name),
-                            items: cats.map((c) => SearchableDropdownItem(value: c.id, label: c.name)).toList(),
-                            onChanged: (v) => setState(() => _selectedCategoryId = v),
-                          ),
-                          loading: () => const LinearProgressIndicator(),
-                          error: (_, _) => const SizedBox.shrink(),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _PremiumDropdown<String>(
-                          value: _selectedUnit,
-                          label: 'Unit',
-                          items: _units.map((u) => SearchableDropdownItem(value: u, label: u)).toList(),
-                          onChanged: (v) => setState(() => _selectedUnit = v ?? 'pcs'),
-                          icon: Icons.straighten_rounded,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+        appBar: AppBar(
+          title: Text(isEditing ? 'Edit Product' : 'New Product Master'),
+          backgroundColor: Colors.transparent,
+          centerTitle: true,
+          actions: [
+            if (isEditing)
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+                onPressed: _confirmDelete,
               ),
+            const SizedBox(width: 12),
+          ],
+        ),
+        body: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                _ImagePicker(imagePath: _selectedImagePath, onPick: _pickImage, isDark: isDark),
+                const SizedBox(height: 24),
 
-              const SizedBox(height: 24),
+                // ── GENERAL DETAILS CARD ──
+                _FormCard(
+                  title: 'Product Information',
+                  isDark: isDark,
+                  children: [
+                    _PremiumField(
+                      controller: _nameCtrl,
+                      label: 'Product Name *',
+                      hint: 'e.g. Basmati Rice 5kg, iPhone 15 Pro',
+                      icon: Icons.title_rounded,
+                      externalError: _nameError,
+                      onChanged: (_) {
+                        if (_nameError != null) setState(() => _nameError = null);
+                      },
+                      validator: (v) => v?.trim().isEmpty == true ? 'Product name is required' : null,
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _PremiumField(
+                            controller: _brandCtrl,
+                            label: 'Brand / Manufacturer',
+                            hint: 'e.g. Apple, Nestle',
+                            icon: Icons.business_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _PremiumField(
+                            controller: _hsnSacCtrl,
+                            label: 'HSN / SAC Code',
+                            hint: 'e.g. 10063020',
+                            icon: Icons.numbers_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _PremiumField(
+                            controller: _skuCtrl,
+                            label: 'SKU / Item Code',
+                            hint: 'Unique SKU identifier',
+                            icon: Icons.tag_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _PremiumField(
+                            controller: _barcodeCtrl,
+                            label: 'Barcode / EAN',
+                            hint: 'Scan or type barcode',
+                            icon: Icons.qr_code_scanner_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _PremiumField(
+                      controller: _descCtrl,
+                      label: 'Description',
+                      hint: 'Detailed product specifications & notes',
+                      maxLines: 2,
+                      icon: Icons.description_rounded,
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: categoriesAsync.when(
+                            data: (cats) => _PremiumDropdown<int?>(
+                              value: _selectedCategoryId,
+                              label: 'Category',
+                              addLabel: 'Add New Category',
+                              onAdd: (name) => _quickAddCategory(context, ref, name),
+                              items: cats.map((c) => SearchableDropdownItem(value: c.id, label: c.name)).toList(),
+                              onChanged: (v) {
+                                setState(() {
+                                  _selectedCategoryId = v;
+                                  _selectedSubcategoryId = null;
+                                });
+                              },
+                            ),
+                            loading: () => const LinearProgressIndicator(),
+                            error: (_, _) => const SizedBox.shrink(),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: subcategoriesAsync.when(
+                            data: (subs) => _PremiumDropdown<int?>(
+                              value: _selectedSubcategoryId,
+                              label: 'Subcategory',
+                              addLabel: _selectedCategoryId != null ? 'Add Subcategory' : null,
+                              onAdd: _selectedCategoryId != null 
+                                ? (name) => _quickAddSubcategory(context, ref, name, _selectedCategoryId!)
+                                : null,
+                              items: subs.map((s) => SearchableDropdownItem(value: s.id, label: s.name)).toList(),
+                              onChanged: (v) => setState(() => _selectedSubcategoryId = v),
+                              icon: Icons.subdirectory_arrow_right_rounded,
+                            ),
+                            loading: () => const LinearProgressIndicator(),
+                            error: (_, _) => const SizedBox.shrink(),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _PremiumDropdown<String>(
+                            value: _selectedUnit,
+                            label: 'Base Unit',
+                            items: _units.map((u) => SearchableDropdownItem(value: u, label: u)).toList(),
+                            onChanged: (v) => setState(() => _selectedUnit = v ?? 'pcs'),
+                            icon: Icons.straighten_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: suppliersAsync.when(
+                            data: (suppliers) => _PremiumDropdown<int?>(
+                              value: _selectedSupplierId,
+                              label: 'Default Supplier',
+                              items: suppliers.map((s) => SearchableDropdownItem(value: s.id, label: s.name)).toList(),
+                              onChanged: (v) => setState(() => _selectedSupplierId = v),
+                              icon: Icons.local_shipping_rounded,
+                            ),
+                            loading: () => const LinearProgressIndicator(),
+                            error: (_, _) => const SizedBox.shrink(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
 
-              _FormCard(
-                title: 'Pricing & Tax',
-                isDark: isDark,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _PremiumField(
-                          controller: _purchasePriceCtrl,
-                          label: 'Cost Price',
-                          hint: '0.00',
-                          icon: Icons.shopping_bag_rounded,
-                          keyboardType: TextInputType.number,
+                const SizedBox(height: 24),
+
+                // ── PRICING MATRIX CARD ──
+                _FormCard(
+                  title: 'Pricing Architecture & Floor Control',
+                  isDark: isDark,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _PremiumField(
+                            controller: _purchasePriceCtrl,
+                            label: 'Purchase Rate / Cost (WAC) ₹',
+                            hint: '0.00',
+                            icon: Icons.shopping_bag_rounded,
+                            keyboardType: TextInputType.number,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _PremiumField(
-                          controller: _sellingPriceCtrl,
-                          label: 'Retail Price (Main)',
-                          hint: '0.00',
-                          icon: Icons.sell_rounded,
-                          keyboardType: TextInputType.number,
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _PremiumField(
+                            controller: _mrpCtrl,
+                            label: 'MRP (Maximum Retail) ₹',
+                            hint: '0.00',
+                            icon: Icons.verified_rounded,
+                            keyboardType: TextInputType.number,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  // Dynamic Selling Price Tiers
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const _SubLabel(text: 'Additional Price Tiers'),
-                      TextButton.icon(
-                        onPressed: () => _showPriceCategoryManager(context),
-                        icon: const Icon(Icons.settings_suggest_rounded, size: 16),
-                        label: const Text('Manage Tiers', style: TextStyle(fontSize: 12)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  priceCatsAsync.when(
-                    data: (cats) {
-                      if (cats.isEmpty) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          child: Text('No custom price tiers defined.', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                        );
-                      }
-                      return Column(
-                        children: [
-                          for (int i = 0; i < cats.length; i += 2)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 16),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: _PremiumField(
-                                      controller: _getTierCtrl(cats[i].id!),
-                                      label: cats[i].name,
-                                      hint: '0.00',
-                                      icon: Icons.handshake_rounded,
-                                      keyboardType: TextInputType.number,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  if (i + 1 < cats.length)
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _PremiumField(
+                            controller: _sellingPriceCtrl,
+                            label: 'Standard Selling Price (Retail) ₹ *',
+                            hint: '0.00',
+                            icon: Icons.sell_rounded,
+                            keyboardType: TextInputType.number,
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'Selling price is required';
+                              final numVal = double.tryParse(v);
+                              if (numVal == null || numVal < 0) return 'Invalid price';
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _PremiumField(
+                            controller: _minSellingPriceCtrl,
+                            label: 'Min Price (Floor Limit) ₹',
+                            hint: 'Manager PIN below this',
+                            icon: Icons.gavel_rounded,
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _PremiumField(
+                            controller: _wholesalePriceCtrl,
+                            label: 'Wholesale Price ₹',
+                            hint: 'For wholesale customers',
+                            icon: Icons.storefront_rounded,
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _PremiumField(
+                            controller: _dealerPriceCtrl,
+                            label: 'Dealer / Distributor Price ₹',
+                            hint: 'For dealers & distributors',
+                            icon: Icons.hub_rounded,
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Dynamic Selling Price Tiers
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const _SubLabel(text: 'Customer-Specific Price Lists'),
+                        TextButton.icon(
+                          onPressed: () => _showPriceCategoryManager(context),
+                          icon: const Icon(Icons.settings_suggest_rounded, size: 16),
+                          label: const Text('Manage Lists', style: TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    priceCatsAsync.when(
+                      data: (cats) {
+                        if (cats.isEmpty) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Text('No custom price lists configured.', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                          );
+                        }
+                        return Column(
+                          children: [
+                            for (int i = 0; i < cats.length; i += 2)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: Row(
+                                  children: [
                                     Expanded(
                                       child: _PremiumField(
-                                        controller: _getTierCtrl(cats[i + 1].id!),
-                                        label: cats[i + 1].name,
+                                        controller: _getTierCtrl(cats[i].id!),
+                                        label: '${cats[i].name} Price ₹',
                                         hint: '0.00',
                                         icon: Icons.handshake_rounded,
                                         keyboardType: TextInputType.number,
                                       ),
-                                    )
-                                  else
-                                    const Expanded(child: SizedBox()),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    if (i + 1 < cats.length)
+                                      Expanded(
+                                        child: _PremiumField(
+                                          controller: _getTierCtrl(cats[i + 1].id!),
+                                          label: '${cats[i + 1].name} Price ₹',
+                                          hint: '0.00',
+                                          icon: Icons.handshake_rounded,
+                                          keyboardType: TextInputType.number,
+                                        ),
+                                      )
+                                    else
+                                      const Expanded(child: SizedBox()),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                      loading: () => const LinearProgressIndicator(),
+                      error: (_, _) => const SizedBox(),
+                    ),
+
+                    if (ref.watch(featureSettingsProvider).gstEnabled) ...[
+                      const SizedBox(height: 12),
+                      const _SubLabel(text: 'Tax Rate (GST %)'),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: AppConstants.gstRates.map((rate) => _ChoiceTag(
+                          label: '${rate.toInt()}%',
+                          isSelected: _selectedGst == rate,
+                          onTap: () => setState(() => _selectedGst = rate),
+                        )).toList(),
+                      ),
+                    ],
+                  ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // ── STOCK AUDIT CARD ──
+                _FormCard(
+                  title: isEditing ? 'Stock Status (Audited)' : 'Opening Inventory',
+                  isDark: isDark,
+                  children: [
+                    if (isEditing) ...[
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.lock_clock_rounded, color: AppColors.primary, size: 28),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Current Stock: ${widget.product!.stock} ${widget.product!.unit}',
+                                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Stock can only be modified via Purchase Entries, Sales, Returns, or Stock Adjustments.',
+                                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                  ),
                                 ],
                               ),
                             ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    Row(
+                      children: [
+                        if (!isEditing) ...[
+                          Expanded(
+                            child: _PremiumField(
+                              controller: _stockCtrl,
+                              label: 'Opening Stock',
+                              hint: '0',
+                              icon: Icons.inventory_2_rounded,
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
                         ],
-                      );
-                    },
-                    loading: () => const LinearProgressIndicator(),
-                    error: (_, _) => const SizedBox(),
-                  ),
-
-                  if (ref.watch(featureSettingsProvider).gstEnabled) ...[
-                    const SizedBox(height: 12),
-                    const _SubLabel(text: 'Tax Rate (GST %)'),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: AppConstants.gstRates.map((rate) => _ChoiceTag(
-                        label: '${rate.toInt()}%',
-                        isSelected: _selectedGst == rate,
-                        onTap: () => setState(() => _selectedGst = rate),
-                      )).toList(),
+                        Expanded(
+                          child: _PremiumField(
+                            controller: _minStockCtrl,
+                            label: 'Low Stock Alert Level',
+                            hint: '5',
+                            icon: Icons.notifications_active_rounded,
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _SwitchRow(
+                      label: 'Active in POS & Catalog',
+                      subtitle: 'Allow item to be sold and searched across terminals',
+                      value: _isActive,
+                      onChanged: (v) => setState(() => _isActive = v),
+                      isDark: isDark,
                     ),
                   ],
-                ],
-              ),
+                ),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 40),
 
-              _FormCard(
-                title: 'Stock Management',
-                isDark: isDark,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _PremiumField(
-                          controller: _stockCtrl,
-                          label: 'Current Stock',
-                          hint: '0',
-                          icon: Icons.layers_rounded,
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _PremiumField(
-                          controller: _minStockCtrl,
-                          label: 'Min Alert',
-                          hint: '5',
-                          icon: Icons.notifications_active_rounded,
-                          keyboardType: TextInputType.number,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  _SwitchRow(
-                    label: 'Visible in POS',
-                    subtitle: 'Show this product in billing screen',
-                    value: _isActive,
-                    onChanged: (v) => setState(() => _isActive = v),
-                    isDark: isDark,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 40),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      child: Text(cancelBtnText, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    flex: 2,
-                    child: AppShortcut(
-                      actionId: 'save',
-                      onPressed: _saveProduct,
-                      child: ElevatedButton(
-                        onPressed: _saveProduct,
-                        style: ElevatedButton.styleFrom(
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 18),
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 4,
-                          shadowColor: AppColors.primary.withValues(alpha: 0.4),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
-                        child: Text(saveBtnText),
+                        child: Text(cancelBtnText, style: const TextStyle(fontWeight: FontWeight.w700)),
                       ),
                     ),
-                  ),
-                ],
-              ).animate().slideY(begin: 0.2, end: 0, duration: 500.ms, curve: Curves.easeOutCubic),
-              const SizedBox(height: 40),
-            ],
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 2,
+                      child: AppShortcut(
+                        actionId: 'save',
+                        onPressed: _saveProduct,
+                        child: ElevatedButton(
+                          onPressed: _saveProduct,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 4,
+                            shadowColor: AppColors.primary.withValues(alpha: 0.4),
+                          ),
+                          child: Text(saveBtnText),
+                        ),
+                      ),
+                    ),
+                  ],
+                ).animate().slideY(begin: 0.2, end: 0, duration: 500.ms, curve: Curves.easeOutCubic),
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
         ),
       ),
-    ),);
+    );
   }
 
   TextEditingController _getTierCtrl(int catId) {
@@ -413,11 +591,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   }
 
   void _saveProduct() async {
-    // Clear any previous name error before re-validating
     setState(() => _nameError = null);
     if (!_formKey.currentState!.validate()) return;
 
-    // Collect tiered prices
     final tieredPrices = _tieredPriceCtrls.entries.map((e) {
       return ProductTierPrice(
         productId: widget.product?.id ?? 0,
@@ -426,7 +602,6 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       );
     }).where((p) => p.price > 0).toList();
 
-    // Update the state provider so the notifier can pick it up
     ref.read(productTieredPricesProvider.notifier).state = tieredPrices;
 
     final product = Product(
@@ -434,10 +609,18 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       name: _nameCtrl.text.trim(),
       sku: _skuCtrl.text.trim().isEmpty ? null : _skuCtrl.text.trim(),
       barcode: _barcodeCtrl.text.trim().isEmpty ? null : _barcodeCtrl.text.trim(),
+      brand: _brandCtrl.text.trim().isEmpty ? null : _brandCtrl.text.trim(),
+      hsnSac: _hsnSacCtrl.text.trim().isEmpty ? null : _hsnSacCtrl.text.trim(),
       description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       categoryId: _selectedCategoryId,
+      subcategoryId: _selectedSubcategoryId,
+      defaultSupplierId: _selectedSupplierId,
       purchasePrice: double.tryParse(_purchasePriceCtrl.text) ?? 0,
+      mrp: double.tryParse(_mrpCtrl.text) ?? 0,
       sellingPrice: double.tryParse(_sellingPriceCtrl.text) ?? 0,
+      minSellingPrice: double.tryParse(_minSellingPriceCtrl.text) ?? 0,
+      wholesalePrice: double.tryParse(_wholesalePriceCtrl.text) ?? 0,
+      dealerPrice: double.tryParse(_dealerPriceCtrl.text) ?? 0,
       stock: double.tryParse(_stockCtrl.text) ?? 0,
       minStock: double.tryParse(_minStockCtrl.text) ?? 5,
       unit: _selectedUnit,
@@ -454,36 +637,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     } on DuplicateProductNameException catch (e) {
       if (mounted) {
         setState(() => _nameError = 'A product named "${e.name}" already exists.');
-        // Re-trigger form validation so the error is painted immediately
         _formKey.currentState!.validate();
       }
     }
-  }
-
-  /// Shows an animated success overlay for 1.5 s, then auto-pops the form.
-  Future<void> _showSuccessAndClose(BuildContext context, bool wasEditing) async {
-    if (!mounted) return;
-
-    // Capture the navigator BEFORE any async gap – context may be stale later.
-    final nav = Navigator.of(context);
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (ctx) => _SuccessOverlay(wasEditing: wasEditing),
-    );
-
-    // Let the animation play
-    await Future.delayed(const Duration(milliseconds: 1600));
-
-    // Close the overlay dialog (only if there's something to pop)
-    if (nav.canPop()) nav.pop();
-
-    await Future.delayed(const Duration(milliseconds: 100));
-
-    // Close the product form screen
-    if (nav.canPop()) nav.pop();
   }
 
   void _confirmDelete() {
@@ -492,7 +648,7 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Delete Product?'),
-        content: const Text('This will remove this item from your inventory. You can restore it afterwards.'),
+        content: const Text('This will remove this item from active inventory. You can restore it afterwards.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
@@ -502,9 +658,8 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
               final productName = widget.product!.name;
               await ref.read(productFormProvider.notifier).deleteProduct(productId);
               if (mounted) {
-                // Show undo notification
                 ref.read(notificationProvider.notifier).showWithUndo(
-                  message: '"$productName" deleted',
+                  message: '"$productName" archived',
                   onUndo: () async {
                     await ref.read(productRepositoryProvider).restoreProduct(productId);
                     ref.invalidate(productsProvider);
@@ -532,12 +687,23 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     }
   }
 
+  void _quickAddSubcategory(BuildContext context, WidgetRef ref, String name, int categoryId) async {
+    final success = await ref.read(productFormProvider.notifier).saveSubcategory(
+      Subcategory(categoryId: categoryId, name: name),
+    );
+    if (success) {
+      final subs = await ref.read(subcategoriesProvider(categoryId).future);
+      final added = subs.firstWhere((s) => s.name == name);
+      setState(() => _selectedSubcategoryId = added.id);
+    }
+  }
+
   void _showPriceCategoryManager(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => CategoryManagerScreen(
-          title: 'Selling Price Tiers',
+          title: 'Selling Price Lists',
           categoriesProvider: priceCategoriesProvider,
           onSave: (name, id) => ref.read(productFormProvider.notifier).savePriceCategory(PriceCategory(id: id, name: name)),
           onDelete: (id) => ref.read(productFormProvider.notifier).deletePriceCategory(id),
@@ -549,7 +715,6 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   Future<void> _pickImage() async {
     final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: false);
     if (result != null && result.files.single.path != null) {
-      // Temporarily show local path while uploading
       setState(() => _selectedImagePath = result.files.single.path);
       
       final finalUrl = await MediaUploadService.uploadMedia(result.files.single.path!);
@@ -628,7 +793,6 @@ class _PremiumField extends StatelessWidget {
   final bool enabled;
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
-  /// Error injected from outside (e.g. duplicate-name check from the server).
   final String? externalError;
   final ValueChanged<String>? onChanged;
 
@@ -655,7 +819,6 @@ class _PremiumField extends StatelessWidget {
       keyboardType: keyboardType,
       onChanged: onChanged,
       validator: (v) {
-        // External error takes priority over the local validator
         if (externalError != null) return externalError;
         return validator?.call(v);
       },
@@ -749,73 +912,6 @@ class _SwitchRow extends StatelessWidget {
           ),
           Switch.adaptive(value: value, onChanged: onChanged, activeTrackColor: AppColors.primary),
         ],
-      ),
-    );
-  }
-}
-
-// ── Auto-closing success overlay ───────────────────────────────────────────────
-class _SuccessOverlay extends StatelessWidget {
-  final bool wasEditing;
-  const _SuccessOverlay({required this.wasEditing});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      backgroundColor: isDark ? AppColors.darkCard : Colors.white,
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Animated checkmark ring
-            Container(
-              width: 90,
-              height: 90,
-              decoration: BoxDecoration(
-                gradient: RadialGradient(colors: [
-                  AppColors.success.withValues(alpha: 0.2),
-                  AppColors.success.withValues(alpha: 0.05),
-                ]),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 56),
-            )
-                .animate()
-                .scale(begin: const Offset(0.3, 0.3), end: const Offset(1, 1), duration: 450.ms, curve: Curves.elasticOut)
-                .fadeIn(duration: 200.ms),
-            const SizedBox(height: 24),
-            Text(
-              wasEditing ? 'Product Updated!' : 'Product Created!',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5),
-            )
-                .animate()
-                .fadeIn(delay: 200.ms, duration: 300.ms)
-                .slideY(begin: 0.15, end: 0, delay: 200.ms),
-            const SizedBox(height: 8),
-            Text(
-              wasEditing
-                  ? 'Changes saved successfully.'
-                  : 'Added to your inventory.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: AppColors.textMuted, height: 1.4),
-            ).animate().fadeIn(delay: 350.ms, duration: 300.ms),
-            const SizedBox(height: 28),
-            // Thin progress bar showing auto-close countdown
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(
-                value: null, // indeterminate
-                backgroundColor: AppColors.success.withValues(alpha: 0.1),
-                color: AppColors.success,
-                minHeight: 4,
-              ),
-            ).animate().fadeIn(delay: 500.ms),
-          ],
-        ),
       ),
     );
   }

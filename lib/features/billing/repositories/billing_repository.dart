@@ -76,8 +76,8 @@ class BillingRepository {
           throw Exception("Product '${item.productName}' not found in database.");
         }
 
-        final currentStock = (productResult.first['stock'] as num).toDouble();
-        final unitCost = (productResult.first['purchase_price'] as num).toDouble();
+        final currentStock = (productResult.first['stock'] as num?)?.toDouble() ?? 0.0;
+        final unitCost = (productResult.first['purchase_price'] as num?)?.toDouble() ?? 0.0;
         
         // Stock Check validation
         if (currentStock < item.quantity && !allowNegativeStock) {
@@ -100,8 +100,8 @@ class BillingRepository {
           where: 'id = ? AND business_id = ?',
           whereArgs: [item.productId, sale.businessId],
         );
-        final costPrice = product.isNotEmpty ? (product.first['purchase_price'] as num).toDouble() : 0.0;
-        final openingStock = product.isNotEmpty ? (product.first['stock'] as num).toDouble() : 0.0;
+        final costPrice = product.isNotEmpty ? (product.first['purchase_price'] as num?)?.toDouble() ?? 0.0 : 0.0;
+        final openingStock = product.isNotEmpty ? (product.first['stock'] as num?)?.toDouble() ?? 0.0 : 0.0;
 
         final itemMap = item.toMap(saleId);
         itemMap['purchase_price'] = costPrice; // Snapshot cost price to secure historical COGS
@@ -271,17 +271,17 @@ class BillingRepository {
 
       // 2. Loop items to restore stock and record items
       for (var item in items) {
-        final productId = item['product_id'] as int;
-        final qty = (item['quantity'] as num).toDouble();
-        final price = (item['price'] as num).toDouble();
+        final productId = (item['product_id'] as num?)?.toInt() ?? 0;
+        final qty = (item['quantity'] as num?)?.toDouble() ?? 1.0;
+        final price = (item['price'] as num?)?.toDouble() ?? 0.0;
         final gstPercent = (item['gst_percent'] as num?)?.toDouble() ?? 0.0;
         final gstAmount = qty * price * (gstPercent / 100);
         final total = (qty * price) + gstAmount;
 
         // Fetch cost price from product master
         final productResult = await txn.query(AppConstants.tblProducts, columns: ['stock', 'purchase_price'], where: 'id = ?', whereArgs: [productId]);
-        final currentStock = productResult.isNotEmpty ? (productResult.first['stock'] as num).toDouble() : 0.0;
-        final costPrice = productResult.isNotEmpty ? (productResult.first['purchase_price'] as num).toDouble() : 0.0;
+        final currentStock = productResult.isNotEmpty ? (productResult.first['stock'] as num?)?.toDouble() ?? 0.0 : 0.0;
+        final costPrice = productResult.isNotEmpty ? (productResult.first['purchase_price'] as num?)?.toDouble() ?? 0.0 : 0.0;
 
         totalReturnedCost += qty * costPrice;
 
@@ -324,7 +324,7 @@ class BillingRepository {
 
       // 3. Update customer outstanding balance or issue refund
       final customerId = returnData['customer_id'] as int?;
-      final grandTotal = (returnData['grand_total'] as num).toDouble();
+      final grandTotal = (returnData['grand_total'] as num?)?.toDouble() ?? 0.0;
       final refundAmount = (returnData['refund_amount'] as num?)?.toDouble() ?? 0.0;
       final balanceDueReduction = grandTotal - refundAmount;
 
@@ -336,7 +336,7 @@ class BillingRepository {
       }
 
       // 4. Double Entry Reversals
-      final businessId = returnData['business_id'] as int;
+      final businessId = (returnData['business_id'] as num?)?.toInt() ?? 1;
       final returnNo = returnData['return_no'] ?? '#SR-$returnId';
       final dateStr = returnData['date'] ?? DateTime.now().toIso8601String();
 
@@ -346,14 +346,14 @@ class BillingRepository {
         'entity_type': 'revenue',
         'entity_id': 0,
         'type': 'debit',
-        'amount': (returnData['subtotal'] as num).toDouble(),
+        'amount': (returnData['subtotal'] as num?)?.toDouble() ?? 0.0,
         'reference_id': returnId,
         'description': 'Sales Revenue Debit Reversal (Sales Return): $returnNo',
         'date': dateStr,
       });
 
       // Output GST Reversal (Debit)
-      final gstAmount = (returnData['gst_amount'] as num).toDouble();
+      final gstAmount = (returnData['gst_amount'] as num?)?.toDouble() ?? 0.0;
       if (gstAmount > 0) {
         await txn.insert(AppConstants.tblLedger, {
           'business_id': businessId,
@@ -430,9 +430,10 @@ class BillingRepository {
       if (customerId != null) {
         final loyaltySettings = await txn.query(AppConstants.tblLoyaltySettings, where: 'business_id = ?', whereArgs: [businessId]);
         if (loyaltySettings.isNotEmpty) {
-          final earnRate = (loyaltySettings.first['earn_rate'] as num).toDouble();
-          final earnSpend = (loyaltySettings.first['earn_spend_amount'] as num).toDouble();
-          final pointsToDeduct = ((returnData['subtotal'] as num).toDouble() / earnSpend) * earnRate;
+          final earnRate = (loyaltySettings.first['earn_rate'] as num?)?.toDouble() ?? 1.0;
+          final earnSpend = (loyaltySettings.first['earn_spend_amount'] as num?)?.toDouble() ?? 100.0;
+          final subtotal = (returnData['subtotal'] as num?)?.toDouble() ?? 0.0;
+          final pointsToDeduct = earnSpend > 0 ? (subtotal / earnSpend) * earnRate : 0.0;
           if (pointsToDeduct > 0) {
             await txn.rawUpdate(
               "UPDATE ${AppConstants.tblCustomers} SET loyalty_points = MAX(0, loyalty_points - ?) WHERE id = ?",
@@ -462,27 +463,27 @@ class BillingRepository {
       if (saleResult.isEmpty) return;
       final saleMap = saleResult.first;
       final customerId = saleMap['customer_id'] as int?;
-      final businessId = saleMap['business_id'] as int;
-      final invoiceNo = saleMap['invoice_no'] as String;
+      final businessId = (saleMap['business_id'] as num?)?.toInt() ?? 1;
+      final invoiceNo = saleMap['invoice_no'] as String? ?? '#$saleId';
 
       final items = await txn.query(AppConstants.tblSaleItems, where: 'sale_id = ?', whereArgs: [saleId]);
 
       // Get Default Warehouse
       final warehouseResult = await txn.query(AppConstants.tblWarehouses, columns: ['id'], limit: 1);
-      final warehouseId = warehouseResult.isNotEmpty ? warehouseResult.first['id'] as int : 1;
+      final warehouseId = warehouseResult.isNotEmpty ? (warehouseResult.first['id'] as num?)?.toInt() ?? 1 : 1;
 
       double totalCost = 0.0;
 
       // 1. Revert Stock & Log transaction
       for (final item in items) {
-        final qty = (item['quantity'] as num).toDouble();
-        final productId = item['product_id'] as int;
-        final cost = (item['purchase_price'] as num).toDouble();
+        final qty = (item['quantity'] as num?)?.toDouble() ?? 1.0;
+        final productId = (item['product_id'] as num?)?.toInt() ?? 0;
+        final cost = (item['purchase_price'] as num?)?.toDouble() ?? 0.0;
         totalCost += qty * cost;
 
         // Fetch opening stock
         final product = await txn.query(AppConstants.tblProducts, columns: ['stock'], where: 'id = ?', whereArgs: [productId]);
-        final openingStock = product.isNotEmpty ? (product.first['stock'] as num).toDouble() : 0.0;
+        final openingStock = product.isNotEmpty ? (product.first['stock'] as num?)?.toDouble() ?? 0.0 : 0.0;
 
         await txn.rawUpdate(
           "UPDATE ${AppConstants.tblProducts} SET stock = stock + ? WHERE id = ?",
@@ -508,7 +509,7 @@ class BillingRepository {
       }
 
       // 2. Revert Customer Balance
-      final balanceDue = (saleMap['balance_due'] as num?)?.toDouble() ?? 0;
+      final balanceDue = (saleMap['balance_due'] as num?)?.toDouble() ?? 0.0;
       if (customerId != null && balanceDue > 0) {
         await txn.rawUpdate(
           "UPDATE ${AppConstants.tblCustomers} SET balance = balance - ? WHERE id = ?",
@@ -518,7 +519,7 @@ class BillingRepository {
 
       // 3. Reverse Account Balance
       final oldAccId = saleMap['account_id'] as int?;
-      final oldPaid = (saleMap['paid_amount'] as num?)?.toDouble() ?? 0;
+      final oldPaid = (saleMap['paid_amount'] as num?)?.toDouble() ?? 0.0;
       if (oldAccId != null && oldPaid > 0) {
         await txn.rawUpdate("UPDATE ${AppConstants.tblAccounts} SET balance = balance - ? WHERE id = ?", [oldPaid, oldAccId]);
       }
@@ -562,7 +563,7 @@ class BillingRepository {
         'entity_type': 'revenue',
         'entity_id': 0,
         'type': 'debit',
-        'amount': (saleMap['subtotal'] as num).toDouble(),
+        'amount': (saleMap['subtotal'] as num?)?.toDouble() ?? 0.0,
         'reference_id': saleId,
         'description': 'Void Sales Revenue Reversal: $invoiceNo',
         'date': dateStr,
@@ -698,6 +699,16 @@ class BillingRepository {
     _db.notify(AppConstants.tblCustomers);
     _db.notify(AppConstants.tblLedger);
     _db.notify(AppConstants.tblAccounts);
+  }
+
+  Future<void> settleCreditInvoice(int saleId, double amount, {String mode = 'Cash', int? accountId}) async {
+    await addSalePayment(saleId, amount, mode, accountId: accountId);
+    
+    await _db.rawUpdate(
+      "UPDATE ${AppConstants.tblSales} SET status = ? WHERE id = ?",
+      ['Payment Completed', saleId],
+    );
+    _db.notify(AppConstants.tblSales);
   }
 
   Future<SaleHistoryModel?> getSaleById(int id) async {

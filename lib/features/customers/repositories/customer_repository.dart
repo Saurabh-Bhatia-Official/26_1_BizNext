@@ -8,12 +8,13 @@ class CustomerRepository {
   final DatabaseHelper _db = DatabaseHelper.instance;
 
   Future<List<CustomerModel>> getCustomers(int businessId) async {
-    final maps = await _db.queryAll(
-      AppConstants.tblCustomers,
-      where: 'business_id = ?',
-      whereArgs: [businessId],
-      orderBy: 'name ASC',
-    );
+    final maps = await _db.rawQuery('''
+      SELECT c.*, ct.name as customer_type_name
+      FROM ${AppConstants.tblCustomers} c
+      LEFT JOIN ${AppConstants.tblCustomerTypes} ct ON c.customer_type_id = ct.id
+      WHERE c.business_id = ?
+      ORDER BY c.name ASC
+    ''', [businessId]);
     return maps.map((m) => CustomerModel.fromMap(m)).toList();
   }
 
@@ -30,7 +31,12 @@ class CustomerRepository {
   }
 
   Future<CustomerModel?> getCustomerById(int id) async {
-    final map = await _db.queryById(AppConstants.tblCustomers, id);
-    return map != null ? CustomerModel.fromMap(map) : null;
+    final maps = await _db.rawQuery('''
+      SELECT c.*, ct.name as customer_type_name
+      FROM ${AppConstants.tblCustomers} c
+      LEFT JOIN ${AppConstants.tblCustomerTypes} ct ON c.customer_type_id = ct.id
+      WHERE c.id = ?
+    ''', [id]);
+    return maps.isNotEmpty ? CustomerModel.fromMap(maps.first) : null;
   }
 }

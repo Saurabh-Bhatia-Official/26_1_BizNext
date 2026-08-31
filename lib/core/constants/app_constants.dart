@@ -8,7 +8,7 @@ class AppConstants {
 
   // Database
   static const String dbName = 'biz_next.sys';
-  static const int dbVersion = 22;
+  static const int dbVersion = 23;
   static const String backupExtension = 'bzcfg';
 
   // ── Auth Tables ────────────────────────────────────────────────────────────
@@ -18,11 +18,15 @@ class AppConstants {
 
   // ── Data Tables ────────────────────────────────────────────────────────────
   static const String tblCategories = 'categories';
+  static const String tblSubcategories = 'subcategories';
   static const String tblProducts = 'products';
   static const String tblPriceCategories = 'price_categories';
   static const String tblProductPrices = 'product_tiered_prices';
+  static const String tblCustomerTypes = 'customer_types';
   static const String tblCustomers = 'customers';
   static const String tblSuppliers = 'suppliers';
+  static const String tblSupplierProducts = 'supplier_products';
+  static const String tblProductBatches = 'product_batches';
   static const String tblSales = 'sales';
   static const String tblSaleItems = 'sale_items';
   static const String tblPurchases = 'purchases';
@@ -51,12 +55,8 @@ class AppConstants {
   static const String tblWarehouseTransferItems = 'warehouse_transfer_items';
   static const String tblInventoryAdjustments = 'inventory_adjustments';
   static const String tblInventoryAdjustmentItems = 'inventory_adjustment_items';
+  static const String tblNotifications = 'notifications';
 
-
-  // ── Restaurant Tables ──────────────────────────────────────────────────────
-  static const String tblRestaurantTables = 'restaurant_tables';
-  static const String tblKot = 'kot';
-  static const String tblKotItems = 'kot_items';
 
   // ── SharedPreferences Keys ─────────────────────────────────────────────────
   static const String prefUserId = 'active_user_id';
@@ -81,24 +81,23 @@ class AppConstants {
   static const String roleOwner = 'owner';
   static const String roleAdmin = 'admin';
   static const String roleManager = 'manager';
+  static const String rolePurchaseManager = 'purchase_manager';
+  static const String roleInventoryManager = 'inventory_manager';
   static const String roleCashier = 'cashier';
-  static const String roleWaiter = 'waiter';
-  static const String roleKitchen = 'kitchen';
 
   static const List<String> userRoles = [
     roleOwner,
     roleAdmin,
     roleManager,
+    rolePurchaseManager,
+    roleInventoryManager,
     roleCashier,
-    roleWaiter,
-    roleKitchen,
   ];
 
   // ── Business Types ─────────────────────────────────────────────────────────
   static const List<String> businessTypes = [
     'Retail Shop',
     'Wholesale',
-    'Restaurant / Café',
     'Pharmacy',
     'Grocery',
     'Electronics',
@@ -113,6 +112,16 @@ class AppConstants {
   static const String entityCustomer = 'customer';
   static const String entitySupplier = 'supplier';
   static const String entityBusiness = 'business'; // For walk-in ledger entries
+
+  // ── Inventory Transaction Types ────────────────────────────────────────────
+  static const String transactionTypeOpeningStock = 'OPENING_STOCK';
+  static const String transactionTypePurchase = 'PURCHASE';
+  static const String transactionTypeSale = 'SALE';
+  static const String transactionTypeSalesReturn = 'SALES_RETURN';
+  static const String transactionTypePurchaseReturn = 'PURCHASE_RETURN';
+  static const String transactionTypeStockAdjustment = 'STOCK_ADJUSTMENT';
+  static const String transactionTypeStockTransfer = 'STOCK_TRANSFER';
+  static const String transactionTypeDamageWastage = 'DAMAGE_WASTAGE';
 
   // ── GST Rates ──────────────────────────────────────────────────────────────
   static const List<double> gstRates = [0, 5, 12, 18, 28];

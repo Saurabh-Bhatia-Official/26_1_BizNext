@@ -220,7 +220,7 @@ class AccountsRepository {
   Future<void> deleteTransactionCategory(int id) async {
     // Check if any transactions use this category
     final count = await _db.rawQuery("SELECT COUNT(*) as total FROM ${AppConstants.tblTransactions} WHERE category_id = ?", [id]);
-    if ((count.first['total'] as int) > 0) {
+    if (((count.first['total'] as num?)?.toInt() ?? 0) > 0) {
       throw Exception('Category in use by transactions');
     }
     await _db.delete(AppConstants.tblTransactionCategories, id);
@@ -351,8 +351,8 @@ class AccountsRepository {
     await _db.transaction((txn) async {
       final entries = await txn.query(AppConstants.tblLedger, where: 'reference_id = ?', whereArgs: [refId]);
       for (final entry in entries) {
-        final double amt = (entry['amount'] as num).toDouble();
-        final int? accId = entry['account_id'] as int?;
+        final double amt = (entry['amount'] as num?)?.toDouble() ?? 0.0;
+        final int? accId = (entry['account_id'] as num?)?.toInt();
         final isDebit = entry['type'] == AppConstants.ledgerDebit;
         
         if (accId != null) {

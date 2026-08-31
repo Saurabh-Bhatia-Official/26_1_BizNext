@@ -69,7 +69,7 @@ class PurchaseRepository {
         if (accountResult.isEmpty) {
           throw Exception("Invalid Account: Selected payment account does not exist.");
         }
-        final currentBalance = (accountResult.first['balance'] as num).toDouble();
+        final currentBalance = (accountResult.first['balance'] as num?)?.toDouble() ?? 0.0;
         if (currentBalance < purchase.paidAmount) {
           throw Exception("Insufficient funds in account '${accountResult.first['name']}': Current Balance = ₹$currentBalance, Payment Required = ₹${purchase.paidAmount}");
         }
@@ -101,7 +101,7 @@ class PurchaseRepository {
         whereArgs: [purchase.businessId],
         limit: 1,
       );
-      final warehouseId = warehouseResult.isNotEmpty ? warehouseResult.first['id'] as int : 1;
+      final warehouseId = warehouseResult.isNotEmpty ? (warehouseResult.first['id'] as int?) ?? 1 : 1;
 
       // 1. Insert Purchase Header
       final purchaseId = await txn.insert(AppConstants.tblPurchases, purchase.toMap());
@@ -121,8 +121,8 @@ class PurchaseRepository {
           throw Exception("Product '${item.productName}' not found in database.");
         }
         
-        final currentStock = (productResult.first['stock'] as num).toDouble();
-        final currentWac = (productResult.first['purchase_price'] as num).toDouble();
+        final currentStock = (productResult.first['stock'] as num?)?.toDouble() ?? 0.0;
+        final currentWac = (productResult.first['purchase_price'] as num?)?.toDouble() ?? 0.0;
 
         // Calculate Weighted Average Cost (WAC)
         double newWac = currentWac;
@@ -162,7 +162,7 @@ class PurchaseRepository {
         await txn.insert(AppConstants.tblInventoryTransactions, {
           'product_id': item.productId,
           'warehouse_id': warehouseId,
-          'transaction_type': 'PURCHASE',
+          'transaction_type': AppConstants.transactionTypePurchase,
           'reference_number': purchase.billNo ?? "#$purchaseId",
           'quantity': item.quantity,
           'unit_cost': item.purchasePrice,
@@ -170,6 +170,19 @@ class PurchaseRepository {
           'closing_stock': currentStock + item.quantity,
           'remarks': 'Purchase recorded via bill ${purchase.billNo ?? "#$purchaseId"}',
         });
+
+        // Update supplier-product price mapping
+        if (purchase.supplierId != null) {
+          await txn.rawInsert('''
+            INSERT INTO ${AppConstants.tblSupplierProducts} 
+              (business_id, supplier_id, product_id, last_purchase_price, last_purchase_date, last_purchase_qty)
+            VALUES (?, ?, ?, ?, datetime('now'), ?)
+            ON CONFLICT(business_id, supplier_id, product_id) DO UPDATE SET
+              last_purchase_price = excluded.last_purchase_price,
+              last_purchase_date = excluded.last_purchase_date,
+              last_purchase_qty = excluded.last_purchase_qty
+          ''', [purchase.businessId, purchase.supplierId, item.productId, item.purchasePrice, item.quantity]);
+        }
       }
 
       // 3. Update Supplier Balance scoped to the business
@@ -269,8 +282,8 @@ class PurchaseRepository {
 
       // 1. Validate stock availability scoped to business
       for (var item in items) {
-        final productId = item['product_id'] as int;
-        final qty = (item['quantity'] as num).toDouble();
+        final productId = (item['product_id'] as num?)?.toInt() ?? 0;
+        final qty = (item['quantity'] as num?)?.toDouble() ?? 1.0;
         
         final productResult = await txn.query(
           AppConstants.tblProducts,
@@ -279,7 +292,7 @@ class PurchaseRepository {
           whereArgs: [productId, businessId],
         );
         if (productResult.isEmpty) throw Exception("Product ID $productId not found.");
-        final currentStock = (productResult.first['stock'] as num).toDouble();
+        final currentStock = (productResult.first['stock'] as num?)?.toDouble() ?? 0.0;
         if (currentStock < qty) {
           throw Exception("Insufficient stock for product '${productResult.first['name']}': Available = $currentStock, Required return quantity = $qty");
         }
@@ -296,13 +309,13 @@ class PurchaseRepository {
         whereArgs: [businessId],
         limit: 1,
       );
-      final warehouseId = warehouseResult.isNotEmpty ? warehouseResult.first['id'] as int : 1;
+      final warehouseId = warehouseResult.isNotEmpty ? (warehouseResult.first['id'] as int?) ?? 1 : 1;
 
       // 3. Deduct stock and update inventory logs
       for (var item in items) {
-        final productId = item['product_id'] as int;
-        final qty = (item['quantity'] as num).toDouble();
-        final price = (item['price'] as num).toDouble();
+        final productId = (item['product_id'] as num?)?.toInt() ?? 0;
+        final qty = (item['quantity'] as num?)?.toDouble() ?? 1.0;
+        final price = (item['price'] as num?)?.toDouble() ?? 0.0;
         final gstPercent = (item['gst_percent'] as num?)?.toDouble() ?? 0.0;
         final gstAmount = qty * price * (gstPercent / 100);
         final total = (qty * price) + gstAmount;
@@ -313,8 +326,8 @@ class PurchaseRepository {
           where: 'id = ? AND business_id = ?',
           whereArgs: [productId, businessId],
         );
-        final currentStock = (productResult.first['stock'] as num).toDouble();
-        final cost = (productResult.first['purchase_price'] as num).toDouble();
+        final currentStock = (productResult.first['stock'] as num?)?.toDouble() ?? 0.0;
+        final cost = (productResult.first['purchase_price'] as num?)?.toDouble() ?? 0.0;
 
         await txn.insert(AppConstants.tblPurchaseReturnItems, {
           'return_id': returnId,
@@ -355,7 +368,7 @@ class PurchaseRepository {
 
       // 4. Update Supplier Balance if credit return scoped to business
       final supplierId = returnData['supplier_id'] as int?;
-      final grandTotal = (returnData['grand_total'] as num).toDouble();
+      final grandTotal = (returnData['grand_total'] as num?)?.toDouble() ?? 0.0;
       final refundAmount = (returnData['refund_amount'] as num?)?.toDouble() ?? 0.0;
       final balanceDueReduction = grandTotal - refundAmount;
 
@@ -410,14 +423,14 @@ class PurchaseRepository {
         'entity_type': 'inventory',
         'entity_id': 0,
         'type': 'credit',
-        'amount': (returnData['subtotal'] as num).toDouble(),
+        'amount': (returnData['subtotal'] as num?)?.toDouble() ?? 0.0,
         'reference_id': returnId,
         'description': 'Inventory Credit (Purchase Return Reversal): $returnNo',
         'date': dateStr,
       });
 
       // GST credit
-      final gstAmount = (returnData['gst_amount'] as num).toDouble();
+      final gstAmount = (returnData['gst_amount'] as num?)?.toDouble() ?? 0.0;
       if (gstAmount > 0) {
         await txn.insert(AppConstants.tblLedger, {
           'business_id': businessId,
@@ -450,7 +463,7 @@ class PurchaseRepository {
       if (purchaseResult.isEmpty) return;
       final p = purchaseResult.first;
       final supplierId = p['supplier_id'] as int?;
-      final businessId = p['business_id'] as int;
+      final businessId = (p['business_id'] as num?)?.toInt() ?? 1;
       final billNo = p['bill_no'] as String?;
 
       // Validate account balance scoped to business
@@ -462,7 +475,7 @@ class PurchaseRepository {
           whereArgs: [accountId, businessId],
         );
         if (accountResult.isNotEmpty) {
-          final balance = (accountResult.first['balance'] as num).toDouble();
+          final balance = (accountResult.first['balance'] as num?)?.toDouble() ?? 0.0;
           if (balance < amount) {
             throw Exception("Insufficient funds in account '${accountResult.first['name']}' to complete payment of ₹$amount.");
           }
@@ -533,5 +546,30 @@ class PurchaseRepository {
     );
     if (result.isEmpty) return null;
     return PurchaseModel.fromMap(result.first);
+  }
+
+  Future<double?> getLastPurchasePrice(int supplierId, int productId, int businessId) async {
+    final result = await _db.rawQuery('''
+      SELECT last_purchase_price 
+      FROM ${AppConstants.tblSupplierProducts}
+      WHERE supplier_id = ? AND product_id = ? AND business_id = ?
+    ''', [supplierId, productId, businessId]);
+    if (result.isNotEmpty) {
+      final rate = (result.first['last_purchase_price'] as num?)?.toDouble();
+      if (rate != null && rate > 0) return rate;
+    }
+    // Fallback: check most recent purchase item
+    final fallback = await _db.rawQuery('''
+      SELECT pi.price
+      FROM ${AppConstants.tblPurchaseItems} pi
+      JOIN ${AppConstants.tblPurchases} p ON pi.purchase_id = p.id
+      WHERE p.supplier_id = ? AND pi.product_id = ? AND p.business_id = ?
+      ORDER BY p.date DESC
+      LIMIT 1
+    ''', [supplierId, productId, businessId]);
+    if (fallback.isNotEmpty) {
+      return (fallback.first['price'] as num?)?.toDouble();
+    }
+    return null;
   }
 }

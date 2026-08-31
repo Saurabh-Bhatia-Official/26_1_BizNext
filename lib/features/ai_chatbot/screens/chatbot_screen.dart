@@ -232,33 +232,44 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
               // ── Suggestions & Input Area ──
               const SizedBox(height: 12),
               
-              // Only show suggestions when NOT loading
-              if (!state.isLoading && state.messages.length <= 1)
+              // Always show quick suggestions when NOT loading
+              if (!state.isLoading)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8.0),
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
                     child: Row(
                       children: [
-                        _SuggestionChip(
-                          label: "Stock Levels",
-                          icon: Icons.inventory_2_rounded,
-                          onTap: () => _sendSuggestion("Which products are low in stock?"),
-                        ),
                         _SuggestionChip(
                           label: "Today's Sales",
                           icon: Icons.monetization_on_rounded,
                           onTap: () => _sendSuggestion("What was my revenue today?"),
                         ),
                         _SuggestionChip(
-                          label: "Top Customers",
-                          icon: Icons.star_rounded,
-                          onTap: () => _sendSuggestion("Who is my top customer by balance?"),
+                          label: "Stock Levels",
+                          icon: Icons.inventory_2_rounded,
+                          onTap: () => _sendSuggestion("Which products are low in stock?"),
                         ),
                         _SuggestionChip(
-                          label: "Net vs Gross",
+                          label: "Account Balances",
+                          icon: Icons.account_balance_wallet_rounded,
+                          onTap: () => _sendSuggestion("Show me my account balances"),
+                        ),
+                        _SuggestionChip(
+                          label: "Recent Transactions",
+                          icon: Icons.receipt_long_rounded,
+                          onTap: () => _sendSuggestion("What are my recent transactions?"),
+                        ),
+                        _SuggestionChip(
+                          label: "This Month's Sales",
+                          icon: Icons.calendar_month_rounded,
+                          onTap: () => _sendSuggestion("What are my sales this month?"),
+                        ),
+                        _SuggestionChip(
+                          label: "Help & Commands",
                           icon: Icons.help_outline_rounded,
-                          onTap: () => _sendSuggestion("Explain the difference between net and gross profit."),
+                          onTap: () => _sendSuggestion("What can you do?"),
                         ),
                       ],
                     ),
@@ -363,22 +374,15 @@ class _SuggestionChip extends StatelessWidget {
   }
 }
 
-class _ChatBubble extends StatefulWidget {
+class _ChatBubble extends StatelessWidget {
   final ChatbotMessage message;
 
   const _ChatBubble({required this.message});
 
   @override
-  State<_ChatBubble> createState() => _ChatBubbleState();
-}
-
-class _ChatBubbleState extends State<_ChatBubble> {
-  bool _showSqlDetails = false;
-
-  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isUser = widget.message.isUser;
+    final isUser = message.isUser;
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
@@ -443,136 +447,11 @@ class _ChatBubbleState extends State<_ChatBubble> {
                                 : AppColors.primary.withValues(alpha: 0.1),
                           ),
                   ),
-                  child: _buildFormattedText(widget.message.text, context, isUser),
+                  child: _buildFormattedText(message.text, context, isUser),
                 ),
               ),
             ],
           ),
-
-          // ── SQL / Database Query Details ──
-          if (widget.message.sqlQuery != null && !isUser) ...[
-            Padding(
-              padding: const EdgeInsets.only(left: 44.0, top: 6),
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    _showSqlDetails = !_showSqlDetails;
-                  });
-                },
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.02) : Colors.black.withValues(alpha: 0.03),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.storage_rounded,
-                        size: 13,
-                        color: widget.message.status == MessageStatus.error
-                            ? AppColors.error
-                            : AppColors.success,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        widget.message.status == MessageStatus.error
-                            ? "Database Query Failed"
-                            : "Local SQL Executed",
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          color: widget.message.status == MessageStatus.error
-                              ? AppColors.error
-                              : AppColors.success,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        _showSqlDetails
-                            ? Icons.keyboard_arrow_up_rounded
-                            : Icons.keyboard_arrow_down_rounded,
-                        size: 14,
-                        color: AppColors.textMuted,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            if (_showSqlDetails)
-              Container(
-                margin: const EdgeInsets.only(left: 44.0, top: 6, right: 20),
-                padding: const EdgeInsets.all(12),
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0C0C15) : const Color(0xFFF1F3F5),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.06),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "GENERATED SQL:",
-                      style: TextStyle(
-                        fontFamily: "monospace",
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      widget.message.sqlQuery!,
-                      style: TextStyle(
-                        fontFamily: "monospace",
-                        fontSize: 11,
-                        color: isDark ? Colors.amber[200] : Colors.blue[800],
-                        height: 1.3,
-                      ),
-                    ),
-                    if (widget.message.queryResult != null) ...[
-                      const SizedBox(height: 12),
-                      const Text(
-                        "DATABASE RESPONSE SUMMARY:",
-                        style: TextStyle(
-                          fontFamily: "monospace",
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      SelectableText(
-                        widget.message.queryResult!,
-                        style: TextStyle(
-                          fontFamily: "monospace",
-                          fontSize: 10.5,
-                          color: isDark ? Colors.green[200] : Colors.green[800],
-                          height: 1.3,
-                        ),
-                      ),
-                    ],
-                    if (widget.message.errorMessage != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        "Error Details: ${widget.message.errorMessage}",
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.error,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ).animate().fade(duration: 150.ms).slideY(begin: -0.05),
-          ],
         ],
       ),
     );

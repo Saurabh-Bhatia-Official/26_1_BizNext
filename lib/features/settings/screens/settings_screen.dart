@@ -831,11 +831,12 @@ class _SettingsSection extends StatelessWidget {
       children: [
         Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.primary, letterSpacing: 0.5)),
         const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkCard : Colors.white,
+        Material(
+          color: isDark ? AppColors.darkCard : Colors.white,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+            side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
           ),
           child: Column(children: children),
         ),
