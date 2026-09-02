@@ -50,7 +50,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     if (mounted) setState(() => _isLoading = false);
 
-    if (!ok && mounted) {
+    if (ok && mounted) {
+      AppAlert.success(ref, 'Account created successfully. Please sign in.');
+      Navigator.pop(context);
+    } else if (!ok && mounted) {
       final err = ref.read(authProvider).error;
       AppAlert.error(ref, err ?? 'Registration failed');
     }

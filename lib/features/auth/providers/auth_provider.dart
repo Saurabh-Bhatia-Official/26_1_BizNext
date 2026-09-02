@@ -160,11 +160,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         phone: phone,
       );
 
-      await _prefs.setInt(AppConstants.prefUserId, user.id!);
-
       state = state.copyWith(
-        status: AuthStatus.businessNotSelected,
-        user: user,
+        status: AuthStatus.unauthenticated,
+        clearError: true,
       );
       return true;
     } catch (e) {
