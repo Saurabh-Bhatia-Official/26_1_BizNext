@@ -40,13 +40,13 @@ jobs:
         run: flutter build apk --release
 
       - name: Rename APK
-        run: mv build/app/outputs/flutter-apk/app-release.apk BizNext_app_release.apk
+        run: mv build/app/outputs/flutter-apk/app-release.apk BizNext-Android-${{ github.event.inputs.tag_name || github.ref_name }}.apk
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          files: BizNext_app_release.apk
+          files: BizNext-Android-*.apk
   build-windows:
     name: Build Windows EXE
     runs-on: windows-latest
@@ -71,11 +71,14 @@ jobs:
       - name: Build Windows Installer
         run: iscc installer.iss
 
+      - name: Rename EXE
+        run: Get-ChildItem -Path "build\windows\installer\*.exe" | Rename-Item -NewName "BizNext-Windows-${{ github.event.inputs.tag_name || github.ref_name }}.exe"
+
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          files: build\windows\installer\*.exe
+          files: build\windows\installer\BizNext-Windows-*.exe
 
   build-linux:
     name: Build Linux
@@ -106,13 +109,13 @@ jobs:
       - name: Zip Linux Build
         run: |
           cd build/linux/x64/release/bundle
-          zip -r ../../../../../BizNext_Linux_Bundle.zip *
+          zip -r ../../../../../BizNext-Linux-x64-${{ github.event.inputs.tag_name || github.ref_name }}.zip *
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          files: BizNext_Linux_Bundle.zip
+          files: BizNext-Linux-x64-*.zip
 
   build-macos:
     name: Build macOS
@@ -138,13 +141,13 @@ jobs:
       - name: Zip macOS Build
         run: |
           cd build/macos/Build/Products/Release
-          zip -r ../../../../../BizNext_macOS.zip *.app
+          zip -r ../../../../../BizNext-macOS-${{ github.event.inputs.tag_name || github.ref_name }}.zip *.app
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          files: BizNext_macOS.zip
+          files: BizNext-macOS-*.zip
 
   build-ios:
     name: Build iOS
@@ -168,10 +171,10 @@ jobs:
         run: |
           mkdir -p Payload
           mv build/ios/iphoneos/Runner.app Payload/
-          zip -qq -r BizNext_iOS_Unsigned.ipa Payload
+          zip -qq -r BizNext-iOS-Unsigned-${{ github.event.inputs.tag_name || github.ref_name }}.ipa Payload
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          files: BizNext_iOS_Unsigned.ipa
+          files: BizNext-iOS-Unsigned-*.ipa
