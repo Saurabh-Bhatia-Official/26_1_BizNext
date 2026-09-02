@@ -166,17 +166,17 @@ class NotificationRepository {
 
       // 2. Scan Customer Overdue Balances
       final highDueCustomers = await db.rawQuery('''
-        SELECT id, name, balance_due, phone
+        SELECT id, name, balance, phone
         FROM ${AppConstants.tblCustomers}
-        WHERE business_id = ? AND balance_due > 500
-        ORDER BY balance_due DESC
+        WHERE business_id = ? AND balance > 500
+        ORDER BY balance DESC
         LIMIT 10
       ''', [businessId]);
 
       for (final cust in highDueCustomers) {
         final customerId = (cust['id'] as num?)?.toInt() ?? 0;
         final custName = cust['name'] as String? ?? 'Customer';
-        final balanceDue = (cust['balance_due'] as num?)?.toDouble() ?? 0.0;
+        final balanceDue = (cust['balance'] as num?)?.toDouble() ?? 0.0;
 
         final existing = await db.rawQuery('''
           SELECT id FROM ${AppConstants.tblNotifications}
