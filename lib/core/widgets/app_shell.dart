@@ -258,7 +258,6 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
                 ],
               ),
             ),
-            const _BetaBanner(),
           ],
         ),
         bottomNavigationBar: isWide
@@ -403,44 +402,6 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
   }
 }
 
-class _BetaBanner extends StatelessWidget {
-  const _BetaBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Color(0xFFF59E0B),
-            Color(0xFFD97706),
-          ],
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.science_rounded, color: Colors.white, size: 16),
-          SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              '🧪  BETA TESTING VERSION — This is a beta version of the software. It may contain bugs. We appreciate your patience and feedback.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.2,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class PremiumLockedScreen extends ConsumerWidget {
   const PremiumLockedScreen({super.key});
