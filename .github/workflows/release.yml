@@ -1,8 +1,5 @@
 name: Flutter Multi-Platform Release
 
-env:
-  PUBLIC_RELEASE_REPO: 'Saurabh-Bhatia-Official/BizNext-Releases'
-
 on:
   push:
     tags:
@@ -48,8 +45,6 @@ jobs:
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          repository: ${{ env.PUBLIC_RELEASE_REPO }}
-          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           files: BizNext-Android-*.apk
   build-windows:
@@ -82,8 +77,6 @@ jobs:
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          repository: ${{ env.PUBLIC_RELEASE_REPO }}
-          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           files: build\windows\installer\BizNext-Windows-*.exe
 
@@ -121,8 +114,6 @@ jobs:
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          repository: ${{ env.PUBLIC_RELEASE_REPO }}
-          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           files: BizNext-Linux-x64-*.zip
 
@@ -155,8 +146,6 @@ jobs:
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
-          repository: ${{ env.PUBLIC_RELEASE_REPO }}
-          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           files: BizNext-macOS-*.zip
 
@@ -185,9 +174,7 @@ jobs:
           zip -qq -r BizNext-iOS-Unsigned-${{ github.event.inputs.tag_name || github.ref_name }}.ipa Payload
 
       - name: Upload to Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v1
         with:
-          repository: ${{ env.PUBLIC_RELEASE_REPO }}
-          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           files: BizNext-iOS-Unsigned-*.ipa
