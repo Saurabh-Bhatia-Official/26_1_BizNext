@@ -47,8 +47,6 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           files: BizNext_app_release.apk
-      - name: Remove APK
-        run: rm  build/app/outputs/flutter-apk/app-release.apk
   build-windows:
     name: Build Windows EXE
     runs-on: windows-latest
