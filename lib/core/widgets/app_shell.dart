@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../constants/app_constants.dart';
 import '../providers/theme_provider.dart';
 import '../theme/app_theme.dart';
+import 'package:tutorial_coach_mark/tutorial_coach_mark.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'app_sidebar.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
 import '../../features/inventory/screens/inventory_screen.dart';
@@ -42,12 +44,114 @@ class AppShell extends ConsumerStatefulWidget {
 
 
 class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver {
+  final GlobalKey _menuKey = GlobalKey();
+  final GlobalKey _themeKey = GlobalKey();
+  final GlobalKey _dashboardKey = GlobalKey();
+  final GlobalKey _posKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     // Trigger sync immediately on shell start
     _triggerFocusSync();
+    
+    Future.delayed(const Duration(milliseconds: 500), () async {
+      final prefs = await SharedPreferences.getInstance();
+      final isTutorialDone = prefs.getBool(AppConstants.prefTutorialDone) ?? false;
+      if (!isTutorialDone && mounted) {
+        _showTutorial();
+        await prefs.setBool(AppConstants.prefTutorialDone, true);
+      }
+    });
+  }
+
+  void _showTutorial() {
+    final isWide = MediaQuery.of(context).size.width >= AppConstants.sidebarBreakpoint;
+    final targets = _createTargets(isWide);
+    if (targets.isEmpty) return;
+
+    TutorialCoachMark(
+      targets: targets,
+      colorShadow: AppColors.primary,
+      textSkip: "SKIP TUTORIAL",
+      paddingFocus: 10,
+      opacityShadow: 0.9,
+    ).show(context: context);
+  }
+
+  List<TargetFocus> _createTargets(bool isWide) {
+    List<TargetFocus> targets = [];
+
+    if (!isWide) {
+      targets.add(
+        TargetFocus(
+          identify: "menu",
+          keyTarget: _menuKey,
+          alignSkip: Alignment.topRight,
+          contents: [
+            TargetContent(
+              align: ContentAlign.bottom,
+              builder: (context, controller) => const _TutorialContent(
+                title: "Navigation Menu",
+                description: "Access all modules, settings, and business profiles from here.",
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    targets.add(
+      TargetFocus(
+        identify: "theme",
+        keyTarget: _themeKey,
+        alignSkip: Alignment.bottomLeft,
+        contents: [
+          TargetContent(
+            align: isWide ? ContentAlign.right : ContentAlign.bottom,
+            builder: (context, controller) => const _TutorialContent(
+              title: "Dark/Light Mode",
+              description: "Toggle the application theme to match your preference.",
+            ),
+          ),
+        ],
+      ),
+    );
+    targets.add(
+      TargetFocus(
+        identify: "dashboard",
+        keyTarget: _dashboardKey,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: isWide ? ContentAlign.right : ContentAlign.top,
+            builder: (context, controller) => const _TutorialContent(
+              title: "Dashboard",
+              description: "Get a quick overview of your business analytics and summaries.",
+            ),
+          ),
+        ],
+      ),
+    );
+    targets.add(
+      TargetFocus(
+        identify: "pos",
+        keyTarget: _posKey,
+        alignSkip: Alignment.topRight,
+        contents: [
+          TargetContent(
+            align: isWide ? ContentAlign.right : ContentAlign.top,
+            builder: (context, controller) => const _TutorialContent(
+              title: "Point of Sale",
+              description: "Quickly ring up sales and manage transactions seamlessly.",
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return targets;
   }
 
   @override
@@ -166,12 +270,14 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
                 centerTitle: true,
                 leading: Builder(
                   builder: (ctx) => IconButton(
+                    key: _menuKey,
                     icon: const Icon(Icons.menu_rounded),
                     onPressed: () => Scaffold.of(ctx).openDrawer(),
                   ),
                 ),
                 actions: [
                   IconButton(
+                    key: _themeKey,
                     icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
                     onPressed: () => ref.read(themeModeProvider.notifier).toggle(),
                   ),
@@ -202,6 +308,9 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
                       if (isWide && !ref.watch(sidebarHiddenProvider))
                         AppSidebar(
                           selectedIndex: selectedIndex,
+                          dashboardKey: _dashboardKey,
+                          posKey: _posKey,
+                          themeKey: _themeKey,
                           onDestinationSelected: (i) {
                             ref.read(previousNavIndexProvider.notifier).state = ref.read(selectedNavIndexProvider);
                             ref.read(selectedNavIndexProvider.notifier).state = i;
@@ -288,6 +397,7 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
                         _buildBottomNavItem(
                           context,
                           ref,
+                          key: _dashboardKey,
                           icon: Icons.grid_view_rounded,
                           activeIcon: Icons.grid_view_rounded,
                           label: 'Dashboard',
@@ -297,6 +407,7 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
                         _buildBottomNavItem(
                           context,
                           ref,
+                          key: _posKey,
                           icon: Icons.shopping_cart_outlined,
                           activeIcon: Icons.shopping_cart_rounded,
                           label: 'POS',
@@ -349,6 +460,7 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
   Widget _buildBottomNavItem(
     BuildContext context,
     WidgetRef ref, {
+    Key? key,
     required IconData icon,
     required IconData activeIcon,
     required String label,
@@ -361,6 +473,7 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
     
     return Expanded(
       child: InkWell(
+        key: key,
         onTap: onTap ?? () {
           ref.read(previousNavIndexProvider.notifier).state = ref.read(selectedNavIndexProvider);
           ref.read(selectedNavIndexProvider.notifier).state = index;
@@ -476,3 +589,30 @@ class PremiumLockedScreen extends ConsumerWidget {
     );
   }
 }
+
+class _TutorialContent extends StatelessWidget {
+  final String title;
+  final String description;
+
+  const _TutorialContent({required this.title, required this.description});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          description,
+          style: const TextStyle(color: Colors.white70, fontSize: 16),
+        ),
+      ],
+    );
+  }
+}
+

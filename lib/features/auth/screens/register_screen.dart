@@ -7,6 +7,7 @@ import '../../../core/providers/notification_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/notification_overlay.dart';
 import '../providers/auth_provider.dart';
+import 'package:confetti/confetti.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -25,9 +26,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   
   bool _obscurePassword = true;
   bool _isLoading = false;
+  late ConfettiController _confettiController;
+
+  @override
+  void initState() {
+    super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 2));
+  }
 
   @override
   void dispose() {
+    _confettiController.dispose();
     _fullNameCtrl.dispose();
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
@@ -40,9 +49,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     
+    final username = _usernameCtrl.text.trim();
+    final password = _passwordCtrl.text;
+
     final ok = await ref.read(authProvider.notifier).register(
-      username: _usernameCtrl.text.trim(),
-      password: _passwordCtrl.text,
+      username: username,
+      password: password,
       fullName: _fullNameCtrl.text.trim(),
       email: _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
       phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
@@ -51,8 +63,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (mounted) setState(() => _isLoading = false);
 
     if (ok && mounted) {
-      AppAlert.success(ref, 'Account created successfully. Please sign in.');
-      Navigator.pop(context);
+      _confettiController.play();
+      AppAlert.success(ref, 'Account created successfully! Welcome!');
+      
+      await Future.delayed(const Duration(seconds: 3));
+      
+      if (mounted) {
+        await ref.read(authProvider.notifier).login(username, password);
+        if (mounted) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      }
     } else if (!ok && mounted) {
       final err = ref.read(authProvider).error;
       AppAlert.error(ref, err ?? 'Registration failed');
@@ -123,6 +144,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             ),
           ),
           const NotificationOverlay(),
+          
+          // Confetti overlay
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConfettiWidget(
+              confettiController: _confettiController,
+              blastDirectionality: BlastDirectionality.explosive,
+              shouldLoop: false,
+              colors: const [Colors.green, Colors.blue, Colors.pink, Colors.orange, Colors.purple],
+            ),
+          ),
         ],
       ),
     );

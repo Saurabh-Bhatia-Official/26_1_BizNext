@@ -31,7 +31,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F1A),
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
           // Background Glow
@@ -95,7 +95,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                 const Text(
                   'BIZNEXT',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: Color(0xFF0F0F1A),
                     fontSize: 32,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 4,
@@ -107,7 +107,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                 Text(
                   'Management System v1.0',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: const Color(0xFF0F0F1A).withValues(alpha: 0.5),
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 1.5,
@@ -141,7 +141,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               child: Text(
                 'Securing your business data...',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: const Color(0xFF0F0F1A).withValues(alpha: 0.3),
                   fontSize: 12,
                 ),
               ),

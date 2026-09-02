@@ -63,6 +63,7 @@ class AppConstants {
   static const String prefBusinessId = 'active_business_id';
   static const String prefThemeMode = 'theme_mode';
   static const String prefSyncMode = 'sync_mode';
+  static const String prefTutorialDone = 'tutorial_done';
 
   // ── Payment Modes ──────────────────────────────────────────────────────────
   static const String paymentCash = 'Cash';

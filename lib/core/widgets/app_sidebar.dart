@@ -46,12 +46,18 @@ class AppSidebar extends ConsumerWidget {
   final int selectedIndex;
   final Function(int) onDestinationSelected;
   final bool? isCollapsedOverride;
+  final GlobalKey? dashboardKey;
+  final GlobalKey? posKey;
+  final GlobalKey? themeKey;
 
   const AppSidebar({
     super.key,
     required this.selectedIndex,
     required this.onDestinationSelected,
     this.isCollapsedOverride,
+    this.dashboardKey,
+    this.posKey,
+    this.themeKey,
   });
 
   @override
@@ -151,7 +157,7 @@ class AppSidebar extends ConsumerWidget {
                     children: [
                       const _ReloadButton(),
                       const SizedBox(width: 8),
-                      _ThemeToggleSmall(),
+                      _ThemeToggleSmall(key: themeKey),
                     ],
                   ),
                 ],
@@ -159,7 +165,7 @@ class AppSidebar extends ConsumerWidget {
                   const SizedBox(height: 20),
                   const _ReloadButton(),
                   const SizedBox(height: 12),
-                  _ThemeToggleSmall(),
+                  _ThemeToggleSmall(key: themeKey),
                   if (isWide) ...[
                     const SizedBox(height: 12),
                     IconButton(
@@ -266,6 +272,7 @@ class AppSidebar extends ConsumerWidget {
     }
 
     return _SidebarItem(
+      key: index == 0 ? dashboardKey : (index == 1 ? posKey : null),
       label: d.label,
       icon: active ? d.activeIcon : d.icon,
       isSelected: active,
@@ -369,6 +376,7 @@ class _SidebarItem extends StatelessWidget {
   final VoidCallback onTap;
 
   const _SidebarItem({
+    super.key,
     required this.label,
     required this.icon,
     required this.isSelected,
@@ -607,6 +615,8 @@ class _SidebarFooter extends ConsumerWidget {
   }
 }
 class _ThemeToggleSmall extends ConsumerWidget {
+  const _ThemeToggleSmall({super.key});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
