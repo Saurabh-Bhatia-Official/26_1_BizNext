@@ -2,18 +2,34 @@
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/utils/currency_formatter.dart';
 import '../../accounts/models/ledger_model.dart';
 import '../models/purchase_model.dart';
+import '../services/purchase_calculation_service.dart';
 
 class PurchaseRepository {
   final DatabaseHelper _db = DatabaseHelper.instance;
 
+  /// Fetches purchases for a business.
   Future<List<PurchaseModel>> getPurchases(int businessId) async {
-    final result = await _db.rawQuery(
+    final list = await _db.rawQuery(
       "SELECT p.*, s.name as supplier_name, a.name as account_name FROM ${AppConstants.tblPurchases} p LEFT JOIN ${AppConstants.tblSuppliers} s ON p.supplier_id = s.id LEFT JOIN ${AppConstants.tblAccounts} a ON p.account_id = a.id WHERE p.business_id = ? ORDER BY p.date DESC",
       [businessId],
     );
-    return result.map((m) => PurchaseModel.fromMap(m)).toList();
+    final results = <PurchaseModel>[];
+    for (var m in list) {
+      final items = await getPurchaseItems(m['id'] as int);
+      results.add(PurchaseModel.fromMap(m, items: items));
+    }
+    return results;
+  }
+
+  Future<List<PurchaseItemModel>> getPurchaseItems(int purchaseId) async {
+    final result = await _db.rawQuery(
+      "SELECT * FROM ${AppConstants.tblPurchaseItems} WHERE purchase_id = ?",
+      [purchaseId],
+    );
+    return result.map((m) => PurchaseItemModel.fromMap(m)).toList();
   }
 
   Future<Map<String, dynamic>> getPurchaseStats(int businessId) async {
@@ -24,41 +40,33 @@ class PurchaseRepository {
     return result.first;
   }
 
+  /// Records a purchase invoice, updates inventory stock, supplier ledger,
+  /// accounts, and main ledger in a single ACID transaction.
   Future<int> recordPurchase(PurchaseModel purchase) async {
     final result = await _db.transaction((txn) async {
-      // ── VALIDATION RULES ──
-      
-      // 1. Supplier Validation
-      if (purchase.supplierId == null) {
-        throw Exception("Invalid Supplier: Supplier is required for recording purchases.");
+      // 1. Business Context Validation
+      if (purchase.businessId <= 0) {
+        throw Exception("Invalid Business: Business ID must be specified.");
       }
-      final supplierCheck = await txn.query(
+
+      // 2. Supplier Validation
+      if (purchase.supplierId == null || purchase.supplierId! <= 0) {
+        throw Exception("Invalid Supplier: A valid supplier must be selected.");
+      }
+      final supplierResult = await txn.query(
         AppConstants.tblSuppliers,
-        columns: ['id'],
+        columns: ['id', 'name'],
         where: 'id = ? AND business_id = ?',
         whereArgs: [purchase.supplierId, purchase.businessId],
       );
-      if (supplierCheck.isEmpty) {
-        throw Exception("Invalid Supplier: Supplier does not exist.");
+      if (supplierResult.isEmpty) {
+        throw Exception("Invalid Supplier: Selected supplier does not exist.");
       }
 
-      // 2. Duplicate Purchase Invoice Validation
-      if (purchase.billNo != null && purchase.billNo!.trim().isNotEmpty) {
-        final duplicateCheck = await txn.query(
-          AppConstants.tblPurchases,
-          columns: ['id'],
-          where: 'supplier_id = ? AND bill_no = ? AND business_id = ?',
-          whereArgs: [purchase.supplierId, purchase.billNo, purchase.businessId],
-        );
-        if (duplicateCheck.isNotEmpty) {
-          throw Exception("Duplicate Purchase Invoice: A purchase with bill number '${purchase.billNo}' already exists for this supplier.");
-        }
-      }
-
-      // 3. Cash & Bank Validation
+      // 3. Account & Balance Validation
       if (purchase.paidAmount > 0) {
         if (purchase.accountId == null) {
-          throw Exception("Invalid Account: A payment account is required when paid amount is greater than zero.");
+          throw Exception("Invalid Account: A payment account must be selected when payment is made.");
         }
         final accountResult = await txn.query(
           AppConstants.tblAccounts,
@@ -70,8 +78,12 @@ class PurchaseRepository {
           throw Exception("Invalid Account: Selected payment account does not exist.");
         }
         final currentBalance = (accountResult.first['balance'] as num?)?.toDouble() ?? 0.0;
+        final accName = accountResult.first['name'] as String? ?? 'Account';
+        if (currentBalance <= 0) {
+          throw Exception("Insufficient funds in account '$accName': Selected account has zero balance (₹0.00).");
+        }
         if (currentBalance < purchase.paidAmount) {
-          throw Exception("Insufficient funds in account '${accountResult.first['name']}': Current Balance = ₹$currentBalance, Payment Required = ₹${purchase.paidAmount}");
+          throw Exception("Insufficient funds in account '$accName': Current Balance = ${CurrencyFormatter.format(currentBalance)}, Payment Required = ${CurrencyFormatter.format(purchase.paidAmount)}.");
         }
       }
 
@@ -124,13 +136,22 @@ class PurchaseRepository {
         final currentStock = (productResult.first['stock'] as num?)?.toDouble() ?? 0.0;
         final currentWac = (productResult.first['purchase_price'] as num?)?.toDouble() ?? 0.0;
 
+        // Calculate Effective Unit Cost accounting for line & bill discounts
+        final effectiveUnitCost = PurchaseCalculationService.calculateEffectiveUnitCost(
+          quantity: item.quantity,
+          purchasePrice: item.purchasePrice,
+          lineDiscount: item.discount,
+          billDiscount: purchase.discount,
+          grossSubtotal: purchase.subtotal,
+        );
+
         // Calculate Weighted Average Cost (WAC)
-        double newWac = currentWac;
-        if (currentStock + item.quantity > 0) {
-          newWac = ((currentStock * currentWac) + (item.quantity * item.purchasePrice)) / (currentStock + item.quantity);
-        } else {
-          newWac = item.purchasePrice;
-        }
+        final newWac = PurchaseCalculationService.calculateNewWac(
+          currentStock: currentStock,
+          currentWac: currentWac,
+          inwardQty: item.quantity,
+          effectiveUnitCost: effectiveUnitCost,
+        );
 
         // Update Product Master stock & price scoped to the business
         await txn.rawUpdate(
@@ -197,13 +218,13 @@ class PurchaseRepository {
       final billRef = purchase.billNo ?? "#$purchaseId";
       final dateStr = purchase.date.toIso8601String();
 
-      // Entry A: Debit Inventory Asset Account = Grand Total - GST Amount (Subtotal)
+      // Entry A: Debit Inventory Asset Account = Net Taxable Purchase (Subtotal - Discount)
       await txn.insert(AppConstants.tblLedger, {
         'business_id': purchase.businessId,
         'entity_type': 'inventory',
         'entity_id': 0,
         'type': 'debit',
-        'amount': purchase.subtotal,
+        'amount': purchase.taxableAmount,
         'reference_id': purchaseId,
         'description': 'Inventory Debit (Purchase): $billRef',
         'date': dateStr,
@@ -256,6 +277,13 @@ class PurchaseRepository {
           'description': 'Accounts Payable Credit (Purchase Credit): $billRef',
           'date': dateStr,
         });
+      }
+
+      // Integrity check: TOTAL DEBITS must equal TOTAL CREDITS
+      final totalDebit = purchase.taxableAmount + purchase.gstAmount;
+      final totalCredit = purchase.paidAmount + purchase.balanceDue;
+      if ((totalDebit - totalCredit).abs() > 0.05) {
+        throw Exception("Accounting Imbalance in Purchase #$purchaseId: Total Debit ($totalDebit) does not equal Total Credit ($totalCredit).");
       }
 
       return purchaseId;
@@ -476,16 +504,26 @@ class PurchaseRepository {
         );
         if (accountResult.isNotEmpty) {
           final balance = (accountResult.first['balance'] as num?)?.toDouble() ?? 0.0;
+          final accName = accountResult.first['name'] as String? ?? 'Account';
+          if (balance <= 0) {
+            throw Exception("Insufficient funds in account '$accName': Selected account has zero balance (₹0.00).");
+          }
           if (balance < amount) {
-            throw Exception("Insufficient funds in account '${accountResult.first['name']}' to complete payment of ₹$amount.");
+            throw Exception("Insufficient funds in account '$accName': Current Balance = ${CurrencyFormatter.format(balance)}, Payment Required = ${CurrencyFormatter.format(amount)}.");
           }
         }
       }
 
+      final currentPaid = (p['paid_amount'] as num?)?.toDouble() ?? 0.0;
+      final grandTotal = (p['grand_total'] as num?)?.toDouble() ?? 0.0;
+      final newPaid = currentPaid + amount;
+      final newBalance = (grandTotal - newPaid).clamp(0.0, double.infinity);
+      final newPaymentStatus = PurchaseModel.calculatePaymentStatus(newPaid, grandTotal);
+
       // Update Purchase scoped to business
       await txn.rawUpdate(
-        "UPDATE ${AppConstants.tblPurchases} SET paid_amount = paid_amount + ?, balance_due = balance_due - ? WHERE id = ? AND business_id = ?",
-        [amount, amount, purchaseId, businessId],
+        "UPDATE ${AppConstants.tblPurchases} SET paid_amount = ?, balance_due = ?, payment_status = ? WHERE id = ? AND business_id = ?",
+        [newPaid, newBalance, newPaymentStatus, purchaseId, businessId],
       );
 
       // Update Supplier Balance scoped to business
@@ -521,14 +559,6 @@ class PurchaseRepository {
     _db.notify(AppConstants.tblSuppliers);
     _db.notify(AppConstants.tblAccounts);
     _db.notify(AppConstants.tblLedger);
-  }
-
-  Future<List<PurchaseItemModel>> getPurchaseItems(int purchaseId) async {
-    final result = await _db.rawQuery(
-      "SELECT * FROM ${AppConstants.tblPurchaseItems} WHERE purchase_id = ?",
-      [purchaseId],
-    );
-    return result.map((m) => PurchaseItemModel.fromMap(m)).toList();
   }
 
   Future<List<LedgerModel>> getPurchasePaymentHistory(int purchaseId) async {

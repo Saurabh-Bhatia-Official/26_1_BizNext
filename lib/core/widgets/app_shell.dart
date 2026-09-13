@@ -45,7 +45,6 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver {
   final GlobalKey _menuKey = GlobalKey();
-  final GlobalKey _themeKey = GlobalKey();
   final GlobalKey _dashboardKey = GlobalKey();
   final GlobalKey _posKey = GlobalKey();
 
@@ -104,22 +103,6 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
 
     targets.add(
       TargetFocus(
-        identify: "theme",
-        keyTarget: _themeKey,
-        alignSkip: Alignment.bottomLeft,
-        contents: [
-          TargetContent(
-            align: isWide ? ContentAlign.right : ContentAlign.bottom,
-            builder: (context, controller) => const _TutorialContent(
-              title: "Dark/Light Mode",
-              description: "Toggle the application theme to match your preference.",
-            ),
-          ),
-        ],
-      ),
-    );
-    targets.add(
-      TargetFocus(
         identify: "dashboard",
         keyTarget: _dashboardKey,
         alignSkip: Alignment.topRight,
@@ -169,7 +152,7 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
 
   void _triggerFocusSync() {
     try {
-      SyncService().syncNow("dummy_token_12345");
+      SyncService().syncNow();
     } catch (e) {
       debugPrint("Auto-sync on app focus error: $e");
     }
@@ -244,21 +227,22 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 24,
-                      height: 24,
+                      width: 32,
+                      height: 32,
+                      padding: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(6),
                         child: Image.asset(
                           'assets/logo.png',
-                          fit: BoxFit.cover,
+                          fit: BoxFit.contain,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Text(
                       selectedIndex < navDestinations.length 
                         ? navDestinations[selectedIndex].label 
@@ -275,13 +259,8 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
                     onPressed: () => Scaffold.of(ctx).openDrawer(),
                   ),
                 ),
-                actions: [
-                  IconButton(
-                    key: _themeKey,
-                    icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
-                    onPressed: () => ref.read(themeModeProvider.notifier).toggle(),
-                  ),
-                  const SizedBox(width: 8),
+                actions: const [
+                  SizedBox(width: 48),
                 ],
               ),
         drawer: isWide
@@ -305,60 +284,42 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
                 children: [
                   Row(
                     children: [
-                      if (isWide && !ref.watch(sidebarHiddenProvider))
-                        AppSidebar(
-                          selectedIndex: selectedIndex,
-                          dashboardKey: _dashboardKey,
-                          posKey: _posKey,
-                          themeKey: _themeKey,
-                          onDestinationSelected: (i) {
-                            ref.read(previousNavIndexProvider.notifier).state = ref.read(selectedNavIndexProvider);
-                            ref.read(selectedNavIndexProvider.notifier).state = i;
-                          },
-                        ),
+                      if (isWide) ...[
+                        if (!ref.watch(sidebarHiddenProvider))
+                          AppSidebar(
+                            selectedIndex: selectedIndex,
+                            dashboardKey: _dashboardKey,
+                            posKey: _posKey,
+                            onDestinationSelected: (i) {
+                              ref.read(previousNavIndexProvider.notifier).state = ref.read(selectedNavIndexProvider);
+                              ref.read(selectedNavIndexProvider.notifier).state = i;
+                            },
+                          )
+                        else
+                          _MiniSidebarRail(
+                            onExpand: () => ref.read(sidebarHiddenProvider.notifier).state = false,
+                            isDark: isDark,
+                          ),
+                      ],
                       Expanded(
-                        child: Stack(
-                          children: [
-                            IndexedStack(
-                              index: selectedIndex,
-                              children: List.generate(screens.length, (index) {
-                                final isPro = ref.watch(subscriptionServiceProvider).isPro;
-                                final restrictedIndices = [11, 12, 13, 14];
-                                final showLock = !isPro && restrictedIndices.contains(index);
-  
-                                if (showLock) {
-                                  return const PremiumLockedScreen();
-                                }
-  
-                                return Navigator(
-                                  key: _navigatorKeys[index],
-                                  onGenerateRoute: (settings) => MaterialPageRoute(
-                                    builder: (context) => screens[index],
-                                  ),
-                                );
-                              }),
-                            ),
-                            if (isWide && ref.watch(sidebarHiddenProvider))
-                              Positioned(
-                                left: 16,
-                                top: 24,
-                                child: Material(
-                                  color: isDark ? AppColors.darkSurface : Colors.white,
-                                  elevation: 4,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    side: BorderSide(
-                                      color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
-                                    ),
-                                  ),
-                                  child: IconButton(
-                                    icon: const Icon(Icons.menu_rounded, color: AppColors.primary),
-                                    onPressed: () => ref.read(sidebarHiddenProvider.notifier).state = false,
-                                    tooltip: 'Show Sidebar',
-                                  ),
-                                ),
+                        child: IndexedStack(
+                          index: selectedIndex,
+                          children: List.generate(screens.length, (index) {
+                            final isPro = ref.watch(subscriptionServiceProvider).isPro;
+                            final restrictedIndices = [11, 12, 13, 14];
+                            final showLock = !isPro && restrictedIndices.contains(index);
+
+                            if (showLock) {
+                              return const PremiumLockedScreen();
+                            }
+
+                            return Navigator(
+                              key: _navigatorKeys[index],
+                              onGenerateRoute: (settings) => MaterialPageRoute(
+                                builder: (context) => screens[index],
                               ),
-                          ],
+                            );
+                          }),
                         ),
                       ),
                     ],
@@ -612,6 +573,72 @@ class _TutorialContent extends StatelessWidget {
           style: const TextStyle(color: Colors.white70, fontSize: 16),
         ),
       ],
+    );
+  }
+}
+
+class _MiniSidebarRail extends StatelessWidget {
+  final VoidCallback onExpand;
+  final bool isDark;
+
+  const _MiniSidebarRail({
+    required this.onExpand,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sidebarColor = isDark ? AppColors.darkSidebar : AppColors.lightSidebar;
+    return Container(
+      width: 64,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: sidebarColor,
+        border: Border(
+          right: BorderSide(
+            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
+            width: 1,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        right: false,
+        child: Column(
+          children: [
+            const SizedBox(height: 24),
+            Container(
+              width: 40,
+              height: 40,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/logo.png',
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            IconButton(
+              onPressed: onExpand,
+              icon: const Icon(Icons.menu_rounded),
+              color: AppColors.primary,
+              tooltip: 'Expand Sidebar',
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

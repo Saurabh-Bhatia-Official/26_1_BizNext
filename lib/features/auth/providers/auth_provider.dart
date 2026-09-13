@@ -1,15 +1,16 @@
 // lib/features/auth/providers/auth_provider.dart
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/theme_provider.dart';
+import '../../../core/security/token_service.dart';
 import '../models/business_model.dart';
 import '../models/user_model.dart';
 import '../repositories/auth_repository.dart';
 
 final splashCompleteProvider = StateProvider<bool>((ref) => false);
+final showOnboardingProvider = StateProvider<bool>((ref) => false);
 
 // ── Repository Provider ───────────────────────────────────────────────────────
 final authRepositoryProvider = Provider<AuthRepository>((ref) => AuthRepository());
@@ -21,30 +22,36 @@ class AuthState {
   final AuthStatus status;
   final UserModel? user;
   final BusinessModel? activeBusiness;
+  final String? token;
   final String? error;
 
   const AuthState({
     this.status = AuthStatus.loading,
     this.user,
     this.activeBusiness,
+    this.token,
     this.error,
   });
 
   bool get isAuthenticated => user != null;
   bool get hasActiveBusiness => activeBusiness != null;
+  bool get hasValidToken => token != null && token!.isNotEmpty;
 
   AuthState copyWith({
     AuthStatus? status,
     UserModel? user,
     BusinessModel? activeBusiness,
+    String? token,
     String? error,
     bool clearError = false,
     bool clearBusiness = false,
+    bool clearToken = false,
   }) {
     return AuthState(
       status: status ?? this.status,
       user: user ?? this.user,
       activeBusiness: clearBusiness ? null : (activeBusiness ?? this.activeBusiness),
+      token: clearToken ? null : (token ?? this.token),
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -75,17 +82,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
 
+      final token = await TokenService.instance.getActiveToken();
+
       if (businessId != null) {
         final business = await _repo.getBusinessById(businessId);
         state = state.copyWith(
           status: AuthStatus.authenticated,
           user: user,
           activeBusiness: business,
+          token: token,
         );
       } else {
         state = state.copyWith(
           status: AuthStatus.businessNotSelected,
           user: user,
+          token: token,
         );
       }
     } catch (e) {
@@ -98,7 +109,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _restoreSession();
   }
 
-  Future<bool> login(String username, String password) async {
+  Future<bool> login(String username, String password, {bool rememberMe = true}) async {
     state = state.copyWith(status: AuthStatus.loading, clearError: true);
 
     try {
@@ -113,15 +124,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = found;
 
       await _prefs.setInt(AppConstants.prefUserId, user.id!);
+      if (rememberMe) {
+        await _prefs.setBool(AppConstants.prefRememberMe, true);
+        await _prefs.setString(AppConstants.prefSavedUsername, user.username);
+      } else {
+        await _prefs.setBool(AppConstants.prefRememberMe, false);
+        await _prefs.remove(AppConstants.prefSavedUsername);
+      }
 
       final businesses = await _repo.getBusinessesForUser(user.id!);
+      final bizId = businesses.isNotEmpty ? businesses.first.id! : 1;
+
+      // Generate cryptographically signed session token
+      final token = await TokenService.instance.generateAndSaveSessionToken(
+        userId: user.id!,
+        businessId: bizId,
+        username: user.username,
+        role: user.role,
+      );
 
       if (businesses.length == 1) {
-        await selectBusiness(businesses.first, user: user);
+        await selectBusiness(businesses.first, user: user, token: token);
       } else {
         state = state.copyWith(
           status: AuthStatus.businessNotSelected,
           user: user,
+          token: token,
         );
       }
       return true;
@@ -152,7 +180,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return false;
       }
 
-      final user = await _repo.registerUser(
+      await _repo.registerUser(
         username: username,
         password: password,
         fullName: fullName,
@@ -174,13 +202,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> selectBusiness(BusinessModel business, {UserModel? user}) async {
+  Future<void> selectBusiness(BusinessModel business, {UserModel? user, String? token}) async {
     final u = user ?? state.user!;
     await _prefs.setInt(AppConstants.prefBusinessId, business.id!);
+    final activeToken = token ?? await TokenService.instance.generateAndSaveSessionToken(
+      userId: u.id!,
+      businessId: business.id!,
+      username: u.username,
+      role: u.role,
+    );
     state = state.copyWith(
       status: AuthStatus.authenticated,
       user: u,
       activeBusiness: business,
+      token: activeToken,
     );
   }
 
@@ -257,6 +292,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _clearSession() async {
+    await TokenService.instance.clearSession();
     await _prefs.remove(AppConstants.prefUserId);
     await _prefs.remove(AppConstants.prefBusinessId);
     state = const AuthState(status: AuthStatus.unauthenticated);
@@ -294,4 +330,9 @@ final userBusinessesProvider = FutureProvider.autoDispose<List<BusinessModel>>((
   final user = ref.watch(currentUserProvider);
   if (user == null) return [];
   return repo.getBusinessesForUser(user.id!);
+});
+
+/// Active session token provider
+final authTokenProvider = Provider<String?>((ref) {
+  return ref.watch(authProvider).token;
 });

@@ -70,7 +70,9 @@ class Product {
         id: map['id'] as int?,
         name: map['name'] as String,
         sku: map['sku'] as String?,
-        barcode: map['barcode'] as String?,
+        barcode: (map['barcode'] as String?)?.trim().isNotEmpty == true
+            ? (map['barcode'] as String)
+            : (map['sku'] as String?),
         description: map['description'] as String?,
         categoryId: map['category_id'] as int?,
         categoryName: map['category_name'] as String?,
@@ -104,7 +106,7 @@ class Product {
         if (id != null) 'id': id,
         'name': name,
         'sku': sku,
-        'barcode': barcode,
+        'barcode': (barcode != null && barcode!.trim().isNotEmpty) ? barcode : sku,
         'description': description,
         'category_id': categoryId,
         'subcategory_id': subcategoryId,

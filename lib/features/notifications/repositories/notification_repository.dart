@@ -1,7 +1,6 @@
-// lib/features/notifications/repositories/notification_repository.dart
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/database/database_helper.dart';
 import '../models/notification_item_model.dart';
@@ -201,25 +200,38 @@ class NotificationRepository {
         }
       }
 
-      // 3. Scan System Welcome / Daily Check
-      final totalNotifs = await db.rawQuery(
-        'SELECT COUNT(*) as count FROM ${AppConstants.tblNotifications} WHERE business_id = ?',
-        [businessId],
-      );
-      final count = (totalNotifs.first['count'] as num?)?.toInt() ?? 0;
+      // 3. Scan System Welcome / Daily Check - Generated ONCE per business
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final welcomeKey = 'welcome_notif_created_biz_$businessId';
+        final hasCreatedWelcome = prefs.getBool(welcomeKey) ?? false;
 
-      if (count == 0) {
-        await insertNotification(
-          NotificationItemModel.now(
-            businessId: businessId,
-            title: 'Welcome to Notifications Center',
-            message: 'All your automated inventory alerts, customer payment dues, and system updates will appear here in real-time.',
-            type: SystemNotificationType.system,
-            priority: SystemNotificationPriority.low,
-            now: now,
-          ),
-        );
-        generatedCount++;
+        if (!hasCreatedWelcome) {
+          final welcomeCheck = await db.rawQuery(
+            'SELECT COUNT(*) as count FROM ${AppConstants.tblNotifications} WHERE business_id = ? AND title = ?',
+            [businessId, 'Welcome to Notifications Center'],
+          );
+          final welcomeCount = (welcomeCheck.first['count'] as num?)?.toInt() ?? 0;
+
+          if (welcomeCount == 0) {
+            await insertNotification(
+              NotificationItemModel.now(
+                businessId: businessId,
+                title: 'Welcome to Notifications Center',
+                message: 'All your automated inventory alerts, customer payment dues, and system updates will appear here in real-time.',
+                type: SystemNotificationType.system,
+                priority: SystemNotificationPriority.low,
+                now: now,
+              ),
+            );
+            generatedCount++;
+          }
+          await prefs.setBool(welcomeKey, true);
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('Error checking welcome notification preference: $e');
+        }
       }
     } catch (e) {
       if (kDebugMode) {

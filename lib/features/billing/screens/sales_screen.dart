@@ -363,8 +363,8 @@ class _SalesList extends ConsumerWidget {
       final sale = await ref.read(saleDetailProvider(saleId).future);
       if (context.mounted) Navigator.pop(context);
 
-      if (sale != null) {
-        await InvoiceService.generateAndPrintInvoice(business: business, sale: sale);
+      if (sale != null && context.mounted) {
+        await InvoiceService.generateAndPrintInvoice(context: context, business: business, sale: sale);
       } else {
         AppAlert.error(ref, 'Could not load sale details');
       }
@@ -506,20 +506,25 @@ class _EmptySales extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.05), shape: BoxShape.circle),
-            child: Icon(Icons.history_rounded, size: 80, color: AppColors.primary.withValues(alpha: 0.2)),
-          ),
-          const SizedBox(height: 24),
-          const Text('No Sales Found', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
-          const SizedBox(height: 8),
-          const Text('Transactions you make will appear here.', style: TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w500)),
-        ],
-      ).animate().fadeIn().scale(begin: const Offset(0.9, 0.9)),
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.05), shape: BoxShape.circle),
+              child: Icon(Icons.history_rounded, size: 56, color: AppColors.primary.withValues(alpha: 0.2)),
+            ),
+            const SizedBox(height: 16),
+            const Text('No Sales Found', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+            const SizedBox(height: 6),
+            const Text('Transactions you make will appear here.', style: TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w500), textAlign: TextAlign.center),
+          ],
+        ).animate().fadeIn().scale(begin: const Offset(0.9, 0.9)),
+      ),
     );
   }
 }
+

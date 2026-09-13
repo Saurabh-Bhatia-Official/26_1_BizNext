@@ -1,5 +1,6 @@
 // lib/features/inventory/screens/inventory_screen.dart
 
+import 'dart:math' as math;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -14,24 +15,20 @@ import '../providers/inventory_provider.dart';
 import 'add_edit_product_screen.dart';
 import '../../../core/widgets/category_manager_screen.dart';
 import '../../../core/providers/notification_provider.dart';
+import '../../../core/services/rbac_service.dart';
+import '../../../core/providers/screen_layout_provider.dart';
 
-class InventoryScreen extends ConsumerStatefulWidget {
+class InventoryScreen extends ConsumerWidget {
   const InventoryScreen({super.key});
 
   @override
-  ConsumerState<InventoryScreen> createState() => _InventoryScreenState();
-}
-
-class _InventoryScreenState extends ConsumerState<InventoryScreen> {
-  LayoutMode _layoutMode = LayoutMode.grid;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = ref.watch(themeModeProvider) == ThemeMode.dark;
     final filter = ref.watch(inventoryFilterProvider);
     final productsAsync = ref.watch(productsProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
     final statsAsync = ref.watch(inventoryStatsProvider);
+    final layoutMode = ref.watch(screenLayoutProvider('inventory'));
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -43,8 +40,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
               isDark: isDark,
               filter: filter,
               ref: ref,
-              layoutMode: _layoutMode,
-              onLayoutChanged: (m) => setState(() => _layoutMode = m),
+              layoutMode: layoutMode,
+              onLayoutChanged: (m) => ref.read(screenLayoutProvider('inventory').notifier).setLayout(m),
             ),
           ),
           SliverPadding(
@@ -72,7 +69,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             sliver: productsAsync.when(
               data: (products) => products.isEmpty
                   ? SliverFillRemaining(child: _EmptyState(isDark: isDark))
-                  : (_layoutMode == LayoutMode.grid
+                  : (layoutMode == LayoutMode.grid
                       ? _ProductGrid(products: products, isDark: isDark)
                       : SliverToBoxAdapter(
                           child: _ProductTable(products: products, isDark: isDark),
@@ -201,13 +198,17 @@ class _InventoryHeaderState extends State<_InventoryHeader> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.inventory_2_rounded, size: 14, color: AppColors.primary),
-                        SizedBox(width: 8),
-                        Text(
-                          'Transaction-driven stock ledger, price levels & batch tracking',
-                          style: TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                        const Icon(Icons.inventory_2_rounded, size: 14, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        const Flexible(
+                          child: Text(
+                            'Transaction-driven stock ledger, price levels & batch tracking',
+                            style: TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
                       ],
                     ),
@@ -630,14 +631,19 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                           _confirmDelete(context, ref);
                         }
                       },
-                      itemBuilder: (ctx) => [
-                        const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_rounded, size: 18), SizedBox(width: 12), Text('Edit')])),
-                        const PopupMenuItem(value: 'ledger', child: Row(children: [Icon(Icons.receipt_long_rounded, size: 18, color: AppColors.primary), SizedBox(width: 12), Text('Stock Ledger')])),
-                        const PopupMenuItem(value: 'adjust', child: Row(children: [Icon(Icons.tune_rounded, size: 18, color: Colors.orange), SizedBox(width: 12), Text('Stock Adjustment')])),
-                        const PopupMenuItem(value: 'duplicate', child: Row(children: [Icon(Icons.copy_rounded, size: 18), SizedBox(width: 12), Text('Duplicate')])),
-                        const PopupMenuDivider(),
-                        const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error), SizedBox(width: 12), Text('Archive', style: TextStyle(color: AppColors.error))])),
-                      ],
+                      itemBuilder: (ctx) {
+                        final rbac = ref.read(rbacProvider);
+                        return [
+                          const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit_rounded, size: 18), SizedBox(width: 12), Text('Edit')])),
+                          const PopupMenuItem(value: 'ledger', child: Row(children: [Icon(Icons.receipt_long_rounded, size: 18, color: AppColors.primary), SizedBox(width: 12), Text('Stock Ledger')])),
+                          const PopupMenuItem(value: 'adjust', child: Row(children: [Icon(Icons.tune_rounded, size: 18, color: Colors.orange), SizedBox(width: 12), Text('Stock Adjustment')])),
+                          const PopupMenuItem(value: 'duplicate', child: Row(children: [Icon(Icons.copy_rounded, size: 18), SizedBox(width: 12), Text('Duplicate')])),
+                          if (rbac.hasPermission(AppPermission.deleteData)) ...[
+                            const PopupMenuDivider(),
+                            const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error), SizedBox(width: 12), Text('Archive', style: TextStyle(color: AppColors.error))])),
+                          ],
+                        ];
+                      },
                     ),
                   ),
                 ],
@@ -810,28 +816,33 @@ class _ProductTableState extends ConsumerState<_ProductTable> {
         border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder, width: 1.5),
       ),
       clipBehavior: Clip.antiAlias,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          sortColumnIndex: _sortColumn,
-          sortAscending: _sortAscending,
-          headingRowColor: WidgetStateProperty.all(
-            isDark ? Colors.white.withValues(alpha: 0.04) : AppColors.lightBg,
-          ),
-          headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.3),
-          dataTextStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-          dividerThickness: 1,
-          columnSpacing: 20,
-          columns: [
-            DataColumn(label: const Text('Product Name'), onSort: _onSort),
-            DataColumn(label: const Text('SKU / Code'), onSort: _onSort),
-            DataColumn(label: const Text('Category'), onSort: _onSort),
-            DataColumn(label: const Text('Cost (WAC)'), numeric: true, onSort: _onSort),
-            DataColumn(label: const Text('Selling Price'), numeric: true, onSort: _onSort),
-            DataColumn(label: const Text('Stock Level'), numeric: true, onSort: _onSort),
-            const DataColumn(label: Text('Status')),
-            const DataColumn(label: Text('Actions')),
-          ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final minTableWidth = math.max(constraints.maxWidth, 950.0);
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: minTableWidth),
+              child: DataTable(
+                sortColumnIndex: _sortColumn,
+                sortAscending: _sortAscending,
+                headingRowColor: WidgetStateProperty.all(
+                  isDark ? Colors.white.withValues(alpha: 0.04) : AppColors.lightBg,
+                ),
+                headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                dataTextStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                dividerThickness: 1,
+                columnSpacing: 20,
+                columns: [
+                  DataColumn(label: const Text('Product Name'), onSort: _onSort),
+                  DataColumn(label: const Text('SKU / Code'), onSort: _onSort),
+                  DataColumn(label: const Text('Category'), onSort: _onSort),
+                  DataColumn(label: const Text('Cost (WAC)'), numeric: true, onSort: _onSort),
+                  DataColumn(label: const Text('Selling Price'), numeric: true, onSort: _onSort),
+                  DataColumn(label: const Text('Stock Level'), numeric: true, onSort: _onSort),
+                  const DataColumn(label: Text('Status')),
+                  const DataColumn(label: Text('Actions')),
+                ],
           rows: _sorted.asMap().entries.map((entry) {
             final i = entry.key;
             final p = entry.value;
@@ -897,6 +908,9 @@ class _ProductTableState extends ConsumerState<_ProductTable> {
           }).toList(),
         ),
       ),
+    );
+  },
+),
     );
   }
 }
@@ -1012,6 +1026,7 @@ void _showStockAdjustmentDialog(BuildContext context, WidgetRef ref, Product pro
                 TextFormField(
                   controller: reasonCtrl,
                   maxLines: 2,
+                  keyboardType: TextInputType.multiline,
                   decoration: InputDecoration(
                     labelText: 'Mandatory Audit Note *',
                     hintText: 'Describe why this adjustment is being made...',

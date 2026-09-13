@@ -6,6 +6,8 @@ import '../../auth/providers/auth_provider.dart';
 import '../models/purchase_model.dart';
 import '../repositories/purchase_repository.dart';
 import '../../../core/database/database_providers.dart';
+import '../services/purchase_calculation_service.dart';
+import '../../notifications/providers/notifications_provider.dart';
 
 final purchaseRepositoryProvider = Provider<PurchaseRepository>((ref) => PurchaseRepository());
 
@@ -34,6 +36,7 @@ class PurchaseFormState {
   final bool isProcessing;
   final int? editingPurchaseId;
   final DateTime date;
+  final String? lastError;
 
   PurchaseFormState({
     this.items = const [],
@@ -48,12 +51,23 @@ class PurchaseFormState {
     this.isProcessing = false,
     this.editingPurchaseId,
     DateTime? date,
+    this.lastError,
   }) : date = date ?? DateTime.now();
 
-  double get subtotal => items.fold(0, (sum, item) => sum + item.total);
-  double get totalGst => items.fold(0, (sum, item) => sum + (item.total * (item.gstPercent / 100)));
-  double get grandTotal => subtotal + totalGst - discount;
-  double get balanceDue => grandTotal - paidAmount;
+  PurchaseCalculationSummary get summary => PurchaseCalculationService.calculateSummary(
+        items: items,
+        billDiscount: discount,
+        paidAmount: paidAmount,
+      );
+
+  double get subtotal => summary.grossSubtotal;
+  double get lineDiscountTotal => summary.lineDiscountTotal;
+  double get totalDiscount => summary.totalDiscount;
+  double get taxableAmount => summary.taxableAmount;
+  double get totalGst => summary.totalGst;
+  double get grandTotal => summary.grandTotal;
+  double get balanceDue => summary.balanceDue;
+  String get paymentStatus => summary.paymentStatus;
 
   PurchaseFormState copyWith({
     List<PurchaseItemModel>? items,
@@ -68,6 +82,8 @@ class PurchaseFormState {
     bool? isProcessing,
     int? editingPurchaseId,
     DateTime? date,
+    String? lastError,
+    bool clearError = false,
   }) {
     return PurchaseFormState(
       items: items ?? this.items,
@@ -82,6 +98,7 @@ class PurchaseFormState {
       isProcessing: isProcessing ?? this.isProcessing,
       editingPurchaseId: editingPurchaseId ?? this.editingPurchaseId,
       date: date ?? this.date,
+      lastError: clearError ? null : (lastError ?? this.lastError),
     );
   }
 }
@@ -107,32 +124,40 @@ class PurchaseFormNotifier extends StateNotifier<PurchaseFormState> {
   }
 
   void addItem(PurchaseItemModel item) {
-    state = state.copyWith(items: [...state.items, item]);
+    final newState = state.copyWith(items: [...state.items, item]);
+    state = newState.copyWith(paidAmount: newState.grandTotal);
   }
 
   void removeItem(int productId) {
-    state = state.copyWith(items: state.items.where((i) => i.productId != productId).toList());
+    final newState = state.copyWith(items: state.items.where((i) => i.productId != productId).toList());
+    state = newState.copyWith(paidAmount: newState.grandTotal);
   }
 
-  void updateItem(int productId, {double? qty, double? price, double? gst}) {
-    state = state.copyWith(
-      items: state.items.map((i) {
-        if (i.productId == productId) {
-          final newQty = qty ?? i.quantity;
-          final newPrice = price ?? i.purchasePrice;
-          final newGst = gst ?? i.gstPercent;
-          return PurchaseItemModel(
-            productId: i.productId,
-            productName: i.productName,
-            quantity: newQty,
-            purchasePrice: newPrice,
-            gstPercent: newGst,
-            total: newQty * newPrice,
-          );
-        }
-        return i;
-      }).toList(),
-    );
+  void updateItem(int productId, {double? qty, double? price, double? gst, double? discount}) {
+    final newItems = state.items.map((i) {
+      if (i.productId == productId) {
+        final newQty = qty ?? i.quantity;
+        final newPrice = price ?? i.purchasePrice;
+        final newGst = gst ?? i.gstPercent;
+        final newDiscount = discount ?? i.discount;
+        final newGross = newQty * newPrice;
+        final newTaxable = (newGross - newDiscount).clamp(0.0, double.infinity);
+        return PurchaseItemModel(
+          productId: i.productId,
+          productName: i.productName,
+          quantity: newQty,
+          purchasePrice: newPrice,
+          discount: newDiscount,
+          taxableAmount: newTaxable,
+          gstPercent: newGst,
+          gstAmount: newTaxable * (newGst / 100),
+          total: newGross,
+        );
+      }
+      return i;
+    }).toList();
+    final newState = state.copyWith(items: newItems);
+    state = newState.copyWith(paidAmount: newState.grandTotal);
   }
 
   void setDate(DateTime date) {
@@ -148,7 +173,8 @@ class PurchaseFormNotifier extends StateNotifier<PurchaseFormState> {
   }
 
   void setDiscount(double amount) {
-    state = state.copyWith(discount: amount);
+    final newState = state.copyWith(discount: amount);
+    state = newState.copyWith(paidAmount: newState.grandTotal);
   }
 
   void setPaidAmount(double amount) {
@@ -178,12 +204,14 @@ class PurchaseFormNotifier extends StateNotifier<PurchaseFormState> {
       supplierId: state.supplierId,
       supplierName: state.supplierName,
       subtotal: state.subtotal,
-      discount: state.discount,
+      discount: state.totalDiscount,
+      taxableAmount: state.taxableAmount,
       gstAmount: state.totalGst,
       grandTotal: state.grandTotal,
       paidAmount: state.paidAmount,
       balanceDue: state.balanceDue,
       paymentMode: state.paymentMode,
+      paymentStatus: state.paymentStatus,
       accountId: state.selectedAccountId,
       notes: state.notes,
       date: state.date,
@@ -198,11 +226,14 @@ class PurchaseFormNotifier extends StateNotifier<PurchaseFormState> {
       }
       
       await repo.recordPurchase(purchase);
+      _ref.read(notificationsProvider.notifier).scanAndGenerateAlerts();
       
       reset();
       return true;
     } catch (e) {
+      final msg = e.toString().replaceAll('Exception: ', '');
       if (kDebugMode) debugPrint('Error saving purchase: $e');
+      state = state.copyWith(lastError: msg);
       return false;
     } finally {
       state = state.copyWith(isProcessing: false);

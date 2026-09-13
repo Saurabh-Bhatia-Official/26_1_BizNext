@@ -16,6 +16,7 @@ import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/screens/business_selector_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/splash_screen.dart';
+import 'features/onboarding/screens/onboarding_tutorial_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +51,7 @@ class BizNextApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final authState = ref.watch(authStateProvider);
     final isSplashDone = ref.watch(splashCompleteProvider);
+    final showOnboarding = ref.watch(showOnboardingProvider);
 
     return MaterialApp(
       title: 'BizNext',
@@ -57,7 +59,9 @@ class BizNextApp extends ConsumerWidget {
       themeMode: themeMode,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      home: isSplashDone ? _getHome(authState) : const SplashScreen(),
+      home: showOnboarding
+          ? const OnboardingTutorialScreen()
+          : (isSplashDone ? _getHome(authState) : const SplashScreen()),
     );
   }
 

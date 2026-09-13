@@ -501,7 +501,8 @@ class _SalesChartPanel extends ConsumerWidget {
     final salesAsync = ref.watch(salesStatsProvider);
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      height: 340,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCard : Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -535,9 +536,8 @@ class _SalesChartPanel extends ConsumerWidget {
               _ChartToggle(),
             ],
           ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 220,
+          const SizedBox(height: 16),
+          Expanded(
             child: salesAsync.when(
               data: (sales) {
                 if (sales.last7DaysSales.every((e) => e == 0)) {
@@ -579,15 +579,22 @@ class _SalesChartPanel extends ConsumerWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              getTitlesWidget: (val, _) {
+              interval: 1,
+              reservedSize: 28,
+              getTitlesWidget: (val, meta) {
+                final intVal = val.toInt();
+                if (val != intVal.toDouble() || intVal < 0 || intVal > 6) {
+                  return const SizedBox.shrink();
+                }
                 final now = DateTime.now();
-                final date = now.subtract(Duration(days: 6 - val.toInt()));
+                final date = now.subtract(Duration(days: 6 - intVal));
                 final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                return Padding(
-                  padding: const EdgeInsets.only(top: 12),
+                return SideTitleWidget(
+                  axisSide: meta.axisSide,
+                  space: 8,
                   child: Text(
                     days[date.weekday - 1],
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.textMuted),
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.textMuted),
                   ),
                 );
               },
@@ -606,12 +613,14 @@ class _SalesChartPanel extends ConsumerWidget {
           ),
         ),
         borderData: FlBorderData(show: false),
+        minY: 0,
         maxY: maxY,
         lineBarsData: [
           LineChartBarData(
             spots: spots,
             isCurved: true,
             curveSmoothness: 0.4,
+            preventCurveOverShooting: true,
             color: AppColors.primary,
             barWidth: 5,
             isStrokeCapRound: true,
@@ -696,7 +705,8 @@ class _PaymentDonutPanel extends ConsumerWidget {
     final reportAsync = ref.watch(salesReportProvider);
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      height: 340,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCard : Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -730,9 +740,8 @@ class _PaymentDonutPanel extends ConsumerWidget {
               Icon(Icons.pie_chart_rounded, size: 20, color: AppColors.textMuted.withValues(alpha: 0.5)),
             ],
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 220,
+          const SizedBox(height: 16),
+          Expanded(
             child: reportAsync.when(
               data: (report) {
                 if (report.paymentModeBreakdown.isEmpty) {
@@ -779,9 +788,11 @@ class _DonutChart extends StatelessWidget {
       final percentage = (entry.value / total) * 100;
       return PieChartSectionData(
         value: entry.value,
-        color: _modeColors[entry.key] ?? AppColors.textMuted,
-        radius: 45,
+        color: _modeColors[entry.key] ?? AppColors.primary,
+        radius: 36,
+        showTitle: percentage >= 5,
         title: '${percentage.toStringAsFixed(0)}%',
+        titlePositionPercentageOffset: 0.55,
         titleStyle: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w900,
@@ -791,31 +802,39 @@ class _DonutChart extends StatelessWidget {
     }).toList();
 
     final legend = data.entries.map((entry) {
-      final color = _modeColors[entry.key] ?? AppColors.textMuted;
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 6),
+      final color = _modeColors[entry.key] ?? AppColors.primary;
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: isDark ? 0.12 : 0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
         child: Row(
           children: [
             Container(
-              width: 10,
-              height: 10,
+              width: 8,
+              height: 8,
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(3),
+                shape: BoxShape.circle,
               ),
             ),
             const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                entry.key,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMuted),
-                overflow: TextOverflow.ellipsis,
+            Text(
+              entry.key,
+              style: TextStyle(
+                fontSize: 12, 
+                fontWeight: FontWeight.w800, 
+                color: isDark ? Colors.white : AppColors.textLight,
               ),
             ),
+            const Spacer(),
             Text(
               CurrencyFormatter.format(entry.value),
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w900,
                 color: isDark ? Colors.white : AppColors.textLight,
               ),
@@ -827,23 +846,26 @@ class _DonutChart extends StatelessWidget {
 
     return Row(
       children: [
-        Flexible(
-          flex: 2,
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: PieChart(
-              PieChartData(
-                sections: sections,
-                centerSpaceRadius: 30,
-                sectionsSpace: 2,
-                startDegreeOffset: -90,
+        Expanded(
+          flex: 5,
+          child: Center(
+            child: SizedBox(
+              height: 180,
+              width: 180,
+              child: PieChart(
+                PieChartData(
+                  sections: sections,
+                  centerSpaceRadius: 38,
+                  sectionsSpace: 3,
+                  startDegreeOffset: -90,
+                ),
               ),
             ),
           ),
         ),
         const SizedBox(width: 16),
         Expanded(
-          flex: 3,
+          flex: 6,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: legend,

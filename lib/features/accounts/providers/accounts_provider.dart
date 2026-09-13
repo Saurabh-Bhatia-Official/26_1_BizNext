@@ -3,6 +3,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/utils/currency_formatter.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/account_model.dart';
 import '../models/account_summary_model.dart';
@@ -108,6 +109,21 @@ class AccountsRepository {
     final result = await _db.transaction((txn) async {
       final id = await txn.insert(AppConstants.tblTransactions, transaction.toMap());
       
+      // Validate account balance for expense / debit transactions
+      if (transaction.type == AppConstants.ledgerDebit && transaction.accountId != null) {
+        final accResult = await txn.query(AppConstants.tblAccounts, where: 'id = ?', whereArgs: [transaction.accountId]);
+        if (accResult.isNotEmpty) {
+          final bal = (accResult.first['balance'] as num?)?.toDouble() ?? 0.0;
+          final name = accResult.first['name'] as String? ?? 'Account';
+          if (bal <= 0) {
+            throw Exception("Insufficient funds in account '$name': Selected account has zero balance (₹0.00).");
+          }
+          if (bal < transaction.amount) {
+            throw Exception("Insufficient funds in account '$name': Current Balance = ${CurrencyFormatter.format(bal)}, Payment Required = ${CurrencyFormatter.format(transaction.amount)}.");
+          }
+        }
+      }
+
       // Update Account Balance
       if (transaction.accountId != null) {
         final double adjustment = transaction.type == AppConstants.ledgerCredit ? transaction.amount : -transaction.amount;
@@ -314,7 +330,19 @@ class AccountsRepository {
       // Use timestamp as reference_id to link both sides
       final refId = date.millisecondsSinceEpoch ~/ 1000;
       
-      // 1. Debit from Source
+      // 1. Debit from Source (Validate balance first)
+      final sourceAccount = await txn.query(AppConstants.tblAccounts, where: 'id = ?', whereArgs: [fromAccountId]);
+      if (sourceAccount.isNotEmpty) {
+        final bal = (sourceAccount.first['balance'] as num?)?.toDouble() ?? 0.0;
+        final name = sourceAccount.first['name'] as String? ?? 'Account';
+        if (bal <= 0) {
+          throw Exception("Insufficient funds in account '$name': Selected account has zero balance (₹0.00).");
+        }
+        if (bal < amount) {
+          throw Exception("Insufficient funds in account '$name': Current Balance = ${CurrencyFormatter.format(bal)}, Transfer Required = ${CurrencyFormatter.format(amount)}.");
+        }
+      }
+
       await txn.rawUpdate("UPDATE ${AppConstants.tblAccounts} SET balance = balance - ? WHERE id = ?", [amount, fromAccountId]);
       await txn.insert(AppConstants.tblLedger, {
         'business_id': businessId,

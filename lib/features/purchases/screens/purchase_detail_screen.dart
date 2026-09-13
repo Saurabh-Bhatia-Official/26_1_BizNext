@@ -185,7 +185,9 @@ class _PurchaseActionButtonsState extends ConsumerState<_PurchaseActionButtons> 
                 final business = ref.read(currentBusinessProvider);
                 if (business == null) return;
                 final p = await _loadWithItems();
+                if (!context.mounted) return;
                 await PurchaseInvoiceService.generateAndPrintPurchase(
+                  context: context,
                   business: business,
                   purchase: p,
                   templateId: _selectedTemplateId,
@@ -241,7 +243,9 @@ class _PurchaseActionButtonsState extends ConsumerState<_PurchaseActionButtons> 
             final business = ref.read(currentBusinessProvider);
             if (business == null) return;
             final p = await _loadWithItems();
+            if (!context.mounted) return;
             await PurchaseInvoiceService.generateAndPrintPurchase(
+              context: context,
               business: business,
               purchase: p,
               templateId: _selectedTemplateId,
@@ -290,12 +294,78 @@ class _DetailHeader extends StatelessWidget {
       ),
       child: Column(
         children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Purchase Status', style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: purchase.status == 'completed'
+                          ? AppColors.primary.withValues(alpha: 0.1)
+                          : Colors.orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      purchase.status.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: purchase.status == 'completed' ? AppColors.primary : Colors.orange,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text('Payment Status', style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: purchase.paymentStatus == 'paid'
+                          ? AppColors.success.withValues(alpha: 0.1)
+                          : (purchase.paymentStatus == 'partially_paid'
+                              ? Colors.orange.withValues(alpha: 0.1)
+                              : AppColors.error.withValues(alpha: 0.1)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      purchase.paymentStatus.replaceAll('_', ' ').toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: purchase.paymentStatus == 'paid'
+                            ? AppColors.success
+                            : (purchase.paymentStatus == 'partially_paid'
+                                ? Colors.orange
+                                : AppColors.error),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const Divider(height: 24),
           _infoRow('Supplier', purchase.supplierName ?? 'Direct Purchase'),
-          _infoRow('Account', purchase.accountName ?? 'Default'),
-          const Divider(height: 32),
+          _infoRow('Payment Mode', purchase.paymentMode),
+          _infoRow('Account', purchase.accountName ?? 'Default Account'),
           _infoRow('Date', DateFormatter.toDisplay(purchase.date)),
-          const Divider(height: 32),
-          _infoRow('Total Amount', CurrencyFormatter.format(purchase.grandTotal), isBold: true),
+          const Divider(height: 24),
+          _infoRow('Gross Subtotal', CurrencyFormatter.format(purchase.subtotal)),
+          if (purchase.discount > 0)
+            _infoRow('Discount', '- ${CurrencyFormatter.format(purchase.discount)}', color: AppColors.error),
+          _infoRow('Net Taxable Value', CurrencyFormatter.format(purchase.taxableAmount)),
+          _infoRow('Total GST (ITC)', CurrencyFormatter.format(purchase.gstAmount)),
+          const Divider(height: 24),
+          _infoRow('Grand Total', CurrencyFormatter.format(purchase.grandTotal), isBold: true, color: AppColors.primary),
           _infoRow('Paid Amount', CurrencyFormatter.format(purchase.paidAmount), color: AppColors.success),
           _infoRow('Balance Due', CurrencyFormatter.format(purchase.balanceDue), color: purchase.balanceDue > 0 ? AppColors.error : null, isBold: true),
         ],

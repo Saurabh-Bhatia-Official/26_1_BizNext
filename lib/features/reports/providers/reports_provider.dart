@@ -335,6 +335,38 @@ class ReportsRepository {
       ORDER BY p.name ASC
     ''', [filter.startDate.toIso8601String(), filter.endDate.toIso8601String(), businessId]);
   }
+
+  Future<List<Map<String, dynamic>>> getStockLedgerReport(int businessId, ReportFilter filter, {int? productId}) async {
+    final whereArgs = <dynamic>[businessId, filter.startDate.toIso8601String(), filter.endDate.toIso8601String()];
+    String productClause = "";
+    if (productId != null && productId > 0) {
+      productClause = "AND it.product_id = ?";
+      whereArgs.add(productId);
+    }
+
+    return await _db.rawQuery('''
+      SELECT 
+        it.id,
+        it.product_id,
+        p.name as product_name,
+        p.sku as product_sku,
+        p.unit as product_unit,
+        it.transaction_type,
+        it.reference_number,
+        it.quantity,
+        it.unit_cost,
+        it.opening_stock,
+        it.closing_stock,
+        it.created_date,
+        it.remarks,
+        w.name as warehouse_name
+      FROM ${AppConstants.tblInventoryTransactions} it
+      JOIN ${AppConstants.tblProducts} p ON it.product_id = p.id
+      LEFT JOIN ${AppConstants.tblWarehouses} w ON it.warehouse_id = w.id
+      WHERE p.business_id = ? AND it.created_date BETWEEN ? AND ? $productClause
+      ORDER BY it.created_date DESC, it.id DESC
+    ''', whereArgs);
+  }
 }
 
 final reportsRepositoryProvider = Provider<ReportsRepository>((ref) => ReportsRepository());
@@ -414,4 +446,11 @@ final productMovementAnalysisProvider = FutureProvider.autoDispose<List<Map<Stri
   final businessId = ref.watch(activeBusinessIdProvider);
   final filter = ref.watch(reportFilterProvider);
   return ref.watch(reportsRepositoryProvider).getProductMovementAnalysis(businessId, filter);
+});
+
+final stockLedgerReportProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  ref.watch(databaseVersionProvider);
+  final businessId = ref.watch(activeBusinessIdProvider);
+  final filter = ref.watch(reportFilterProvider);
+  return ref.watch(reportsRepositoryProvider).getStockLedgerReport(businessId, filter);
 });

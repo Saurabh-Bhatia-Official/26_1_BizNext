@@ -114,6 +114,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               child: Row(
                 children: [
                   _ReportTypeChip(label: 'Sales & Revenue', value: 'sales', selectedValue: _selectedReportType, icon: Icons.insights_rounded, isDark: isDark, onChanged: (v) => setState(() => _selectedReportType = v)),
+                  _ReportTypeChip(label: 'Stock Ledger', value: 'stock_ledger', selectedValue: _selectedReportType, icon: Icons.history_edu_rounded, isDark: isDark, onChanged: (v) => setState(() => _selectedReportType = v)),
                   _ReportTypeChip(label: 'Sales vs Purchases', value: 'sales_vs_purchases', selectedValue: _selectedReportType, icon: Icons.compare_arrows_rounded, isDark: isDark, onChanged: (v) => setState(() => _selectedReportType = v)),
                   _ReportTypeChip(label: 'Sales by Category', value: 'category_sales', selectedValue: _selectedReportType, icon: Icons.category_rounded, isDark: isDark, onChanged: (v) => setState(() => _selectedReportType = v)),
                   _ReportTypeChip(label: 'Customer Types', value: 'customer_type_sales', selectedValue: _selectedReportType, icon: Icons.groups_rounded, isDark: isDark, onChanged: (v) => setState(() => _selectedReportType = v)),
@@ -183,6 +184,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
           csvContent += "Supplier Name,Phone,Bills Count,Total Purchases,Total Paid,Balance Due\n";
           for (var r in list) {
             csvContent += "${r['supplier_name']},${r['supplier_phone'] ?? ''},${r['purchase_count']},${r['total_purchases']},${r['total_paid']},${r['total_balance_due']}\n";
+          }
+        } else if (_selectedReportType == 'stock_ledger') {
+          final list = await ref.read(reportsRepositoryProvider).getStockLedgerReport(businessId, filter);
+          csvContent += "Date,Product Name,SKU,Transaction Type,Reference No,Opening Stock,Quantity,Closing Stock,Unit Cost,Remarks\n";
+          for (var r in list) {
+            csvContent += "${r['created_date']},${r['product_name']},${r['product_sku'] ?? ''},${r['transaction_type']},${r['reference_number']},${r['opening_stock']},${r['quantity']},${r['closing_stock']},${r['unit_cost']},\"${r['remarks'] ?? ''}\"\n";
           }
         } else if (_selectedReportType == 'inventory_movement') {
           final list = await ref.read(reportsRepositoryProvider).getProductMovementAnalysis(businessId, filter);
@@ -285,7 +292,8 @@ class _InteractiveChartPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      height: 340,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCard : Colors.white,
         borderRadius: BorderRadius.circular(28),
@@ -308,27 +316,33 @@ class _InteractiveChartPanel extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _getChartTitle(),
-                    style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: -0.5),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _getChartSubtitle(),
-                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted, fontWeight: FontWeight.w600),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _getChartTitle(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: -0.5),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _getChartSubtitle(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 12),
               _buildModeButtons(),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           // Chart Canvas
-          SizedBox(
-            height: 240,
+          Expanded(
             child: _buildChartContent(ref),
           ),
         ],
@@ -594,6 +608,7 @@ class _InteractiveChartPanel extends ConsumerWidget {
               ),
             ),
             borderData: FlBorderData(show: false),
+            minY: 0,
             lineTouchData: LineTouchData(
               touchTooltipData: LineTouchTooltipData(
                 getTooltipColor: (_) => isDark ? AppColors.darkSurface : Colors.black87,
@@ -614,6 +629,7 @@ class _InteractiveChartPanel extends ConsumerWidget {
                 spots: spots,
                 isCurved: true,
                 curveSmoothness: 0.35,
+                preventCurveOverShooting: true,
                 color: AppColors.primary,
                 barWidth: 3.5,
                 isStrokeCapRound: true,
@@ -799,6 +815,7 @@ class _InteractiveChartPanel extends ConsumerWidget {
               ),
             ),
             borderData: FlBorderData(show: false),
+            minY: 0,
             lineTouchData: LineTouchData(
               handleBuiltInTouches: true,
               touchTooltipData: LineTouchTooltipData(
@@ -818,6 +835,7 @@ class _InteractiveChartPanel extends ConsumerWidget {
               LineChartBarData(
                 spots: salesSpots,
                 isCurved: true,
+                preventCurveOverShooting: true,
                 color: AppColors.primary,
                 barWidth: 3,
                 dotData: const FlDotData(show: false),
@@ -825,6 +843,7 @@ class _InteractiveChartPanel extends ConsumerWidget {
               LineChartBarData(
                 spots: purchaseSpots,
                 isCurved: true,
+                preventCurveOverShooting: true,
                 color: Colors.amber,
                 barWidth: 3,
                 dotData: const FlDotData(show: false),
@@ -1154,7 +1173,7 @@ class _InteractiveChartPanel extends ConsumerWidget {
                         Expanded(
                           child: Text(e.key, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis),
                         ),
-                        Text('₹${CurrencyFormatter.format(e.value)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                        Text(CurrencyFormatter.format(e.value), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
                       ],
                     ),
                   );
@@ -1475,6 +1494,71 @@ class _ReportBreakdownSection extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
       );
+    } else if (reportType == 'stock_ledger') {
+      final ledgerAsync = ref.watch(stockLedgerReportProvider);
+      return ledgerAsync.when(
+        data: (list) {
+          double totalInward = 0;
+          double totalOutward = 0;
+
+          for (var item in list) {
+            final type = item['transaction_type'] as String? ?? '';
+            final qty = (item['quantity'] as num?)?.toDouble() ?? 0.0;
+            if (type == 'PURCHASE' || type == 'SALE_RETURN' || (type == 'STOCK_ADJUSTMENT' && qty > 0)) {
+              totalInward += qty.abs();
+            } else {
+              totalOutward += qty.abs();
+            }
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Stock Ledger & Inventory Audit Trail', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _StatCard(label: 'Total Movements', value: '${list.length}', icon: Icons.history_rounded, color: AppColors.primary),
+                  _StatCard(label: 'Total Stock Inward', value: '+${totalInward.toStringAsFixed(1)}', icon: Icons.add_circle_outline_rounded, color: AppColors.success),
+                  _StatCard(label: 'Total Stock Outward', value: '-${totalOutward.toStringAsFixed(1)}', icon: Icons.remove_circle_outline_rounded, color: AppColors.error),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Text('Chronological Stock Movement Log (${list.length} Records)', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              if (list.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(
+                    child: Text('No stock movement records found for this period.', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+                  ),
+                )
+              else
+                ...list.map((r) {
+                  final type = r['transaction_type'] as String? ?? 'MOVEMENT';
+                  final qty = (r['quantity'] as num?)?.toDouble() ?? 0.0;
+                  final openStock = (r['opening_stock'] as num?)?.toDouble() ?? 0.0;
+                  final closeStock = (r['closing_stock'] as num?)?.toDouble() ?? 0.0;
+                  final dtStr = r['created_date'] as String?;
+                  final dt = dtStr != null ? DateTime.tryParse(dtStr) ?? DateTime.now() : DateTime.now();
+
+                  final isInward = type == 'PURCHASE' || type == 'SALE_RETURN' || (type == 'STOCK_ADJUSTMENT' && qty > 0);
+
+                  return _ReportListTile(
+                    title: r['product_name'] as String? ?? 'Product',
+                    subtitle: 'Ref: ${r['reference_number']} • Opening: ${openStock.toStringAsFixed(1)} ➔ Closing: ${closeStock.toStringAsFixed(1)} • ${DateFormatter.toDisplay(dt)}',
+                    trailing: '${isInward ? "+" : "-"}${qty.abs().toStringAsFixed(1)} ${r['product_unit'] ?? "pcs"}',
+                    tag: type.replaceAll('_', ' '),
+                  );
+                }),
+            ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error loading stock ledger: $e')),
+      );
     } else if (reportType == 'category_sales') {
       final catAsync = ref.watch(categorySalesProvider);
       return catAsync.when(
@@ -1754,7 +1838,15 @@ class _ReportDetailsRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.w600, color: isBold ? null : AppColors.textMuted)),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.w600, color: isBold ? null : AppColors.textMuted),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 12),
           Text(
             value,
             style: GoogleFonts.outfit(

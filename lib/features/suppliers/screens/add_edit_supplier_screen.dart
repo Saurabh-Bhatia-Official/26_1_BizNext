@@ -86,202 +86,199 @@ class _AddEditSupplierScreenState extends ConsumerState<AddEditSupplierScreen> {
           backgroundColor: Colors.transparent,
           centerTitle: true,
         ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                _FormCard(
-                  title: 'Supplier & Business Profile',
-                  isDark: isDark,
-                  children: [
-                    _SupplierField(
-                      controller: _nameCtrl,
-                      label: 'Supplier Display Name *',
-                      hint: 'e.g. ABC Wholesalers Ltd',
-                      icon: Icons.business_rounded,
-                      validator: (v) => v?.trim().isEmpty == true ? 'Supplier name is required' : null,
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _SupplierField(
-                            controller: _companyCtrl,
-                            label: 'Company Legal Name',
-                            hint: 'Official registered entity name',
-                            icon: Icons.domain_rounded,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _SupplierField(
-                            controller: _contactPersonCtrl,
-                            label: 'Contact Person / Rep',
-                            hint: 'Key account manager name',
-                            icon: Icons.person_rounded,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _SupplierField(
-                            controller: _phoneCtrl,
-                            label: 'Phone / Mobile',
-                            hint: '+91...',
-                            icon: Icons.phone_rounded,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _SupplierField(
-                            controller: _emailCtrl,
-                            label: 'Email Address',
-                            hint: 'orders@supplier.com',
-                            icon: Icons.email_rounded,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final isPhone = constraints.maxWidth < 650;
 
-                _FormCard(
-                  title: 'Tax Compliance & Credit Terms',
-                  isDark: isDark,
-                  children: [
-                    Row(
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 860),
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(horizontal: isPhone ? 14 : 24, vertical: isPhone ? 16 : 24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: _SupplierField(
-                            controller: _gstCtrl,
-                            label: 'GSTIN / Tax ID',
-                            hint: '15-digit GST Number',
-                            icon: Icons.tag_rounded,
-                          ),
+                        _FormCard(
+                          title: 'Supplier & Business Profile',
+                          isDark: isDark,
+                          isPhone: isPhone,
+                          children: [
+                            _SupplierField(
+                              controller: _nameCtrl,
+                              label: 'Supplier Display Name *',
+                              hint: 'e.g. ABC Wholesalers Ltd',
+                              icon: Icons.business_rounded,
+                              validator: (v) => v?.trim().isEmpty == true ? 'Supplier name is required' : null,
+                            ),
+                            const SizedBox(height: 18),
+                            _ResponsiveSupplierRow(
+                              isPhone: isPhone,
+                              children: [
+                                _SupplierField(
+                                  controller: _companyCtrl,
+                                  label: 'Company Legal Name',
+                                  hint: 'Official registered entity name',
+                                  icon: Icons.domain_rounded,
+                                ),
+                                _SupplierField(
+                                  controller: _contactPersonCtrl,
+                                  label: 'Contact Person / Rep',
+                                  hint: 'Key account manager name',
+                                  icon: Icons.person_rounded,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            _ResponsiveSupplierRow(
+                              isPhone: isPhone,
+                              children: [
+                                _SupplierField(
+                                  controller: _phoneCtrl,
+                                  label: 'Phone / Mobile',
+                                  hint: '+91...',
+                                  icon: Icons.phone_rounded,
+                                ),
+                                _SupplierField(
+                                  controller: _emailCtrl,
+                                  label: 'Email Address',
+                                  hint: 'orders@supplier.com',
+                                  icon: Icons.email_rounded,
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _SupplierField(
-                            controller: _panCtrl,
-                            label: 'PAN Card Number',
-                            hint: 'Permanent Account Number',
-                            icon: Icons.badge_rounded,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _SupplierField(
-                            controller: _paymentTermsCtrl,
-                            label: 'Payment Terms',
-                            hint: 'e.g. Net 30, Due on Receipt',
-                            icon: Icons.schedule_rounded,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _SupplierField(
-                            controller: _creditLimitCtrl,
-                            label: 'Credit Limit ₹',
-                            hint: '0.00',
-                            icon: Icons.credit_card_rounded,
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    _SupplierField(
-                      controller: _openingBalanceCtrl,
-                      label: 'Opening Balance (Payable) ₹',
-                      hint: '0.00',
-                      icon: Icons.account_balance_wallet_rounded,
-                      keyboardType: TextInputType.number,
-                      helperText: 'Initial outstanding owed to this supplier upon setup',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
+                        SizedBox(height: isPhone ? 16 : 24),
 
-                _FormCard(
-                  title: 'Location & Banking Details',
-                  isDark: isDark,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: _SupplierField(
-                            controller: _addressCtrl,
-                            label: 'Billing / Dispatch Address',
-                            hint: 'Full physical address...',
-                            icon: Icons.location_on_rounded,
-                            maxLines: 2,
-                          ),
+                        _FormCard(
+                          title: 'Tax Compliance & Credit Terms',
+                          isDark: isDark,
+                          isPhone: isPhone,
+                          children: [
+                            _ResponsiveSupplierRow(
+                              isPhone: isPhone,
+                              children: [
+                                _SupplierField(
+                                  controller: _gstCtrl,
+                                  label: 'GSTIN / Tax ID',
+                                  hint: '15-digit GST Number',
+                                  icon: Icons.tag_rounded,
+                                ),
+                                _SupplierField(
+                                  controller: _panCtrl,
+                                  label: 'PAN Card Number',
+                                  hint: 'Permanent Account Number',
+                                  icon: Icons.badge_rounded,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            _ResponsiveSupplierRow(
+                              isPhone: isPhone,
+                              children: [
+                                _SupplierField(
+                                  controller: _paymentTermsCtrl,
+                                  label: 'Payment Terms',
+                                  hint: 'e.g. Net 30, Due on Receipt',
+                                  icon: Icons.schedule_rounded,
+                                ),
+                                _SupplierField(
+                                  controller: _creditLimitCtrl,
+                                  label: 'Credit Limit ₹',
+                                  hint: '0.00',
+                                  icon: Icons.credit_card_rounded,
+                                  keyboardType: TextInputType.number,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            _SupplierField(
+                              controller: _openingBalanceCtrl,
+                              label: 'Opening Balance (Payable) ₹',
+                              hint: '0.00',
+                              icon: Icons.account_balance_wallet_rounded,
+                              keyboardType: TextInputType.number,
+                              helperText: 'Initial outstanding owed to this supplier upon setup',
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _SupplierField(
-                            controller: _stateCtrl,
-                            label: 'State / Region',
-                            hint: 'e.g. Maharashtra',
-                            icon: Icons.map_rounded,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    _SupplierField(
-                      controller: _bankDetailsCtrl,
-                      label: 'Bank Account & NEFT Details',
-                      hint: 'Bank Name, Account #, IFSC, Branch...',
-                      icon: Icons.account_balance_rounded,
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 20),
-                    _SupplierField(
-                      controller: _notesCtrl,
-                      label: 'Internal Notes',
-                      hint: 'Special discounts, delivery preferences, contract remarks...',
-                      icon: Icons.note_alt_rounded,
-                      maxLines: 2,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 40),
+                        SizedBox(height: isPhone ? 16 : 24),
 
-                SizedBox(
-                  width: double.infinity,
-                  child: AppShortcut(
-                    actionId: 'save',
-                    onPressed: _save,
-                    child: ElevatedButton(
-                      onPressed: formState.isLoading ? null : _save,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      child: formState.isLoading
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : Text(saveBtnText, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                        _FormCard(
+                          title: 'Location & Banking Details',
+                          isDark: isDark,
+                          isPhone: isPhone,
+                          children: [
+                            _ResponsiveSupplierRow(
+                              isPhone: isPhone,
+                              flexes: const [2, 1],
+                              children: [
+                                _SupplierField(
+                                  controller: _addressCtrl,
+                                  label: 'Billing / Dispatch Address',
+                                  hint: 'Full physical address...',
+                                  icon: Icons.location_on_rounded,
+                                  maxLines: 2,
+                                  keyboardType: TextInputType.multiline,
+                                ),
+                                _SupplierField(
+                                  controller: _stateCtrl,
+                                  label: 'State / Region',
+                                  hint: 'e.g. Maharashtra',
+                                  icon: Icons.map_rounded,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
+                            _SupplierField(
+                              controller: _bankDetailsCtrl,
+                              label: 'Bank Account & NEFT Details',
+                              hint: 'Bank Name, Account #, IFSC, Branch...',
+                              icon: Icons.account_balance_rounded,
+                              maxLines: 2,
+                              keyboardType: TextInputType.multiline,
+                            ),
+                            const SizedBox(height: 18),
+                            _SupplierField(
+                              controller: _notesCtrl,
+                              label: 'Internal Notes',
+                              hint: 'Special discounts, delivery preferences, contract remarks...',
+                              icon: Icons.note_alt_rounded,
+                              maxLines: 2,
+                              keyboardType: TextInputType.multiline,
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: isPhone ? 24 : 40),
+
+                        SizedBox(
+                          width: double.infinity,
+                          child: AppShortcut(
+                            actionId: 'save',
+                            onPressed: _save,
+                            child: ElevatedButton(
+                              onPressed: formState.isLoading ? null : _save,
+                              style: ElevatedButton.styleFrom(
+                                padding: EdgeInsets.symmetric(vertical: isPhone ? 15 : 18),
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                              child: formState.isLoading
+                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : Text(saveBtnText, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -319,27 +316,79 @@ class _AddEditSupplierScreenState extends ConsumerState<AddEditSupplierScreen> {
   }
 }
 
+class _ResponsiveSupplierRow extends StatelessWidget {
+  final bool isPhone;
+  final List<Widget> children;
+  final List<int>? flexes;
+
+  const _ResponsiveSupplierRow({
+    required this.isPhone,
+    required this.children,
+    this.flexes,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (isPhone) {
+      return Column(
+        children: [
+          for (int i = 0; i < children.length; i++) ...[
+            if (i > 0) const SizedBox(height: 18),
+            children[i],
+          ],
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (int i = 0; i < children.length; i++) ...[
+          if (i > 0) const SizedBox(width: 16),
+          Expanded(
+            flex: flexes != null && flexes!.length > i ? flexes![i] : 1,
+            child: children[i],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _FormCard extends StatelessWidget {
   final String title;
   final List<Widget> children;
   final bool isDark;
-  const _FormCard({required this.title, required this.children, required this.isDark});
+  final bool isPhone;
+
+  const _FormCard({
+    required this.title,
+    required this.children,
+    required this.isDark,
+    this.isPhone = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isPhone ? 16 : 24),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCard : Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(isPhone ? 18 : 24),
         border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder, width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
-          const SizedBox(height: 20),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: isPhone ? 15 : 16,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.2,
+            ),
+          ),
+          SizedBox(height: isPhone ? 16 : 20),
           ...children,
         ],
       ),
@@ -353,7 +402,7 @@ class _SupplierField extends StatelessWidget {
   final String hint;
   final IconData icon;
   final int maxLines;
-  final TextInputType keyboardType;
+  final TextInputType? keyboardType;
   final String? Function(String?)? validator;
   final String? helperText;
 
@@ -363,7 +412,7 @@ class _SupplierField extends StatelessWidget {
     required this.hint,
     required this.icon,
     this.maxLines = 1,
-    this.keyboardType = TextInputType.text,
+    this.keyboardType,
     this.validator,
     this.helperText,
   });
@@ -371,10 +420,17 @@ class _SupplierField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isMultiline = maxLines > 1;
+    final effectiveKeyboardType = isMultiline
+        ? TextInputType.multiline
+        : (keyboardType ?? TextInputType.text);
+    final effectiveInputAction = isMultiline ? null : TextInputAction.next;
+
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
-      keyboardType: keyboardType,
+      keyboardType: effectiveKeyboardType,
+      textInputAction: effectiveInputAction,
       validator: validator,
       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
       decoration: InputDecoration(

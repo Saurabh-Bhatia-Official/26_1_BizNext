@@ -74,6 +74,21 @@ class DatabaseHelper {
           await db.execute('ALTER TABLE ${AppConstants.tblOffers} ADD COLUMN poster_path TEXT');
         } catch (_) {}
         try {
+          await db.execute('ALTER TABLE ${AppConstants.tblPurchases} ADD COLUMN taxable_amount REAL NOT NULL DEFAULT 0');
+        } catch (_) {}
+        try {
+          await db.execute('ALTER TABLE ${AppConstants.tblPurchases} ADD COLUMN payment_status TEXT NOT NULL DEFAULT "unpaid"');
+        } catch (_) {}
+        try {
+          await db.execute('ALTER TABLE ${AppConstants.tblPurchaseItems} ADD COLUMN discount REAL NOT NULL DEFAULT 0');
+        } catch (_) {}
+        try {
+          await db.execute('ALTER TABLE ${AppConstants.tblPurchaseItems} ADD COLUMN taxable_amount REAL NOT NULL DEFAULT 0');
+        } catch (_) {}
+        try {
+          await db.execute('ALTER TABLE ${AppConstants.tblAccounts} ADD COLUMN account_token TEXT');
+        } catch (_) {}
+        try {
           await db.execute('''
             CREATE TABLE IF NOT EXISTS ${AppConstants.tblNotifications} (
               id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,14 +109,22 @@ class DatabaseHelper {
     );
   }
 
-  // ── Password Hashing ───────────────────────────────────────────────────────
+  // ── Cryptographic Password Encryption & Hashing ─────────────────────────────
+  static const String _hashSalt = "biznext_account_encryption_salt_2026_v1";
+
   static String hashPassword(String password) {
+    final key = utf8.encode(_hashSalt);
     final bytes = utf8.encode(password);
-    return sha256.convert(bytes).toString();
+    final hmac = Hmac(sha256, key);
+    final digest = hmac.convert(bytes);
+    return digest.toString();
   }
 
   static bool verifyPassword(String password, String hash) {
-    return hashPassword(password) == hash;
+    if (hashPassword(password) == hash) return true;
+    // Backwards compatibility for legacy unsalted hashes
+    final legacyHash = sha256.convert(utf8.encode(password)).toString();
+    return legacyHash == hash;
   }
 
   // ── onCreate ───────────────────────────────────────────────────────────────
@@ -391,36 +414,40 @@ class DatabaseHelper {
     // Purchases
     await _safeExecute(txn, '''
       CREATE TABLE IF NOT EXISTS ${AppConstants.tblPurchases} (
-        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        business_id  INTEGER NOT NULL DEFAULT 1,
-        bill_no      TEXT,
-        supplier_id  INTEGER REFERENCES ${AppConstants.tblSuppliers}(id) ON DELETE SET NULL,
-        subtotal     REAL    NOT NULL DEFAULT 0,
-        discount     REAL    NOT NULL DEFAULT 0,
-        gst_amount   REAL    NOT NULL DEFAULT 0,
-        grand_total  REAL    NOT NULL DEFAULT 0,
-        paid_amount  REAL    NOT NULL DEFAULT 0,
-        balance_due  REAL    NOT NULL DEFAULT 0,
-        payment_mode TEXT    NOT NULL DEFAULT 'Cash',
-        account_id   INTEGER REFERENCES ${AppConstants.tblAccounts}(id) ON DELETE SET NULL,
-        notes        TEXT,
-        status       TEXT    NOT NULL DEFAULT 'completed',
-        date         TEXT    NOT NULL DEFAULT (datetime('now'))
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id    INTEGER NOT NULL DEFAULT 1,
+        bill_no        TEXT,
+        supplier_id    INTEGER REFERENCES ${AppConstants.tblSuppliers}(id) ON DELETE SET NULL,
+        subtotal       REAL    NOT NULL DEFAULT 0,
+        discount       REAL    NOT NULL DEFAULT 0,
+        taxable_amount REAL    NOT NULL DEFAULT 0,
+        gst_amount     REAL    NOT NULL DEFAULT 0,
+        grand_total    REAL    NOT NULL DEFAULT 0,
+        paid_amount    REAL    NOT NULL DEFAULT 0,
+        balance_due    REAL    NOT NULL DEFAULT 0,
+        payment_mode   TEXT    NOT NULL DEFAULT 'Cash',
+        payment_status TEXT    NOT NULL DEFAULT 'unpaid',
+        account_id     INTEGER REFERENCES ${AppConstants.tblAccounts}(id) ON DELETE SET NULL,
+        notes          TEXT,
+        status         TEXT    NOT NULL DEFAULT 'completed',
+        date           TEXT    NOT NULL DEFAULT (datetime('now'))
       )
     ''');
 
     // Purchase Items
     await _safeExecute(txn, '''
       CREATE TABLE IF NOT EXISTS ${AppConstants.tblPurchaseItems} (
-        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        purchase_id  INTEGER NOT NULL REFERENCES ${AppConstants.tblPurchases}(id) ON DELETE CASCADE,
-        product_id   INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE RESTRICT,
-        product_name TEXT    NOT NULL,
-        quantity     REAL    NOT NULL,
-        price        REAL    NOT NULL,
-        gst_percent  REAL    NOT NULL DEFAULT 0,
-        gst_amount   REAL    NOT NULL DEFAULT 0,
-        total        REAL    NOT NULL
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        purchase_id    INTEGER NOT NULL REFERENCES ${AppConstants.tblPurchases}(id) ON DELETE CASCADE,
+        product_id     INTEGER NOT NULL REFERENCES ${AppConstants.tblProducts}(id) ON DELETE RESTRICT,
+        product_name   TEXT    NOT NULL,
+        quantity       REAL    NOT NULL,
+        price          REAL    NOT NULL,
+        discount       REAL    NOT NULL DEFAULT 0,
+        taxable_amount REAL    NOT NULL DEFAULT 0,
+        gst_percent    REAL    NOT NULL DEFAULT 0,
+        gst_amount     REAL    NOT NULL DEFAULT 0,
+        total          REAL    NOT NULL
       )
     ''');
 
@@ -434,6 +461,7 @@ class DatabaseHelper {
         opening_balance REAL    NOT NULL DEFAULT 0,
         balance         REAL    NOT NULL DEFAULT 0,
         account_number  TEXT,
+        account_token   TEXT,
         is_default      INTEGER NOT NULL DEFAULT 0,
         created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
       )
@@ -1860,6 +1888,24 @@ class DatabaseHelper {
       'is_active': 1,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
+
+  /// Safely cleans sample/demo transactions, sales, and purchases
+  /// while preserving core Chart of Accounts, Categories, and Business configurations.
+  Future<void> cleanSampleData(int businessId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete(AppConstants.tblSaleItems);
+      await txn.delete(AppConstants.tblSales, where: 'business_id = ?', whereArgs: [businessId]);
+      await txn.delete(AppConstants.tblPurchaseItems);
+      await txn.delete(AppConstants.tblPurchases, where: 'business_id = ?', whereArgs: [businessId]);
+      await txn.delete(AppConstants.tblLedger, where: 'business_id = ? AND (description LIKE ? OR description LIKE ?)', whereArgs: [businessId, '%Demo%', '%Sample%']);
+      await txn.delete(AppConstants.tblTransactions, where: 'business_id = ? AND (description LIKE ? OR description LIKE ?)', whereArgs: [businessId, '%Demo%', '%Sample%']);
+    });
+    notify(AppConstants.tblSales);
+    notify(AppConstants.tblPurchases);
+    notify(AppConstants.tblLedger);
+    notify(AppConstants.tblAccounts);
+  }
 }
 
 // ── Web Fallback Mock Database Implementation ────────────────────────────────
@@ -1895,7 +1941,7 @@ class MockDatabase implements Database {
         list = [
           {
             'id': 1,
-            'name': 'Demo Business',
+            'name': 'BizNext Enterprise',
             'type': 'Retail Shop',
             'owner_id': 1,
             'is_active': 1,

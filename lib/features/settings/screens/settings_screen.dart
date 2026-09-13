@@ -11,7 +11,6 @@ import '../../../core/providers/notification_provider.dart';
 import '../providers/settings_provider.dart';
 import '../../loyalty/screens/loyalty_settings_screen.dart';
 import 'gst_settings_screen.dart';
-import '../../../core/services/auto_update_service.dart';
 import 'package:camera/camera.dart';
 import 'credentials_screen.dart';
 import '../../../core/services/rbac_service.dart';
@@ -20,9 +19,16 @@ import 'package:flutter/foundation.dart';
 import '../../billing/utils/invoice_service.dart';
 import '../../billing/models/sale_history_model.dart';
 import '../../../core/widgets/qr_scanner_screen.dart';
+import '../../../core/services/hardware_scanner_service.dart';
 import '../../auth/models/business_model.dart';
 import 'shortcut_settings_screen.dart';
 import '../../updater/screens/update_screen.dart';
+import '../../../core/widgets/category_manager_screen.dart';
+import '../../accounts/models/transaction_model.dart';
+import '../../accounts/providers/accounts_provider.dart';
+import '../../inventory/providers/inventory_provider.dart';
+import '../../inventory/repositories/product_repository.dart';
+import '../../inventory/models/product_model.dart';
 
 class PermissionNotifier extends StateNotifier<PermissionStatus> {
   final Permission _permission;
@@ -77,8 +83,6 @@ String _getPermissionLabel(PermissionStatus status) {
       return 'Limited';
     case PermissionStatus.provisional:
       return 'Provisional';
-    default:
-      return 'Unknown';
   }
 }
 
@@ -161,8 +165,23 @@ class SettingsScreen extends ConsumerWidget {
               isDark: isDark,
               children: [
                 SwitchListTile.adaptive(
+                  secondary: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: (isDark ? Colors.amber : AppColors.primary).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                      color: isDark ? Colors.amber : AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
                   title: const Text('Dark Mode', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                  subtitle: const Text('Switch between light and dark themes', style: TextStyle(fontSize: 12)),
+                  subtitle: Text(
+                    isDark ? 'Dark theme is currently active' : 'Light theme is currently active',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  ),
                   value: isDark,
                   onChanged: (v) => ref.read(themeModeProvider.notifier).toggle(),
                   activeTrackColor: AppColors.primary,
@@ -274,6 +293,61 @@ class SettingsScreen extends ConsumerWidget {
                       MaterialPageRoute(builder: (_) => const LoyaltySettingsScreen()),
                     );
                   },
+                ),
+                const Divider(height: 1),
+                _SettingsTile(
+                  label: 'Customer Price Tiers',
+                  value: 'Manage customer price categories (Wholesale, Dealer, VIP, etc.)',
+                  icon: Icons.sell_rounded,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CategoryManagerScreen(
+                          title: 'Customer Price Tiers',
+                          categoriesProvider: customerTypesProvider,
+                          onSave: (name, id) async {
+                            final repo = ref.read(productRepositoryProvider);
+                            final biz = ref.read(currentBusinessProvider);
+                            await repo.addCustomerType(CustomerType(id: id, name: name), biz?.id ?? 1);
+                            ref.invalidate(customerTypesProvider);
+                            return true;
+                          },
+                          onDelete: (id) async {
+                            final repo = ref.read(productRepositoryProvider);
+                            await repo.deleteCustomerType(id);
+                            ref.invalidate(customerTypesProvider);
+                            return true;
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 32),
+
+            // ── Accounting & Categories ──
+            _SettingsSection(
+              title: 'Accounting & Categories',
+              isDark: isDark,
+              children: [
+                _SettingsTile(
+                  label: 'Income Categories',
+                  value: 'Configure revenue sources, services & fees',
+                  icon: Icons.trending_up_rounded,
+                  color: AppColors.success,
+                  onTap: () => _openCategoryManager(context, ref, 'income'),
+                ),
+                const Divider(height: 1),
+                _SettingsTile(
+                  label: 'Expense Categories',
+                  value: 'Configure operational overhead, utility & expense heads',
+                  icon: Icons.trending_down_rounded,
+                  color: AppColors.error,
+                  onTap: () => _openCategoryManager(context, ref, 'expense'),
                 ),
               ],
             ),
@@ -426,6 +500,7 @@ class SettingsScreen extends ConsumerWidget {
     try {
       final business = ref.read(currentBusinessProvider);
       await InvoiceService.generateAndPrintInvoice(
+        context: context,
         business: business ?? BusinessModel(id: 1, name: 'BizNext Demo', type: 'Retail'),
         sale: SaleHistoryModel(
           id: 9999,
@@ -459,35 +534,7 @@ class SettingsScreen extends ConsumerWidget {
   void _testScannerInput(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) {
-        final controller = TextEditingController();
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: const Text('Scan Test Barcode', style: TextStyle(fontWeight: FontWeight.w900)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Please connect your hardware scanner and scan a barcode, or type it manually to test input:'),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Scanner Output',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.qr_code_rounded),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => const _ScannerDiagnosticDialog(),
     );
   }
 
@@ -587,6 +634,47 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
+
+  void _openCategoryManager(BuildContext context, WidgetRef ref, String type) {
+    final isIncome = type == 'income';
+    final title = isIncome ? 'Income Categories' : 'Expense Categories';
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CategoryManagerScreen(
+          title: title,
+          categoriesProvider: transactionCategoriesProvider(type),
+          nameExtractor: (cat) => (cat as TransactionCategoryModel).name,
+          onSave: (name, id) async {
+            final businessId = ref.read(activeBusinessIdProvider);
+            final category = TransactionCategoryModel(
+              id: id,
+              businessId: businessId,
+              name: name,
+              type: type,
+            );
+            if (id == null) {
+              await ref.read(accountsRepositoryProvider).addTransactionCategory(category);
+            } else {
+              await ref.read(accountsRepositoryProvider).updateTransactionCategory(category);
+            }
+            ref.invalidate(transactionCategoriesProvider(type));
+            return true;
+          },
+          onDelete: (id) async {
+            try {
+              await ref.read(accountsRepositoryProvider).deleteTransactionCategory(id);
+              ref.invalidate(transactionCategoriesProvider(type));
+              return true;
+            } catch (e) {
+              AppAlert.error(ref, 'Cannot delete: Category is in use by transactions');
+              return false;
+            }
+          },
+        ),
+      ),
+    );
+  }
 
   void _showEditDialog(BuildContext context, WidgetRef ref, String title, String current, Function(String) onSave) {
     final ctrl = TextEditingController(text: current);
@@ -706,115 +794,6 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
-
-  void _handleSoftwareUpdate(BuildContext context, WidgetRef ref) async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const Center(
-        child: Card(
-          child: Padding(
-            padding: EdgeInsets.all(24.0),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(width: 16),
-                Text('Checking for updates...'),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final updater = AutoUpdateService();
-    final res = await updater.checkAndUpdate();
-    
-    if (context.mounted) {
-      Navigator.pop(context); // Close checking dialog
-    }
-
-    if (res != null && res["update_available"] == true && context.mounted) {
-      final String version = res["version"];
-      final String downloadUrl = res["download_url"];
-      
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Update Available!', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: Text('A new version ($version) of BizNext is available. Would you like to install it now?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Later'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _downloadAndInstall(context, ref, downloadUrl);
-              },
-              child: const Text('Update Now'),
-            ),
-          ],
-        ),
-      );
-    } else {
-      if (context.mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Up to Date', style: TextStyle(fontWeight: FontWeight.bold)),
-            content: const Text('Your software is already running the latest version.'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
-            ],
-          ),
-        );
-      }
-    }
-  }
-
-  void _downloadAndInstall(BuildContext context, WidgetRef ref, String downloadUrl) {
-    double progress = 0.0;
-    StateSetter? dialogState;
-    
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setState) {
-          dialogState = setState;
-          return AlertDialog(
-            title: const Text('Downloading Update...', style: TextStyle(fontWeight: FontWeight.bold)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LinearProgressIndicator(value: progress),
-                const SizedBox(height: 12),
-                Text('${(progress * 100).toStringAsFixed(0)}% completed'),
-              ],
-            ),
-          );
-        }
-      ),
-    );
-
-    AutoUpdateService().downloadAndInstallUpdate(downloadUrl, (p) {
-      if (dialogState != null) {
-        dialogState!(() {
-          progress = p;
-        });
-      }
-    }).then((success) {
-      if (!success && context.mounted) {
-        Navigator.pop(context); // Close progress dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to download update. Please try again later.')),
-        );
-      }
-    });
-  }
 }
 
 
@@ -885,6 +864,240 @@ class _FeatureToggle extends StatelessWidget {
       value: value,
       onChanged: onChanged,
       activeTrackColor: AppColors.primary,
+    );
+  }
+}
+
+class _ScannerDiagnosticDialog extends StatefulWidget {
+  const _ScannerDiagnosticDialog();
+
+  @override
+  State<_ScannerDiagnosticDialog> createState() => _ScannerDiagnosticDialogState();
+}
+
+class _ScannerDiagnosticDialogState extends State<_ScannerDiagnosticDialog> {
+  final TextEditingController _inputController = TextEditingController();
+  HardwareScannerScanLog? _latestLog;
+  String? _lastScannedCode;
+
+  @override
+  void initState() {
+    super.initState();
+    _latestLog = HardwareBarcodeScannerService.instance.lastScanLog.value;
+  }
+
+  @override
+  void dispose() {
+    _inputController.dispose();
+    super.dispose();
+  }
+
+  void _onScanDetected(String code) {
+    setState(() {
+      _lastScannedCode = code;
+      _inputController.text = code;
+      _latestLog = HardwareBarcodeScannerService.instance.lastScanLog.value;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return HardwareBarcodeScannerListener(
+      onBarcodeScanned: _onScanDetected,
+      child: AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary, size: 24),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Scanner Diagnostic Studio', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                  Text('Test USB/Bluetooth hardware scanner & camera', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Live Status Banner
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: _latestLog != null
+                        ? (_latestLog!.isHardwareScanner
+                            ? const Color(0xFF22C55E).withValues(alpha: 0.12)
+                            : Colors.amber.withValues(alpha: 0.12))
+                        : (isDark ? AppColors.darkSurface : const Color(0xFFF1F5F9)),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: _latestLog != null
+                          ? (_latestLog!.isHardwareScanner ? const Color(0xFF22C55E) : Colors.amber)
+                          : Colors.transparent,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _latestLog != null
+                            ? (_latestLog!.isHardwareScanner ? Icons.check_circle_rounded : Icons.keyboard_rounded)
+                            : Icons.sensors_rounded,
+                        color: _latestLog != null
+                            ? (_latestLog!.isHardwareScanner ? const Color(0xFF22C55E) : Colors.amber)
+                            : AppColors.primary,
+                        size: 28,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _latestLog == null
+                                  ? 'Scanner Listener Active'
+                                  : (_latestLog!.isHardwareScanner
+                                      ? 'Physical Barcode Scanner Verified'
+                                      : 'Manual Keyboard Entry Detected'),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: _latestLog != null
+                                    ? (_latestLog!.isHardwareScanner ? const Color(0xFF16A34A) : Colors.amber.shade800)
+                                    : null,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _latestLog == null
+                                  ? 'Plug in your USB/Bluetooth scanner and scan any barcode now.'
+                                  : '${_latestLog!.charCount} chars in ${_latestLog!.totalDurationMs}ms (Avg ${_latestLog!.avgMsPerChar.toStringAsFixed(1)}ms/char)',
+                              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Decoded Value Output Card
+                const Text(
+                  'DECODED OUTPUT',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: AppColors.textMuted),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                  ),
+                  child: Text(
+                    _lastScannedCode ?? 'Waiting for scan...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                      fontFamily: 'monospace',
+                      color: _lastScannedCode != null ? AppColors.primary : AppColors.textMuted,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Manual Test Input
+                TextField(
+                  controller: _inputController,
+                  decoration: InputDecoration(
+                    labelText: 'Manual Entry / Barcode Input',
+                    hintText: 'Type or scan with scanner focused here',
+                    prefixIcon: const Icon(Icons.keyboard_alt_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onSubmitted: (v) {
+                    if (v.trim().isNotEmpty) {
+                      setState(() {
+                        _lastScannedCode = v.trim();
+                      });
+                    }
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // Action Buttons (Simulate + Open Camera)
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          HardwareBarcodeScannerService.instance.simulateHardwareScan('8901030383321');
+                          _onScanDetected('8901030383321');
+                        },
+                        icon: const Icon(Icons.flash_on_rounded, size: 16),
+                        label: const Text('Simulate USB Scan'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          final code = await Navigator.push<String>(
+                            context,
+                            MaterialPageRoute(builder: (context) => const QRScannerScreen()),
+                          );
+                          if (code != null && code.isNotEmpty) {
+                            _onScanDetected(code);
+                          }
+                        },
+                        icon: const Icon(Icons.camera_alt_rounded, size: 16),
+                        label: const Text('Test Webcam Scan'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 }

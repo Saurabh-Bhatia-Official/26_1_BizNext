@@ -5,6 +5,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../models/product_model.dart';
 import '../repositories/product_repository.dart';
 import '../../../core/database/database_providers.dart';
+import '../../notifications/providers/notifications_provider.dart';
 
 /// Thrown when a product name already exists for the same business.
 class DuplicateProductNameException implements Exception {
@@ -207,6 +208,7 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
         final tieredPrices = _ref.read(productTieredPricesProvider);
         await _repo.updateProductPrices(product.id!, tieredPrices);
       }
+      _ref.read(notificationsProvider.notifier).scanAndGenerateAlerts();
       if (mounted) {
         state = const AsyncValue.data(null);
       }
@@ -352,6 +354,39 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     try {
       await _repo.deleteSubcategory(id);
+      if (mounted) {
+        state = const AsyncValue.data(null);
+      }
+      return true;
+    } catch (e, st) {
+      if (mounted) {
+        state = AsyncValue.error(e, st);
+      }
+      return false;
+    }
+  }
+
+  Future<bool> saveCustomerType(CustomerType customerType) async {
+    state = const AsyncValue.loading();
+    try {
+      final businessId = _ref.read(activeBusinessIdProvider);
+      await _repo.addCustomerType(customerType, businessId);
+      if (mounted) {
+        state = const AsyncValue.data(null);
+      }
+      return true;
+    } catch (e, st) {
+      if (mounted) {
+        state = AsyncValue.error(e, st);
+      }
+      return false;
+    }
+  }
+
+  Future<bool> deleteCustomerType(int id) async {
+    state = const AsyncValue.loading();
+    try {
+      await _repo.deleteCustomerType(id);
       if (mounted) {
         state = const AsyncValue.data(null);
       }

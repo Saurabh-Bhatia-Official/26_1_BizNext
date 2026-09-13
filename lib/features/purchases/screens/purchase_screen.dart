@@ -14,28 +14,27 @@ import '../providers/purchase_provider.dart';
 import 'purchase_detail_screen.dart';
 import '../../accounts/providers/accounts_provider.dart';
 import '../../../core/widgets/searchable_dropdown.dart';
+import '../../../core/providers/screen_layout_provider.dart';
 
-class PurchaseScreen extends ConsumerStatefulWidget {
+class PurchaseScreen extends ConsumerWidget {
   const PurchaseScreen({super.key});
 
   @override
-  ConsumerState<PurchaseScreen> createState() => _PurchaseScreenState();
-}
-
-class _PurchaseScreenState extends ConsumerState<PurchaseScreen> {
-  LayoutMode _layoutMode = LayoutMode.table;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final layoutMode = ref.watch(screenLayoutProvider('purchases'));
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Column(
         children: [
-          _PurchaseHeader(isDark: isDark, layoutMode: _layoutMode, onLayoutChanged: (m) => setState(() => _layoutMode = m)),
+          _PurchaseHeader(
+            isDark: isDark,
+            layoutMode: layoutMode,
+            onLayoutChanged: (m) => ref.read(screenLayoutProvider('purchases').notifier).setLayout(m),
+          ),
           _PurchaseSummaryBar(isDark: isDark),
-          Expanded(child: _PurchaseHistoryList(isDark: isDark, layoutMode: _layoutMode)),
+          Expanded(child: _PurchaseHistoryList(isDark: isDark, layoutMode: layoutMode)),
         ],
       ),
     );
@@ -221,7 +220,37 @@ class _PurchaseListView extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(p.billNo ?? 'Purchase #${p.id}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(p.billNo ?? 'Purchase #${p.id}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14), overflow: TextOverflow.ellipsis),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: p.paymentStatus == 'paid'
+                                  ? AppColors.success.withValues(alpha: 0.1)
+                                  : (p.paymentStatus == 'partially_paid'
+                                      ? Colors.orange.withValues(alpha: 0.1)
+                                      : AppColors.error.withValues(alpha: 0.1)),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              p.paymentStatus.replaceAll('_', ' ').toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: p.paymentStatus == 'paid'
+                                    ? AppColors.success
+                                    : (p.paymentStatus == 'partially_paid'
+                                        ? Colors.orange
+                                        : AppColors.error),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       Text(p.supplierName ?? 'Unknown Supplier', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                     ],
                   ),
@@ -342,12 +371,29 @@ class _PurchaseCardState extends State<_PurchaseCard> {
                     child: const Icon(Icons.receipt_rounded, color: AppColors.primary, size: 18),
                   ),
                   const Spacer(),
-                  if (hasPending)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                      child: const Text('Pending', style: TextStyle(color: AppColors.error, fontSize: 10, fontWeight: FontWeight.w800)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: p.paymentStatus == 'paid'
+                          ? AppColors.success.withValues(alpha: 0.1)
+                          : (p.paymentStatus == 'partially_paid'
+                              ? Colors.orange.withValues(alpha: 0.1)
+                              : AppColors.error.withValues(alpha: 0.1)),
+                      borderRadius: BorderRadius.circular(8),
                     ),
+                    child: Text(
+                      p.paymentStatus.replaceAll('_', ' ').toUpperCase(),
+                      style: TextStyle(
+                        color: p.paymentStatus == 'paid'
+                            ? AppColors.success
+                            : (p.paymentStatus == 'partially_paid'
+                                ? Colors.orange
+                                : AppColors.error),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
                 ],
               ),
               const Spacer(),

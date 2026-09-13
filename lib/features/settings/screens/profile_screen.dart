@@ -41,11 +41,6 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => ref.read(themeModeProvider.notifier).toggle(),
-                  icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: isDark ? Colors.amber : AppColors.primary),
-                ),
               ],
             ),
             const Text('Manage your personal account information and security', 
@@ -78,7 +73,7 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 _ProfileTile(
                   label: 'Username',
-                  value: user?.username ?? 'admin',
+                  value: user?.username ?? '',
                   icon: Icons.alternate_email_rounded,
                   onTap: () {}, // Username usually read-only
                 ),

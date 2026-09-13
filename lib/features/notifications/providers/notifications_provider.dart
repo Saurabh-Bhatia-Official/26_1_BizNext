@@ -1,5 +1,4 @@
-// lib/features/notifications/providers/notifications_provider.dart
-
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/notification_item_model.dart';
@@ -11,23 +10,43 @@ final notificationSearchQueryProvider = StateProvider<String>((ref) => '');
 class NotificationsNotifier extends StateNotifier<AsyncValue<List<NotificationItemModel>>> {
   final Ref _ref;
   final NotificationRepository _repository;
+  Timer? _autoRefreshTimer;
 
   NotificationsNotifier(this._ref, this._repository) : super(const AsyncValue.loading()) {
-    refresh();
+    refresh(showLoading: true);
+    // Dynamically poll & scan for background smart alerts every 5 seconds
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      scanAndGenerateAlerts(silent: true);
+    });
+    // Refresh instantly when active business changes
+    _ref.listen(activeBusinessIdProvider, (previous, next) {
+      if (previous != next) {
+        refresh(showLoading: true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
   }
 
   int get _businessId => _ref.read(authProvider).activeBusiness?.id ?? _ref.read(activeBusinessIdProvider);
 
-  Future<void> refresh() async {
-    state = const AsyncValue.loading();
+  Future<void> refresh({bool showLoading = false}) async {
+    if (showLoading && state.value == null) {
+      state = const AsyncValue.loading();
+    }
     try {
       final businessId = _businessId;
-      // Run automatic smart alert detection on refresh
       await _repository.generateSmartAlerts(businessId);
       final items = await _repository.getNotifications(businessId: businessId);
       state = AsyncValue.data(items);
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (state.value == null) {
+        state = AsyncValue.error(e, st);
+      }
     }
   }
 
@@ -39,8 +58,7 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<NotificationIt
         current.map((n) => n.id == notificationId ? n.copyWith(isRead: true) : n).toList(),
       );
     } catch (e) {
-      // Re-fetch in case of inconsistency
-      refresh();
+      refresh(showLoading: false);
     }
   }
 
@@ -53,7 +71,7 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<NotificationIt
         current.map((n) => n.copyWith(isRead: true)).toList(),
       );
     } catch (e) {
-      refresh();
+      refresh(showLoading: false);
     }
   }
 
@@ -65,7 +83,7 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<NotificationIt
         current.where((n) => n.id != notificationId).toList(),
       );
     } catch (e) {
-      refresh();
+      refresh(showLoading: false);
     }
   }
 
@@ -75,11 +93,11 @@ class NotificationsNotifier extends StateNotifier<AsyncValue<List<NotificationIt
       await _repository.clearAll(businessId);
       state = const AsyncValue.data([]);
     } catch (e) {
-      refresh();
+      refresh(showLoading: false);
     }
   }
 
-  Future<int> scanAndGenerateAlerts() async {
+  Future<int> scanAndGenerateAlerts({bool silent = false}) async {
     try {
       final businessId = _businessId;
       final generated = await _repository.generateSmartAlerts(businessId);

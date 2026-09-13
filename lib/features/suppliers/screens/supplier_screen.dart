@@ -1,5 +1,6 @@
 // lib/features/suppliers/screens/supplier_screen.dart
 
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,25 +8,20 @@ import '../../../core/providers/notification_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../core/widgets/layout_toggle.dart';
+import '../../../core/providers/screen_layout_provider.dart';
 import '../models/supplier_model.dart';
 import '../providers/supplier_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'add_edit_supplier_screen.dart';
 
-class SupplierScreen extends ConsumerStatefulWidget {
+class SupplierScreen extends ConsumerWidget {
   const SupplierScreen({super.key});
 
   @override
-  ConsumerState<SupplierScreen> createState() => _SupplierScreenState();
-}
-
-class _SupplierScreenState extends ConsumerState<SupplierScreen> {
-  LayoutMode _layoutMode = LayoutMode.grid;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final suppliersAsync = ref.watch(filteredSuppliersProvider);
+    final layoutMode = ref.watch(screenLayoutProvider('suppliers'));
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -33,14 +29,14 @@ class _SupplierScreenState extends ConsumerState<SupplierScreen> {
         children: [
           _SupplierHeader(
             isDark: isDark,
-            layoutMode: _layoutMode,
-            onLayoutChanged: (m) => setState(() => _layoutMode = m),
+            layoutMode: layoutMode,
+            onLayoutChanged: (m) => ref.read(screenLayoutProvider('suppliers').notifier).setLayout(m),
           ),
           Expanded(
             child: suppliersAsync.when(
               data: (list) => list.isEmpty
                   ? _EmptyState(isDark: isDark)
-                  : (_layoutMode == LayoutMode.grid
+                  : (layoutMode == LayoutMode.grid
                       ? _SupplierGrid(suppliers: list, isDark: isDark)
                       : _SupplierTable(suppliers: list, isDark: isDark)),
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -230,76 +226,101 @@ class _SupplierTableState extends State<_SupplierTable> {
           color: isDark ? AppColors.darkCard : Colors.white,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder, width: 1.5),
+          boxShadow: [
+            if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 12, offset: const Offset(0, 4)),
+          ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            sortColumnIndex: _sortColumn,
-            sortAscending: _sortAscending,
-            headingRowColor: WidgetStateProperty.all(
-              isDark ? Colors.white.withValues(alpha: 0.04) : AppColors.lightBg,
-            ),
-            headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.3),
-            dataTextStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            dividerThickness: 1,
-            columnSpacing: 28,
-            columns: [
-              DataColumn(label: const Text('Supplier / Company'), onSort: _onSort),
-              DataColumn(label: const Text('Contact & Phone'), onSort: _onSort),
-              DataColumn(label: const Text('GSTIN / State'), onSort: _onSort),
-              DataColumn(label: const Text('Terms'), onSort: _onSort),
-              DataColumn(label: const Text('Payable Balance'), numeric: true, onSort: _onSort),
-              const DataColumn(label: Text('Actions')),
-            ],
-            rows: _sorted.asMap().entries.map((entry) {
-              final i = entry.key;
-              final s = entry.value;
-              final balanceColor = s.balance > 0 ? AppColors.error : (s.balance < 0 ? AppColors.success : AppColors.textMuted);
-
-              return DataRow(
-                color: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.hovered)) return AppColors.primary.withValues(alpha: 0.04);
-                  return i.isOdd
-                      ? (isDark ? Colors.white.withValues(alpha: 0.02) : Colors.grey.withValues(alpha: 0.02))
-                      : null;
-                }),
-                cells: [
-                  DataCell(
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(
-                          radius: 16,
-                          backgroundColor: AppColors.accent.withValues(alpha: 0.1),
-                          child: Text(s.name[0].toUpperCase(), style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800, fontSize: 13)),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(s.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            if (s.companyName != null && s.companyName!.isNotEmpty)
-                              Text(s.companyName!, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                          ],
-                        ),
-                      ],
-                    ),
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddEditSupplierScreen(supplier: s))),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final minTableWidth = math.max(constraints.maxWidth, 900.0);
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: minTableWidth),
+                child: DataTable(
+                  sortColumnIndex: _sortColumn,
+                  sortAscending: _sortAscending,
+                  headingRowColor: WidgetStateProperty.all(
+                    isDark ? Colors.white.withValues(alpha: 0.04) : AppColors.lightBg,
                   ),
-                  DataCell(Text(s.phone ?? (s.contactPerson ?? '—'), style: const TextStyle(color: AppColors.textMuted))),
-                  DataCell(Text(s.gstNumber ?? (s.state ?? '—'), style: const TextStyle(color: AppColors.textMuted))),
-                  DataCell(Text(s.paymentTerms ?? 'Net 30', style: const TextStyle(fontSize: 11))),
-                  DataCell(Text(
-                    CurrencyFormatter.format(s.balance),
-                    style: TextStyle(color: balanceColor, fontWeight: FontWeight.w800),
-                  )),
-                  DataCell(_SupplierTableActions(supplier: s)),
-                ],
-              );
-            }).toList(),
-          ),
+                  headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                  dataTextStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  dividerThickness: 1,
+                  columnSpacing: 28,
+                  columns: [
+                    DataColumn(label: const Text('Supplier / Company'), onSort: _onSort),
+                    DataColumn(label: const Text('Contact & Phone'), onSort: _onSort),
+                    DataColumn(label: const Text('GSTIN / State'), onSort: _onSort),
+                    DataColumn(label: const Text('Terms'), onSort: _onSort),
+                    DataColumn(label: const Text('Payable Balance'), numeric: true, onSort: _onSort),
+                    const DataColumn(label: Text('Actions')),
+                  ],
+                  rows: _sorted.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final s = entry.value;
+                    final balanceColor = s.balance > 0 ? AppColors.error : (s.balance < 0 ? AppColors.success : AppColors.textMuted);
+
+                    final phoneStr = (s.phone != null && s.phone!.trim().isNotEmpty) ? s.phone!.trim() : null;
+                    final contactStr = (s.contactPerson != null && s.contactPerson!.trim().isNotEmpty) ? s.contactPerson!.trim() : null;
+                    final contactDisplay = phoneStr != null
+                        ? (contactStr != null ? '$contactStr ($phoneStr)' : phoneStr)
+                        : (contactStr ?? '—');
+
+                    final gstStr = (s.gstNumber != null && s.gstNumber!.trim().isNotEmpty) ? s.gstNumber!.trim() : null;
+                    final stateStr = (s.state != null && s.state!.trim().isNotEmpty) ? s.state!.trim() : null;
+                    final gstDisplay = gstStr != null
+                        ? (stateStr != null ? '$gstStr • $stateStr' : gstStr)
+                        : (stateStr ?? '—');
+
+                    final termsDisplay = (s.paymentTerms != null && s.paymentTerms!.trim().isNotEmpty) ? s.paymentTerms!.trim() : 'Net 30';
+
+                    return DataRow(
+                      color: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.hovered)) return AppColors.primary.withValues(alpha: 0.04);
+                        return i.isOdd
+                            ? (isDark ? Colors.white.withValues(alpha: 0.02) : Colors.grey.withValues(alpha: 0.02))
+                            : null;
+                      }),
+                      cells: [
+                        DataCell(
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor: AppColors.accent.withValues(alpha: 0.1),
+                                child: Text(s.name.isNotEmpty ? s.name[0].toUpperCase() : 'S', style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800, fontSize: 13)),
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(s.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                  if (s.companyName != null && s.companyName!.trim().isNotEmpty)
+                                    Text(s.companyName!.trim(), style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                                ],
+                              ),
+                            ],
+                          ),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddEditSupplierScreen(supplier: s))),
+                        ),
+                        DataCell(Text(contactDisplay, style: const TextStyle(color: AppColors.textMuted))),
+                        DataCell(Text(gstDisplay, style: const TextStyle(color: AppColors.textMuted))),
+                        DataCell(Text(termsDisplay, style: const TextStyle(fontSize: 11))),
+                        DataCell(Text(
+                          CurrencyFormatter.format(s.balance),
+                          style: TextStyle(color: balanceColor, fontWeight: FontWeight.w800),
+                        )),
+                        DataCell(_SupplierTableActions(supplier: s)),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -378,6 +399,14 @@ class _SupplierCardState extends State<_SupplierCard> {
     final balance = widget.supplier.balance;
     final balanceColor = balance > 0 ? AppColors.error : (balance < 0 ? AppColors.success : AppColors.textMuted);
 
+    final subInfo = (widget.supplier.companyName != null && widget.supplier.companyName!.trim().isNotEmpty)
+        ? widget.supplier.companyName!.trim()
+        : ((widget.supplier.phone != null && widget.supplier.phone!.trim().isNotEmpty) ? widget.supplier.phone!.trim() : 'No contact details');
+
+    final termsText = (widget.supplier.paymentTerms != null && widget.supplier.paymentTerms!.trim().isNotEmpty)
+        ? widget.supplier.paymentTerms!.trim()
+        : 'Net 30';
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -403,7 +432,7 @@ class _SupplierCardState extends State<_SupplierCard> {
                   children: [
                     CircleAvatar(
                       backgroundColor: AppColors.accent.withValues(alpha: 0.1),
-                      child: Text(widget.supplier.name[0].toUpperCase(), style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800)),
+                      child: Text(widget.supplier.name.isNotEmpty ? widget.supplier.name[0].toUpperCase() : 'S', style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800)),
                     ),
                     const Spacer(),
                     PopupMenuButton<String>(
@@ -449,7 +478,7 @@ class _SupplierCardState extends State<_SupplierCard> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  widget.supplier.companyName ?? (widget.supplier.phone ?? 'No phone'),
+                  subInfo,
                   style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -458,7 +487,7 @@ class _SupplierCardState extends State<_SupplierCard> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(widget.supplier.paymentTerms ?? 'Net 30', style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600)),
+                    Text(termsText, style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600)),
                     Text(
                       CurrencyFormatter.format(balance),
                       style: TextStyle(color: balanceColor, fontWeight: FontWeight.w900, fontSize: 15),
@@ -523,14 +552,14 @@ void _showSupplierPurchases(BuildContext context, WidgetRef ref, SupplierModel s
             ? const Center(child: Text('No purchase records found for this vendor.', style: TextStyle(color: AppColors.textMuted)))
             : ListView.separated(
                 itemCount: purchases.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
+                separatorBuilder: (context, index) => const Divider(height: 1),
                 itemBuilder: (ctx, i) {
                   final p = purchases[i];
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                     leading: const CircleAvatar(backgroundColor: Color(0xFFEEF2FF), child: Icon(Icons.receipt_rounded, color: AppColors.primary, size: 20)),
                     title: Text(p['bill_no'] ?? 'PO #${p['id']}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                    subtitle: Text((p['date'] as String? ?? '').substring(0, 10), style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                    subtitle: Text((p['date'] as String? ?? '').substring(0, math.min(10, (p['date'] as String? ?? '').length)), style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
                     trailing: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.end,

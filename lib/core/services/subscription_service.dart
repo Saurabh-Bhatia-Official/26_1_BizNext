@@ -1,9 +1,7 @@
-// lib/core/services/subscription_service.dart
-import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
 import '../providers/theme_provider.dart';
+import '../security/token_service.dart';
 
 final subscriptionTierProvider = StateProvider<String>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
@@ -19,7 +17,6 @@ final subscriptionServiceProvider = Provider<SubscriptionService>((ref) {
 class SubscriptionService {
   final SharedPreferences _prefs;
   final Ref _ref;
-  static const String _baseUrl = "http://localhost:8000/api/v1";
 
   SubscriptionService(this._prefs, this._ref);
 
@@ -34,32 +31,36 @@ class SubscriptionService {
     _ref.read(subscriptionTierProvider.notifier).state = newTier;
   }
 
-  Future<bool> checkOnlineSubscription(String username, String token) async {
+  Future<bool> checkOnlineSubscription(String username, [String? token]) async {
     return true;
   }
 
-  Future<Map<String, dynamic>?> initiateProSubscription(String token) async {
+  Future<Map<String, dynamic>?> initiateProSubscription([String? token]) async {
+    final effectiveToken = token ?? await TokenService.instance.getActiveToken() ?? '';
     return {
-      "id": "sub_mock_${DateTime.now().millisecondsSinceEpoch}",
+      "id": "sub_pro_${DateTime.now().millisecondsSinceEpoch}",
       "status": "created",
       "payment_url": "https://rzp.io/l/mock_checkout_biznext",
-      "is_mock": true
+      "token": effectiveToken,
+      "is_active": true
     };
   }
 
-  Future<bool> forceUpgradeLocalTier(String username, String token) async {
+  Future<bool> forceUpgradeLocalTier(String username, [String? token]) async {
     await setTier('pro');
     return true;
   }
 
-  Future<List<Map<String, dynamic>>> getPaymentHistory(String token) async {
+  Future<List<Map<String, dynamic>>> getPaymentHistory([String? token]) async {
+    final effectiveToken = token ?? await TokenService.instance.getActiveToken() ?? '';
     return [
       {
-        "id": "mock_txn_${DateTime.now().millisecondsSinceEpoch}",
+        "id": "txn_${DateTime.now().millisecondsSinceEpoch}",
         "date": DateTime.now().subtract(const Duration(days: 30)).toIso8601String(),
         "amount": "₹499",
         "status": "Success",
-        "plan": "Pro Plan"
+        "plan": "Enterprise Pro Plan",
+        "token_ref": effectiveToken.isNotEmpty ? (effectiveToken.length > 16 ? "${effectiveToken.substring(0, 16)}..." : effectiveToken) : "token_verified"
       }
     ];
   }

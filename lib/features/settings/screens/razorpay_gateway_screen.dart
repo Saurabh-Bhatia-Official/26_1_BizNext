@@ -1039,7 +1039,7 @@ class _RazorpayGatewayScreenState extends ConsumerState<RazorpayGatewayScreen> {
 
       // Sync all data from the internet database
       try {
-        await SyncService().syncNow("dummy_token_12345");
+        await SyncService().syncNow();
       } catch (e) {
         debugPrint("Sync error during checkout: $e");
       }

@@ -23,10 +23,7 @@ class _PaymentHistoryScreenState extends ConsumerState<PaymentHistoryScreen> {
 
   Future<void> _fetchHistory() async {
     final subService = ref.read(subscriptionServiceProvider);
-    // In a real app, you would retrieve the actual token from Auth provider
-    final token = "dummy_token_12345";
-    
-    final history = await subService.getPaymentHistory(token);
+    final history = await subService.getPaymentHistory();
     if (mounted) {
       setState(() {
         _history = history;

@@ -95,11 +95,12 @@ class ShortcutSettingsScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkCard : Colors.white,
+                  Material(
+                    color: isDark ? AppColors.darkCard : Colors.white,
+                    clipBehavior: Clip.antiAlias,
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                      side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
                     ),
                     child: ListView.separated(
                       shrinkWrap: true,

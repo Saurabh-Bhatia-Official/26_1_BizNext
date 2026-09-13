@@ -77,7 +77,7 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
                   context: context,
                   builder: (c) => AlertDialog(
                     title: const Text('Settle Payment'),
-                    content: Text('Are you sure you want to mark this invoice as fully paid? This will settle ₹${CurrencyFormatter.format(widget.sale.balanceDue)}.'),
+                    content: Text('Are you sure you want to mark this invoice as fully paid? This will settle ${CurrencyFormatter.format(widget.sale.balanceDue)}.'),
                     actions: [
                       TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
                       ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('Settle')),
@@ -146,7 +146,7 @@ class _ActionButtonsState extends ConsumerState<ActionButtons> {
   void _printInvoice(BuildContext context, SaleHistoryModel sale, int templateId) async {
     final business = ref.read(currentBusinessProvider);
     if (business != null) {
-      await InvoiceService.generateAndPrintInvoice(business: business, sale: sale, templateId: templateId);
+      await InvoiceService.generateAndPrintInvoice(context: context, business: business, sale: sale, templateId: templateId);
     }
   }
 

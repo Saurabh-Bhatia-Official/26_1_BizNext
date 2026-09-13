@@ -37,7 +37,7 @@ class CustomerFormNotifier extends StateNotifier<AsyncValue<void>> {
   CustomerFormNotifier(this._repo, this._ref) : super(const AsyncValue.data(null));
 
   Future<bool> saveCustomer(CustomerModel customer) async {
-    state = const AsyncValue.loading();
+    if (mounted) state = const AsyncValue.loading();
     try {
       if (customer.id == null) {
         final lSettings = _ref.read(loyaltySettingsProvider);
@@ -46,28 +46,28 @@ class CustomerFormNotifier extends StateNotifier<AsyncValue<void>> {
       } else {
         await _repo.updateCustomer(customer);
       }
-      state = const AsyncValue.data(null);
+      if (mounted) state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) state = AsyncValue.error(e, st);
       return false;
     }
   }
 
   Future<bool> deleteCustomer(int id) async {
-    state = const AsyncValue.loading();
+    if (mounted) state = const AsyncValue.loading();
     try {
       await _repo.deleteCustomer(id);
-      state = const AsyncValue.data(null);
+      if (mounted) state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) state = AsyncValue.error(e, st);
       return false;
     }
   }
 }
 
-final customerFormProvider = StateNotifierProvider.autoDispose<CustomerFormNotifier, AsyncValue<void>>((ref) {
+final customerFormProvider = StateNotifierProvider<CustomerFormNotifier, AsyncValue<void>>((ref) {
   final repo = ref.watch(customerRepositoryProvider);
   return CustomerFormNotifier(repo, ref);
 });

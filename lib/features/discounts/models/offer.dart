@@ -89,15 +89,18 @@ class Offer {
       suffix = targetProductName != null ? ' on $targetProductName' : ' on specific product';
     }
 
+    final formattedValue = (discountValue % 1 == 0) ? discountValue.toInt().toString() : discountValue.toString();
+    final formattedMin = (minAmount % 1 == 0) ? minAmount.toInt().toString() : minAmount.toString();
+
     switch (offerType) {
       case 'buy_x_get_y':
         return 'Buy ${buyQty.toInt()} get ${getQty.toInt()} free$suffix';
       case 'bill_amount':
-        return '$discountValue${discountType == 'percentage' ? '%' : ' off'} on bills above ₹$minAmount$suffix';
+        return '$formattedValue${discountType == 'percentage' ? '%' : ' OFF'} on bills above ₹$formattedMin$suffix';
       case 'product_discount':
-        return '$discountValue${discountType == 'percentage' ? '%' : ' off'} on selected products';
+        return '$formattedValue${discountType == 'percentage' ? '%' : ' OFF'} on selected products';
       default:
-        return '$discountValue${discountType == 'percentage' ? '%' : ' off'} discount$suffix';
+        return '$formattedValue${discountType == 'percentage' ? '%' : ' OFF'} discount$suffix';
     }
   }
 

@@ -61,6 +61,9 @@ class AppConstants {
   // ── SharedPreferences Keys ─────────────────────────────────────────────────
   static const String prefUserId = 'active_user_id';
   static const String prefBusinessId = 'active_business_id';
+  static const String prefAuthToken = 'active_auth_token';
+  static const String prefRememberMe = 'remember_me';
+  static const String prefSavedUsername = 'saved_username';
   static const String prefThemeMode = 'theme_mode';
   static const String prefSyncMode = 'sync_mode';
   static const String prefTutorialDone = 'tutorial_done';

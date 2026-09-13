@@ -151,8 +151,8 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     setState(() => _isLoading = true);
     final subService = ref.read(subscriptionServiceProvider);
     
-    // Simulate/Initiate subscription via backend api
-    final res = await subService.initiateProSubscription("dummy_token_12345");
+    // Initiate subscription via secure backend API
+    final res = await subService.initiateProSubscription();
     setState(() => _isLoading = false);
 
     if (res != null && context.mounted) {

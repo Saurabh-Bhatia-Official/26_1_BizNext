@@ -2,6 +2,7 @@
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -9,20 +10,26 @@ import '../../auth/models/business_model.dart';
 import '../models/sale_history_model.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../core/utils/date_formatter.dart';
+import '../../../core/widgets/invoice_preview_screen.dart';
 
 class InvoiceService {
   static Future<void> generateAndPrintInvoice({
+    required BuildContext context,
     required BusinessModel business,
     required SaleHistoryModel sale,
     int templateId = 0,
   }) async {
     final pdf = await _generateDocument(business, sale, templateId);
+    final docName = 'Invoice_${sale.invoiceNo}';
 
-    // Show print preview
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Invoice_${sale.invoiceNo}',
-    );
+    // Navigate to the in-app PDF preview window
+    if (context.mounted) {
+      await InvoicePreviewScreen.show(
+        context,
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        documentName: docName,
+      );
+    }
   }
 
   static Future<void> exportInvoice({

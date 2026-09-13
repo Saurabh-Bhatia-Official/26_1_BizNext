@@ -5,10 +5,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../../features/auth/providers/auth_provider.dart';
-import '../providers/theme_provider.dart';
 import '../../features/settings/providers/settings_provider.dart';
 import 'app_shell.dart';
-import '../services/sync_service.dart';
+
 import '../database/database_providers.dart';
 import '../services/rbac_service.dart';
 import '../../features/notifications/providers/notifications_provider.dart';
@@ -48,7 +47,6 @@ class AppSidebar extends ConsumerWidget {
   final bool? isCollapsedOverride;
   final GlobalKey? dashboardKey;
   final GlobalKey? posKey;
-  final GlobalKey? themeKey;
 
   const AppSidebar({
     super.key,
@@ -57,7 +55,6 @@ class AppSidebar extends ConsumerWidget {
     this.isCollapsedOverride,
     this.dashboardKey,
     this.posKey,
-    this.themeKey,
   });
 
   @override
@@ -90,22 +87,30 @@ class AppSidebar extends ConsumerWidget {
                   mainAxisAlignment: isCollapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
                   children: [
                     Container(
-                      width: 32,
-                      height: 32,
+                      width: 40,
+                      height: 40,
+                      padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: Image.asset(
                           'assets/logo.png',
-                          fit: BoxFit.cover,
+                          fit: BoxFit.contain,
                         ),
                       ),
                     ),
                     if (!isCollapsed) ...[
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -115,7 +120,7 @@ class AppSidebar extends ConsumerWidget {
                               'BIZNEXT',
                               style: TextStyle(
                                 color: isDark ? Colors.white : AppColors.textLight,
-                                fontSize: 20,
+                                fontSize: 22,
                                 fontWeight: FontWeight.w900,
                                 letterSpacing: -0.5,
                               ),
@@ -150,30 +155,13 @@ class AppSidebar extends ConsumerWidget {
                     ],
                   ],
                 ),
-                if (!isCollapsed) ...[
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      const _ReloadButton(),
-                      const SizedBox(width: 8),
-                      _ThemeToggleSmall(key: themeKey),
-                    ],
-                  ),
-                ],
-                if (isCollapsed) ...[
-                  const SizedBox(height: 20),
-                  const _ReloadButton(),
+                if (isCollapsed && isWide) ...[
                   const SizedBox(height: 12),
-                  _ThemeToggleSmall(key: themeKey),
-                  if (isWide) ...[
-                    const SizedBox(height: 12),
-                    IconButton(
-                      onPressed: () => ref.read(sidebarHiddenProvider.notifier).state = true,
-                      icon: const Icon(Icons.menu_open_rounded, color: AppColors.primary, size: 20),
-                      tooltip: 'Hide Sidebar',
-                    ),
-                  ],
+                  IconButton(
+                    onPressed: () => ref.read(sidebarHiddenProvider.notifier).state = true,
+                    icon: const Icon(Icons.menu_open_rounded, color: AppColors.primary, size: 20),
+                    tooltip: 'Hide Sidebar',
+                  ),
                 ],
               ],
             ),
@@ -246,25 +234,72 @@ class AppSidebar extends ConsumerWidget {
   Widget _buildNavItem(BuildContext context, WidgetRef ref, int index, bool isCollapsed) {
     final d = navDestinations[index];
     final active = selectedIndex == index;
-    
-    // Gate role-based access
+
+    // ── Role-based access gate ─────────────────────────────────────────────
     final rbac = ref.watch(rbacProvider);
-    bool hasRoleAccess = true;
-    if (index == 9) { // Reports
-      hasRoleAccess = rbac.hasPermission(AppPermission.viewReports);
-    } else if (index == 10) { // Budgeting
-      hasRoleAccess = rbac.hasPermission(AppPermission.manageBudgets);
-    } else if (index == 15) { // Settings
-      hasRoleAccess = rbac.hasPermission(AppPermission.manageSettings);
-    } else if (index == 8) { // Accounts
-      hasRoleAccess = rbac.isOwnerOrAdmin || rbac.isManager;
-    } else if (index == 3 || index == 4 || index == 5 || index == 7) { // Purchase & Inventory, Suppliers
-      hasRoleAccess = rbac.isOwnerOrAdmin || rbac.isManager;
+    bool hasRoleAccess;
+
+    switch (index) {
+      case 0: // Dashboard — everyone
+      case 1: // POS / Billing — everyone
+      case 2: // Sales History — everyone
+      case 14: // AI Assistant — everyone
+        hasRoleAccess = true;
+        break;
+
+      case 3: // Record Purchase
+      case 4: // Purchase History
+        hasRoleAccess = rbac.hasPermission(AppPermission.managePurchases);
+        break;
+
+      case 5: // Inventory
+        hasRoleAccess = rbac.hasPermission(AppPermission.manageInventory);
+        break;
+
+      case 6: // Customers
+        hasRoleAccess = rbac.hasPermission(AppPermission.manageCustomers);
+        break;
+
+      case 7: // Suppliers
+        hasRoleAccess = rbac.hasPermission(AppPermission.manageSuppliers);
+        break;
+
+      case 8: // Accounts — Owner & Admin only
+        hasRoleAccess = rbac.hasPermission(AppPermission.viewAccounts);
+        break;
+
+      case 9: // Reports
+        hasRoleAccess = rbac.hasPermission(AppPermission.viewReports);
+        break;
+
+      case 10: // Budgeting
+        hasRoleAccess = rbac.hasPermission(AppPermission.manageBudgets);
+        break;
+
+      case 11: // Offers & Promotions
+        hasRoleAccess = rbac.hasPermission(AppPermission.manageOffers);
+        break;
+
+      case 12: // Loyalty
+        hasRoleAccess = rbac.hasPermission(AppPermission.manageLoyalty);
+        break;
+
+      case 13: // Notifications — Owner, Admin, Manager
+        hasRoleAccess = rbac.isOwnerOrAdmin || rbac.isManager;
+        break;
+
+      case 15: // Settings — Owner & Admin only
+        hasRoleAccess = rbac.hasPermission(AppPermission.manageSettings);
+        break;
+
+      default:
+        hasRoleAccess = true;
     }
 
     if (!hasRoleAccess) {
-      return const SizedBox.shrink(); // Hide the nav item completely for unauthorized roles
+      return const SizedBox.shrink(); // Hide nav item completely for unauthorised roles
     }
+
 
     int badgeCount = 0;
     if (index == 13) {
@@ -348,7 +383,7 @@ class _BusinessSwitcher extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        biz?.name ?? 'No Business',
+                        (biz?.name != null && biz!.name.isNotEmpty) ? biz.name : 'Company Name',
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: TextStyle(color: isDark ? Colors.white : AppColors.textLight, fontSize: 13, fontWeight: FontWeight.w800),
                       ),
@@ -500,8 +535,6 @@ class _SidebarFooter extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const tier = 'pro';
-    const isPro = true;
 
     if (isCollapsed) {
       return InkWell(
@@ -612,135 +645,5 @@ class _SidebarFooter extends ConsumerWidget {
       ),
     ),
   );
-  }
-}
-class _ThemeToggleSmall extends ConsumerWidget {
-  const _ThemeToggleSmall({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final themeMode = ref.watch(themeModeProvider);
-    final isDark = themeMode == ThemeMode.dark;
-
-    return InkWell(
-      onTap: () => ref.read(themeModeProvider.notifier).toggle(),
-      borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: 300.ms,
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1)),
-        ),
-        child: Icon(
-          isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-          color: isDark ? Colors.amber : AppColors.primary,
-          size: 18,
-        ),
-      ),
-    );
-  }
-}
-
-class _ReloadButton extends ConsumerStatefulWidget {
-  const _ReloadButton();
-
-  @override
-  ConsumerState<_ReloadButton> createState() => _ReloadButtonState();
-}
-
-class _ReloadButtonState extends ConsumerState<_ReloadButton> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleReload({bool isAutoTriggered = false}) async {
-    if (_isLoading) return;
-    setState(() {
-      _isLoading = true;
-    });
-    _controller.repeat();
-
-    try {
-      await SyncService().syncNow("dummy_token_12345");
-      if (mounted && !isAutoTriggered) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Software and data reloaded successfully!"),
-            backgroundColor: AppColors.success,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Reload failed: $e"),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        _controller.stop();
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // Automatically trigger synchronization when local data or settings change in DB
-    ref.listen<int>(databaseVersionProvider, (previous, next) {
-      if (previous != null && next > previous) {
-        _handleReload(isAutoTriggered: true);
-      }
-    });
-
-    return Tooltip(
-      message: 'Reload Software',
-      child: InkWell(
-        onTap: () => _handleReload(isAutoTriggered: false),
-        borderRadius: BorderRadius.circular(12),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.1),
-            ),
-          ),
-          child: RotationTransition(
-            turns: _controller,
-            child: Icon(
-              Icons.sync_rounded,
-              color: isDark ? AppColors.accent : AppColors.primary,
-              size: 18,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }

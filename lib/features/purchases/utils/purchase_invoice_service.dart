@@ -2,6 +2,7 @@
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -9,19 +10,26 @@ import '../../auth/models/business_model.dart';
 import '../models/purchase_model.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../core/utils/date_formatter.dart';
+import '../../../core/widgets/invoice_preview_screen.dart';
 
 class PurchaseInvoiceService {
   static Future<void> generateAndPrintPurchase({
+    required BuildContext context,
     required BusinessModel business,
     required PurchaseModel purchase,
     int templateId = 0,
   }) async {
     final pdf = await _generateDocument(business, purchase, templateId);
+    final docName = 'Purchase_Bill_${purchase.billNo ?? purchase.id}';
 
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Purchase_Bill_${purchase.billNo ?? purchase.id}',
-    );
+    // Navigate to the in-app PDF preview window
+    if (context.mounted) {
+      await InvoicePreviewScreen.show(
+        context,
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        documentName: docName,
+      );
+    }
   }
 
   static Future<void> exportPurchasePDF({
@@ -284,9 +292,10 @@ class PurchaseInvoiceService {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
-                      _buildTotalRow('Subtotal:', CurrencyFormatter.format(purchase.subtotal), fontRegular),
-                      _buildTotalRow('Tax (GST):', CurrencyFormatter.format(purchase.gstAmount), fontRegular),
+                      _buildTotalRow('Gross Subtotal:', CurrencyFormatter.format(purchase.subtotal), fontRegular),
                       if (purchase.discount > 0) _buildTotalRow('Discount:', '-${CurrencyFormatter.format(purchase.discount)}', fontRegular),
+                      _buildTotalRow('Taxable Value:', CurrencyFormatter.format(purchase.taxableAmount), fontRegular),
+                      _buildTotalRow('Tax (GST):', CurrencyFormatter.format(purchase.gstAmount), fontRegular),
                       pw.Divider(color: PdfColors.grey400),
                       _buildTotalRow('Grand Total:', CurrencyFormatter.format(purchase.grandTotal), fontBold, isLarge: true, primaryColor: primaryColor),
                       _buildTotalRow('Amount Paid:', CurrencyFormatter.format(purchase.paidAmount), fontRegular),

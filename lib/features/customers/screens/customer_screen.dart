@@ -1,5 +1,6 @@
 // lib/features/customers/screens/customer_screen.dart
 
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,21 +17,16 @@ import '../../discounts/providers/discount_provider.dart';
 import '../models/customer_discount.dart';
 import '../../settings/providers/settings_provider.dart';
 import '../../../core/services/subscription_service.dart';
+import '../../../core/providers/screen_layout_provider.dart';
 
-class CustomerScreen extends ConsumerStatefulWidget {
+class CustomerScreen extends ConsumerWidget {
   const CustomerScreen({super.key});
 
   @override
-  ConsumerState<CustomerScreen> createState() => _CustomerScreenState();
-}
-
-class _CustomerScreenState extends ConsumerState<CustomerScreen> {
-  LayoutMode _layoutMode = LayoutMode.grid;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final customersAsync = ref.watch(filteredCustomersProvider);
+    final layoutMode = ref.watch(screenLayoutProvider('customers'));
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -38,14 +34,14 @@ class _CustomerScreenState extends ConsumerState<CustomerScreen> {
         children: [
           _CustomerHeader(
             isDark: isDark,
-            layoutMode: _layoutMode,
-            onLayoutChanged: (m) => setState(() => _layoutMode = m),
+            layoutMode: layoutMode,
+            onLayoutChanged: (m) => ref.read(screenLayoutProvider('customers').notifier).setLayout(m),
           ),
           Expanded(
             child: customersAsync.when(
               data: (list) => list.isEmpty
                   ? _EmptyState(isDark: isDark)
-                  : (_layoutMode == LayoutMode.grid
+                  : (layoutMode == LayoutMode.grid
                       ? _CustomerGrid(customers: list, isDark: isDark)
                       : _CustomerTable(customers: list, isDark: isDark)),
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -223,71 +219,80 @@ class _CustomerTableState extends State<_CustomerTable> {
           border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder, width: 1.5),
         ),
         clipBehavior: Clip.antiAlias,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            sortColumnIndex: _sortColumn,
-            sortAscending: _sortAscending,
-            headingRowColor: WidgetStateProperty.all(
-              isDark ? Colors.white.withValues(alpha: 0.04) : AppColors.lightBg,
-            ),
-            headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.3),
-            dataTextStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            dividerThickness: 1,
-            columnSpacing: 28,
-            columns: [
-              DataColumn(label: const Text('Customer'), onSort: _onSort),
-              DataColumn(label: const Text('Phone'), onSort: _onSort),
-              DataColumn(label: const Text('Balance'), numeric: true, onSort: _onSort),
-              DataColumn(label: const Text('Loyalty Pts'), numeric: true, onSort: _onSort),
-              const DataColumn(label: Text('Actions')),
-            ],
-            rows: _sorted.asMap().entries.map((entry) {
-              final i = entry.key;
-              final c = entry.value;
-              final balanceColor = c.balance > 0 ? AppColors.success : (c.balance < 0 ? AppColors.error : AppColors.textMuted);
-
-              return DataRow(
-                color: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.hovered)) return AppColors.primary.withValues(alpha: 0.04);
-                  return i.isOdd
-                      ? (isDark ? Colors.white.withValues(alpha: 0.02) : Colors.grey.withValues(alpha: 0.02))
-                      : null;
-                }),
-                cells: [
-                  DataCell(
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(
-                          radius: 16,
-                          backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                          child: Text(c.name[0].toUpperCase(), style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800, fontSize: 13)),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(c.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                      ],
-                    ),
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddEditCustomerScreen(customer: c))),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final minTableWidth = math.max(constraints.maxWidth, 850.0);
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minWidth: minTableWidth),
+                child: DataTable(
+                  sortColumnIndex: _sortColumn,
+                  sortAscending: _sortAscending,
+                  headingRowColor: WidgetStateProperty.all(
+                    isDark ? Colors.white.withValues(alpha: 0.04) : AppColors.lightBg,
                   ),
-                  DataCell(Text(c.phone ?? '—', style: const TextStyle(color: AppColors.textMuted))),
-                  DataCell(Text(
-                    CurrencyFormatter.format(c.balance),
-                    style: TextStyle(color: balanceColor, fontWeight: FontWeight.w700),
-                  )),
-                  DataCell(Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.stars_rounded, size: 14, color: AppColors.primary),
-                      const SizedBox(width: 4),
-                      Text(c.loyaltyPoints.toInt().toString()),
-                    ],
-                  )),
-                  DataCell(_CustomerTableActions(customer: c)),
-                ],
-              );
-            }).toList(),
-          ),
+                  headingTextStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                  dataTextStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  dividerThickness: 1,
+                  columnSpacing: 28,
+                  columns: [
+                    DataColumn(label: const Text('Customer'), onSort: _onSort),
+                    DataColumn(label: const Text('Phone'), onSort: _onSort),
+                    DataColumn(label: const Text('Balance'), numeric: true, onSort: _onSort),
+                    DataColumn(label: const Text('Loyalty Pts'), numeric: true, onSort: _onSort),
+                    const DataColumn(label: Text('Actions')),
+                  ],
+                  rows: _sorted.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final c = entry.value;
+                    final balanceColor = c.balance > 0 ? AppColors.success : (c.balance < 0 ? AppColors.error : AppColors.textMuted);
+                    final phoneDisplay = (c.phone != null && c.phone!.trim().isNotEmpty) ? c.phone!.trim() : '—';
+
+                    return DataRow(
+                      color: WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.hovered)) return AppColors.primary.withValues(alpha: 0.04);
+                        return i.isOdd
+                            ? (isDark ? Colors.white.withValues(alpha: 0.02) : Colors.grey.withValues(alpha: 0.02))
+                            : null;
+                      }),
+                      cells: [
+                        DataCell(
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircleAvatar(
+                                radius: 16,
+                                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                                child: Text(c.name.isNotEmpty ? c.name[0].toUpperCase() : 'C', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800, fontSize: 13)),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(c.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            ],
+                          ),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AddEditCustomerScreen(customer: c))),
+                        ),
+                        DataCell(Text(phoneDisplay, style: const TextStyle(color: AppColors.textMuted))),
+                        DataCell(Text(
+                          CurrencyFormatter.format(c.balance),
+                          style: TextStyle(color: balanceColor, fontWeight: FontWeight.w700),
+                        )),
+                        DataCell(Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.stars_rounded, size: 14, color: AppColors.primary),
+                            const SizedBox(width: 4),
+                            Text(c.loyaltyPoints.toInt().toString()),
+                          ],
+                        )),
+                        DataCell(_CustomerTableActions(customer: c)),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );

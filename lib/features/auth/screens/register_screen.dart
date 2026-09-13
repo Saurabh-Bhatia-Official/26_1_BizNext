@@ -95,6 +95,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           Positioned(top: -100, left: -100, child: _GlowOrb(color: AppColors.primary, size: 400)),
           Positioned(bottom: -150, right: -100, child: _GlowOrb(color: AppColors.accent, size: 500)),
           
+          // ── Back Button ──
+          if (Navigator.canPop(context))
+            Positioned(
+              top: 16,
+              left: 16,
+              child: SafeArea(
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 28),
+                  onPressed: () => Navigator.maybePop(context),
+                  tooltip: 'Back',
+                ),
+              ),
+            ),
+          
           // ── Main Content ──
           Center(
             child: SingleChildScrollView(

@@ -2,6 +2,7 @@
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/utils/currency_formatter.dart';
 import '../models/sale_history_model.dart';
 
 class BillingRepository {
@@ -381,8 +382,24 @@ class BillingRepository {
           'date': dateStr,
         });
 
-        // Deduct Cash/Bank balance
-        if (returnData['account_id'] != null) {
+        // Deduct Cash/Bank balance (Validate balance first)
+        if (returnData['account_id'] != null && refundAmount > 0) {
+          final accResult = await txn.query(
+            AppConstants.tblAccounts,
+            columns: ['balance', 'name'],
+            where: 'id = ?',
+            whereArgs: [returnData['account_id']],
+          );
+          if (accResult.isNotEmpty) {
+            final balance = (accResult.first['balance'] as num?)?.toDouble() ?? 0.0;
+            final accName = accResult.first['name'] as String? ?? 'Account';
+            if (balance <= 0) {
+              throw Exception("Insufficient funds in account '$accName': Selected account has zero balance (₹0.00).");
+            }
+            if (balance < refundAmount) {
+              throw Exception("Insufficient funds in account '$accName': Current Balance = ${CurrencyFormatter.format(balance)}, Refund Required = ${CurrencyFormatter.format(refundAmount)}.");
+            }
+          }
           await txn.rawUpdate(
             "UPDATE ${AppConstants.tblAccounts} SET balance = balance - ? WHERE id = ?",
             [refundAmount, returnData['account_id']],

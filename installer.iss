@@ -1,17 +1,32 @@
+#ifndef MyAppVersion
+#define MyAppVersion "1.0.0"
+#endif
+#define MyAppName "BizNext"
+#define MyAppPublisher "Saurabh Bhatia Official"
+#define MyAppExeName "biz_next.exe"
+
 [Setup]
-AppName=BizNext
-AppVersion=1.0.0+1
-AppPublisher=Saurabh Bhatia Official
-DefaultDirName={autopf}\BizNext
-DefaultGroupName=BizNext
+AppId={{D37E88BC-6F80-4D56-8A33-898A1907A8BE}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=LICENSE.txt
 OutputDir=build\windows\installer
-OutputBaseFilename=BizNext_v1.0.0_Setup
+OutputBaseFilename=BizNext-Windows-x64
+SetupIconFile=windows\runner\resources\app_icon.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayIcon={app}\biz_next.exe
+ArchitecturesInstallIn64BitMode=x64
+CloseApplications=yes
+RestartApplications=no
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -20,9 +35,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\BizNext"; Filename: "{app}\biz_next.exe"
-Name: "{group}\{cm:UninstallProgram,BizNext}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\BizNext"; Filename: "{app}\biz_next.exe"; Tasks: desktopicon
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\biz_next.exe"; Description: "{cm:LaunchProgram,BizNext}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent

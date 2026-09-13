@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/providers/notification_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../inventory/providers/inventory_provider.dart';
 import '../models/offer.dart';
@@ -86,7 +85,10 @@ class _OffersScreenState extends ConsumerState<OffersScreen> {
                         children: [
                           Icon(Icons.local_offer_outlined, size: 64, color: AppColors.textMuted.withValues(alpha: 0.5)),
                           const SizedBox(height: 16),
-                          Text(_searchQuery.isEmpty ? 'No offers created yet' : 'No offers found matching "$_searchQuery"', style: const TextStyle(color: AppColors.textMuted, fontSize: 16)),
+                          Text(
+                            _searchQuery.isEmpty ? 'No offers created yet' : 'No offers found matching "$_searchQuery"',
+                            style: const TextStyle(color: AppColors.textMuted, fontSize: 16),
+                          ),
                         ],
                       ),
                     )
@@ -95,7 +97,7 @@ class _OffersScreenState extends ConsumerState<OffersScreen> {
                         maxCrossAxisExtent: 400,
                         mainAxisSpacing: 20,
                         crossAxisSpacing: 20,
-                        mainAxisExtent: 340,
+                        mainAxisExtent: 380,
                       ),
                       itemCount: filteredOffers.length,
                       itemBuilder: (context, index) {
@@ -148,10 +150,10 @@ class _AddOfferDialogState extends ConsumerState<_AddOfferDialog> {
     super.initState();
     final o = widget.offer;
     _nameCtrl = TextEditingController(text: o?.name);
-    _valCtrl = TextEditingController(text: o?.discountValue.toString() ?? '0');
-    _minAmountCtrl = TextEditingController(text: o?.minAmount.toString() ?? '0');
-    _buyQtyCtrl = TextEditingController(text: o?.buyQty.toString() ?? '0');
-    _getQtyCtrl = TextEditingController(text: o?.getQty.toString() ?? '0');
+    _valCtrl = TextEditingController(text: o != null ? ((o.discountValue % 1 == 0) ? o.discountValue.toInt().toString() : o.discountValue.toString()) : '0');
+    _minAmountCtrl = TextEditingController(text: o != null ? ((o.minAmount % 1 == 0) ? o.minAmount.toInt().toString() : o.minAmount.toString()) : '0');
+    _buyQtyCtrl = TextEditingController(text: o != null ? ((o.buyQty % 1 == 0) ? o.buyQty.toInt().toString() : o.buyQty.toString()) : '0');
+    _getQtyCtrl = TextEditingController(text: o != null ? ((o.getQty % 1 == 0) ? o.getQty.toInt().toString() : o.getQty.toString()) : '0');
     
     if (o != null) {
       _offerType = o.offerType;
@@ -179,6 +181,7 @@ class _AddOfferDialogState extends ConsumerState<_AddOfferDialog> {
   @override
   Widget build(BuildContext context) {
     final products = ref.watch(productsProvider).asData?.value ?? [];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
@@ -412,68 +415,93 @@ class _AddOfferDialogState extends ConsumerState<_AddOfferDialog> {
                   child: Text('Promotion Poster', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textLight)),
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    if (_posterPath != null) ...[
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          image: DecorationImage(
-                            image: FileImage(File(_posterPath!)),
-                            fit: BoxFit.cover,
+                InkWell(
+                  onTap: () async {
+                    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+                    if (result != null && result.files.single.path != null) {
+                      final savedPath = await MediaUploadService.uploadMedia(result.files.single.path!);
+                      setState(() => _posterPath = savedPath);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    height: 120,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.5), style: BorderStyle.solid),
+                      borderRadius: BorderRadius.circular(16),
+                      color: isDark ? Colors.white.withValues(alpha: 0.05) : AppColors.primary.withValues(alpha: 0.02),
+                    ),
+                    child: _posterPath != null && _posterPath!.isNotEmpty && File(_posterPath!).existsSync()
+                        ? Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(16),
+                                child: Image.file(
+                                  File(_posterPath!),
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                ),
+                              ),
+                              Positioned(
+                                right: 8,
+                                top: 8,
+                                child: CircleAvatar(
+                                  backgroundColor: Colors.black54,
+                                  radius: 16,
+                                  child: IconButton(
+                                    icon: const Icon(Icons.close, size: 16, color: Colors.white),
+                                    onPressed: () => setState(() => _posterPath = null),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.cloud_upload_outlined, size: 36, color: AppColors.primary),
+                              SizedBox(height: 8),
+                              Text('Click to Upload Offer Banner / Poster', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 13)),
+                            ],
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final result = await FilePicker.platform.pickFiles(type: FileType.image);
-                        if (result != null && result.files.single.path != null) {
-                          setState(() => _posterPath = result.files.single.path);
-                          final finalUrl = await MediaUploadService.uploadMedia(result.files.single.path!);
-                          if (mounted && finalUrl != result.files.single.path) {
-                            setState(() => _posterPath = finalUrl);
-                          }
-                        }
-                      },
-                      icon: const Icon(Icons.upload_rounded),
-                      label: Text(_posterPath == null ? 'Upload Poster' : 'Change Poster'),
-                    ),
-                    if (_posterPath != null) ...[
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: () => setState(() => _posterPath = null),
-                        icon: const Icon(Icons.delete_rounded, color: AppColors.error),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+
+                // Validity Dates
                 Row(
                   children: [
                     Expanded(
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Start Date', style: TextStyle(fontSize: 12)),
-                        subtitle: Text(_startDate?.toString().split(' ')[0] ?? 'Pick date'),
-                        onTap: () async {
-                          final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
-                          if (d != null) setState(() => _startDate = d);
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: _startDate ?? DateTime.now(),
+                            firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (date != null) setState(() => _startDate = date);
                         },
+                        icon: const Icon(Icons.calendar_today_rounded, size: 16),
+                        label: Text(_startDate == null ? 'Start Date' : _startDate!.toString().split(' ')[0]),
                       ),
                     ),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('End Date', style: TextStyle(fontSize: 12)),
-                        subtitle: Text(_endDate?.toString().split(' ')[0] ?? 'Pick date'),
-                        onTap: () async {
-                          final d = await showDatePicker(context: context, initialDate: DateTime.now().add(const Duration(days: 30)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
-                          if (d != null) setState(() => _endDate = d);
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: _endDate ?? DateTime.now().add(const Duration(days: 7)),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (date != null) setState(() => _endDate = date);
                         },
+                        icon: const Icon(Icons.event_rounded, size: 16),
+                        label: Text(_endDate == null ? 'End Date' : _endDate!.toString().split(' ')[0]),
                       ),
                     ),
                   ],
@@ -486,52 +514,36 @@ class _AddOfferDialogState extends ConsumerState<_AddOfferDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         ElevatedButton(
-          onPressed: () async {
-            if (!_formKey.currentState!.validate()) return;
-            if (_applyTo == 'product' && _selectedProductIds.isEmpty) return;
-            
-            final baseOffer = Offer(
-              id: widget.offer?.id,
-              businessId: ref.read(activeBusinessIdProvider),
-              name: _nameCtrl.text,
-              offerType: _offerType,
-              discountType: _discountType,
-              discountValue: double.tryParse(_valCtrl.text) ?? 0,
-              minAmount: double.tryParse(_minAmountCtrl.text) ?? 0,
-              buyQty: double.tryParse(_buyQtyCtrl.text) ?? 0,
-              getQty: double.tryParse(_getQtyCtrl.text) ?? 0,
-              applyTo: _applyTo,
-              targetId: null,
-              startDate: _startDate,
-              endDate: _endDate,
-              createdAt: widget.offer?.createdAt ?? DateTime.now(),
-              posterPath: _posterPath,
-            );
-            
-            if (_applyTo == 'product') {
-               for (final pId in _selectedProductIds) {
-                  final offer = baseOffer.copyWith(targetId: pId);
-                  if (widget.offer == null) {
-                      await ref.read(offersProvider.notifier).addOffer(offer);
-                  } else {
-                      if (pId == _selectedProductIds.first) {
-                          await ref.read(offersProvider.notifier).updateOffer(offer.copyWith(id: widget.offer!.id));
-                      } else {
-                          await ref.read(offersProvider.notifier).addOffer(offer.copyWith(id: null));
-                      }
-                  }
-               }
-            } else {
-               if (widget.offer == null) {
-                 await ref.read(offersProvider.notifier).addOffer(baseOffer);
-               } else {
-                 await ref.read(offersProvider.notifier).updateOffer(baseOffer);
-               }
-            }
-            
-            if (context.mounted) {
+          onPressed: () {
+            if (_formKey.currentState!.validate()) {
+              final business = ref.read(currentBusinessProvider);
+              final businessId = business?.id ?? 1;
+
+              final newOffer = Offer(
+                id: widget.offer?.id,
+                businessId: businessId,
+                name: _nameCtrl.text.trim(),
+                offerType: _offerType,
+                discountType: _discountType,
+                discountValue: double.tryParse(_valCtrl.text) ?? 0,
+                minAmount: double.tryParse(_minAmountCtrl.text) ?? 0,
+                buyQty: double.tryParse(_buyQtyCtrl.text) ?? 0,
+                getQty: double.tryParse(_getQtyCtrl.text) ?? 0,
+                applyTo: _applyTo,
+                targetId: _selectedProductIds.isNotEmpty ? _selectedProductIds.first : null,
+                startDate: _startDate,
+                endDate: _endDate,
+                isActive: widget.offer?.isActive ?? true,
+                createdAt: widget.offer?.createdAt ?? DateTime.now(),
+                posterPath: _posterPath,
+              );
+
+              if (widget.offer == null) {
+                ref.read(offersProvider.notifier).addOffer(newOffer);
+              } else {
+                ref.read(offersProvider.notifier).updateOffer(newOffer);
+              }
               Navigator.pop(context);
-              AppAlert.success(ref, widget.offer == null ? 'Offer created!' : 'Offer updated!');
             }
           },
           child: Text(widget.offer == null ? 'Create Offer' : 'Save Changes'),
@@ -548,6 +560,7 @@ class _OfferCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasPoster = offer.posterPath != null && offer.posterPath!.isNotEmpty && File(offer.posterPath!).existsSync();
     
     return Container(
       decoration: BoxDecoration(
@@ -555,106 +568,131 @@ class _OfferCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
         boxShadow: [
-          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4)),
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (offer.posterPath != null) ...[
-            Container(
-              height: 160,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              height: 120,
               width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                color: isDark ? Colors.black.withValues(alpha: 0.2) : AppColors.lightBg,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.file(
-                  File(offer.posterPath!),
-                  fit: BoxFit.contain,
-                ),
-              ),
+              color: isDark ? Colors.white.withValues(alpha: 0.05) : AppColors.lightBg,
+              child: hasPoster
+                  ? Image.file(
+                      File(offer.posterPath!),
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => _buildPlaceholderBanner(isDark),
+                    )
+                  : _buildPlaceholderBanner(isDark),
             ),
-            const SizedBox(height: 12),
-          ],
+          ),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   offer.offerType.toUpperCase().replaceAll('_', ' '),
-                  style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800),
+                  style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5),
                 ),
               ),
-              Switch.adaptive(
-                value: offer.isActive,
-                onChanged: (v) {
-                  ref.read(offersProvider.notifier).updateOffer(offer.copyWith(isActive: v));
-                },
-                activeTrackColor: AppColors.primary,
+              Transform.scale(
+                scale: 0.85,
+                child: Switch.adaptive(
+                  value: offer.isActive,
+                  onChanged: (v) {
+                    ref.read(offersProvider.notifier).updateOffer(offer.copyWith(isActive: v));
+                  },
+                  activeTrackColor: AppColors.primary,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Text(
             offer.name,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 4),
-          Flexible(
-            child: Text(
-              _getOfferDescription(offer, ref),
-              style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+          Text(
+            _getOfferDescription(offer, ref),
+            style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13, height: 1.3),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
           const Spacer(),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 offer.endDate != null ? 'Ends: ${offer.endDate!.toString().split(' ')[0]}' : 'No expiry',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted),
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted),
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
                     onPressed: () => _showViewOfferDialog(context, ref, offer),
-                    icon: const Icon(Icons.visibility_outlined, color: AppColors.primary, size: 20),
+                    icon: const Icon(Icons.visibility_outlined, color: AppColors.primary, size: 18),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
+                    tooltip: 'View Offer',
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   IconButton(
                     onPressed: () => _showAddOfferDialog(context, ref, offer),
-                    icon: const Icon(Icons.edit_outlined, color: AppColors.primary, size: 20),
+                    icon: const Icon(Icons.edit_outlined, color: AppColors.primary, size: 18),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
+                    tooltip: 'Edit Offer',
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   IconButton(
                     onPressed: () => ref.read(offersProvider.notifier).deleteOffer(offer.id!),
-                    icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 20),
+                    icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 18),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
+                    tooltip: 'Delete Offer',
                   ),
                 ],
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderBanner(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [AppColors.primary.withValues(alpha: 0.2), AppColors.primary.withValues(alpha: 0.05)]
+              : [AppColors.primary.withValues(alpha: 0.08), AppColors.primary.withValues(alpha: 0.02)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.local_offer_rounded,
+          size: 42,
+          color: AppColors.primary.withValues(alpha: 0.4),
+        ),
       ),
     );
   }
@@ -667,13 +705,20 @@ class _OfferCard extends ConsumerWidget {
       suffix = p != null ? ' on ${p.name}' : ' on specific product';
     }
 
+    final formattedValue = (offer.discountValue % 1 == 0)
+        ? offer.discountValue.toInt().toString()
+        : offer.discountValue.toString();
+    final formattedMin = (offer.minAmount % 1 == 0)
+        ? offer.minAmount.toInt().toString()
+        : offer.minAmount.toString();
+
     switch (offer.offerType) {
       case 'buy_x_get_y':
         return 'Buy ${offer.buyQty.toInt()} get ${offer.getQty.toInt()} free$suffix';
       case 'bill_amount':
-        return '${offer.discountValue}${offer.discountType == 'percentage' ? '%' : ' off'} on bills above ₹${offer.minAmount}$suffix';
+        return '$formattedValue${offer.discountType == 'percentage' ? '%' : ' OFF'} on bills above ₹$formattedMin$suffix';
       default:
-        return '${offer.discountValue}${offer.discountType == 'percentage' ? '%' : ' off'} discount$suffix';
+        return '$formattedValue${offer.discountType == 'percentage' ? '%' : ' OFF'} discount$suffix';
     }
   }
 }
@@ -712,7 +757,7 @@ class _ViewOfferDialog extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (offer.posterPath != null) ...[
+              if (offer.posterPath != null && offer.posterPath!.isNotEmpty && File(offer.posterPath!).existsSync()) ...[
                 Container(
                   height: 200,
                   width: double.infinity,

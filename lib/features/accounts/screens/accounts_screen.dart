@@ -13,7 +13,6 @@ import '../providers/accounts_provider.dart';
 import '../models/transaction_model.dart';
 import '../models/ledger_model.dart';
 import '../models/account_model.dart';
-import '../../../core/widgets/category_manager_screen.dart';
 import '../../billing/screens/sale_detail_screen.dart';
 import '../../purchases/screens/purchase_detail_screen.dart';
 import '../../purchases/screens/add_purchase_screen.dart';
@@ -21,6 +20,8 @@ import '../../purchases/providers/purchase_provider.dart';
 import '../../billing/providers/billing_provider.dart';
 import '../../inventory/providers/inventory_provider.dart';
 import '../../../core/widgets/searchable_dropdown.dart';
+import '../../../core/security/token_service.dart';
+import 'package:flutter/services.dart';
 
 class AccountsScreen extends ConsumerStatefulWidget {
   const AccountsScreen({super.key});
@@ -39,7 +40,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> with SingleTick
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
@@ -71,8 +72,6 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> with SingleTick
               tabs: const [
                 Tab(text: 'OVERVIEW'),
                 Tab(text: 'ACCOUNTS'),
-                Tab(text: 'INCOME CATS'),
-                Tab(text: 'EXPENSE CATS'),
               ],
             ),
           ],
@@ -85,36 +84,12 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> with SingleTick
           CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              const SliverToBoxAdapter(child: SizedBox(height: 20)),
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 sliver: SliverToBoxAdapter(child: _BalanceOverview(isDark: isDark)),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                sliver: SliverToBoxAdapter(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _showTransactionDialog(context, ref, AppConstants.ledgerCredit),
-                          icon: const Icon(Icons.add_rounded),
-                          label: const Text('Record Income / Expense', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            elevation: 2,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
+              const SliverToBoxAdapter(child: SizedBox(height: 28)),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
                 sliver: SliverToBoxAdapter(
@@ -133,20 +108,12 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> with SingleTick
 
           // ── Tab 2: Accounts ──
           _AccountsListTab(isDark: isDark),
-
-          // ── Tab 3: Income Categories ──
-          _CategoryListTab(type: 'income', isDark: isDark),
-
-          // ── Tab 4: Expense Categories ──
-          _CategoryListTab(type: 'expense', isDark: isDark),
         ],
       ),
       floatingActionButton: AnimatedBuilder(
         animation: _tabController,
         builder: (context, _) {
-          if (_tabController.index == 0) {
-            return const SizedBox.shrink(); // No FAB since it is merged and placed above
-          } else if (_tabController.index == 1) {
+          if (_tabController.index == 1) {
             return FloatingActionButton.extended(
               onPressed: () => _showAddAccountDialog(context, ref),
               icon: const Icon(Icons.account_balance_wallet_rounded),
@@ -154,110 +121,8 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> with SingleTick
               backgroundColor: AppColors.primary,
             );
           }
-          
-          return FloatingActionButton.extended(
-            onPressed: () => _showAddCategoryDialog(context, ref, _tabController.index == 2 ? AppConstants.ledgerCredit : AppConstants.ledgerDebit),
-            icon: const Icon(Icons.add_rounded),
-            label: Text('Add ${_tabController.index == 2 ? 'Income' : 'Expense'} Category'),
-            backgroundColor: AppColors.primary,
-          );
-        }
-      ),
-    );
-  }
-}
-
-class _CategoryListTab extends ConsumerWidget {
-  final String type;
-  final bool isDark;
-  const _CategoryListTab({required this.type, required this.isDark});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final categoriesAsync = ref.watch(transactionCategoriesProvider(type));
-
-    return categoriesAsync.when(
-      data: (list) {
-        if (list.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.category_outlined, size: 64, color: AppColors.textMuted.withValues(alpha: 0.3)),
-                const SizedBox(height: 16),
-                Text('No $type categories found', style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          );
-        }
-
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 100),
-          itemCount: list.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
-          itemBuilder: (ctx, i) {
-            final cat = list[i];
-            return Material(
-              color: isDark ? AppColors.darkCard : Colors.white,
-              clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-              ),
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                title: Text(
-                  cat.name, 
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit_rounded, size: 20, color: AppColors.primary),
-                      onPressed: () => _showAddCategoryDialog(context, ref, type == 'income' ? AppConstants.ledgerCredit : AppConstants.ledgerDebit, initialCategory: cat),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.error),
-                      onPressed: () => _confirmDeleteCategory(context, ref, cat),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
-    );
-  }
-
-  void _confirmDeleteCategory(BuildContext context, WidgetRef ref, dynamic cat) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Category?'),
-        content: Text('Delete "${cat.name}"? This will fail if transactions are using it.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await ref.read(accountsRepositoryProvider).deleteTransactionCategory(cat.id!);
-                ref.invalidate(transactionCategoriesProvider(type));
-                if (ctx.mounted) Navigator.pop(ctx);
-              } catch (e) {
-                if (ctx.mounted) Navigator.pop(ctx);
-                AppAlert.error(ref, 'Cannot delete: Category is in use');
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete'),
-          ),
-        ],
+          return const SizedBox.shrink();
+        },
       ),
     );
   }
@@ -380,6 +245,67 @@ class _AccountsListTab extends ConsumerWidget {
                                 ),
                             ],
                           ),
+                          if (acc.maskedAccountNumber.isNotEmpty || acc.displayToken.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                if (acc.maskedAccountNumber.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      acc.maskedAccountNumber,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? Colors.white70 : Colors.black87,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                  ),
+                                if (acc.displayToken.isNotEmpty)
+                                  InkWell(
+                                    onTap: () {
+                                      Clipboard.setData(ClipboardData(text: acc.displayToken));
+                                      AppAlert.success(ref, 'Account token copied to clipboard');
+                                    },
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.shield_outlined, size: 11, color: AppColors.primary),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            acc.displayToken,
+                                            style: const TextStyle(
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: AppColors.primary,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.copy_rounded, size: 10, color: AppColors.primary),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
                           const Spacer(),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -490,6 +416,7 @@ void _showAddAccountDialog(BuildContext context, WidgetRef ref, {dynamic initial
   final nameCtrl = TextEditingController(text: initialAccount?.name);
   String type = initialAccount?.type ?? 'Cash';
   final balanceCtrl = TextEditingController(text: initialAccount?.openingBalance.toString() ?? '0.0');
+  final accountNumCtrl = TextEditingController(text: initialAccount?.accountNumber ?? '');
 
   showDialog(
     context: context,
@@ -516,6 +443,18 @@ void _showAddAccountDialog(BuildContext context, WidgetRef ref, {dynamic initial
                     items: ['Cash', 'Bank', 'Wallet'].map((t) => SearchableDropdownItem(value: t, label: t)).toList(),
                     onChanged: (v) => setState(() => type = v!),
                   ),
+                  if (type != 'Cash') ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: accountNumCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Account / UPI / IBAN Number',
+                        prefixIcon: Icon(Icons.lock_outline_rounded),
+                        hintText: 'e.g. 50100456789012',
+                        helperText: 'Account numbers are securely tokenized with masked display',
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   TextField(
                     controller: balanceCtrl,
@@ -531,8 +470,9 @@ void _showAddAccountDialog(BuildContext context, WidgetRef ref, {dynamic initial
                 onPressed: () async {
                   if (nameCtrl.text.trim().isEmpty) return;
                   final bal = double.tryParse(balanceCtrl.text) ?? 0.0;
-                  
+                  final rawNum = accountNumCtrl.text.trim().isEmpty ? null : accountNumCtrl.text.trim();
                   final businessId = ref.read(activeBusinessIdProvider);
+                  final token = rawNum != null ? AccountTokenManager.tokenizeAccount(rawNum, businessId: businessId) : null;
                   
                   if (initialAccount == null) {
                     await ref.read(accountsRepositoryProvider).addAccount(
@@ -542,6 +482,8 @@ void _showAddAccountDialog(BuildContext context, WidgetRef ref, {dynamic initial
                         type: type,
                         openingBalance: bal,
                         balance: bal,
+                        accountNumber: rawNum,
+                        accountToken: token,
                       )
                     );
                   } else {
@@ -552,6 +494,8 @@ void _showAddAccountDialog(BuildContext context, WidgetRef ref, {dynamic initial
                         name: nameCtrl.text.trim(),
                         type: type,
                         openingBalance: bal,
+                        accountNumber: rawNum,
+                        accountToken: token,
                         isDefault: initialAccount.isDefault,
                       )
                     );
@@ -600,7 +544,6 @@ void _viewTransaction(BuildContext context, WidgetRef ref, LedgerModel ledger) a
 }
 
 void _showTransactionDetailDialog(BuildContext context, TransactionModel t) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
   final isIncome = t.type == AppConstants.ledgerCredit;
   final color = isIncome ? AppColors.success : AppColors.error;
 
@@ -758,80 +701,81 @@ void _showTransactionDialog(BuildContext context, WidgetRef ref, String initialT
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             title: Text(initialTransaction == null ? 'Record Transaction' : 'Edit Record', style: const TextStyle(fontWeight: FontWeight.w800)),
-            content: SizedBox(
-              width: 400,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
+            content: Builder(
+              builder: (dialogCtx) {
+                final isMobileDialog = MediaQuery.of(dialogCtx).size.width < 500;
+                return SizedBox(
+                  width: 400,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              if (!isIncome) {
-                                setState(() {
-                                  type = AppConstants.ledgerCredit;
-                                  selectedCategoryId = null;
-                                });
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              decoration: BoxDecoration(
-                                color: isIncome ? AppColors.success : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: isIncome ? AppColors.success : AppColors.textMuted.withValues(alpha: 0.3)),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'Income',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: isIncome ? Colors.white : AppColors.textMuted,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: InkWell(
+                                onTap: () {
+                                  if (!isIncome) {
+                                    setState(() {
+                                      type = AppConstants.ledgerCredit;
+                                      selectedCategoryId = null;
+                                    });
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: isIncome ? AppColors.success : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: isIncome ? AppColors.success : AppColors.textMuted.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      'Income',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: isIncome ? Colors.white : AppColors.textMuted,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              if (isIncome) {
-                                setState(() {
-                                  type = AppConstants.ledgerDebit;
-                                  selectedCategoryId = null;
-                                });
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              decoration: BoxDecoration(
-                                color: !isIncome ? AppColors.error : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: !isIncome ? AppColors.error : AppColors.textMuted.withValues(alpha: 0.3)),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'Expense',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: !isIncome ? Colors.white : AppColors.textMuted,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: InkWell(
+                                onTap: () {
+                                  if (isIncome) {
+                                    setState(() {
+                                      type = AppConstants.ledgerDebit;
+                                      selectedCategoryId = null;
+                                    });
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: !isIncome ? AppColors.error : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: !isIncome ? AppColors.error : AppColors.textMuted.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      'Expense',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: !isIncome ? Colors.white : AppColors.textMuted,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
+                        const SizedBox(height: 20),
+                        if (isMobileDialog) ...[
+                          TextField(
                             controller: amountCtrl,
                             keyboardType: TextInputType.number,
                             decoration: InputDecoration(
@@ -843,14 +787,38 @@ void _showTransactionDialog(BuildContext context, WidgetRef ref, String initialT
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        _DatePickerButton(
-                          selectedDate: selectedDate,
-                          onDateSelected: (date) => setState(() => selectedDate = date),
-                        ),
-                      ],
-                    ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: _DatePickerButton(
+                              selectedDate: selectedDate,
+                              onDateSelected: (date) => setState(() => selectedDate = date),
+                            ),
+                          ),
+                        ] else
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: amountCtrl,
+                                  keyboardType: TextInputType.number,
+                                  decoration: InputDecoration(
+                                    labelText: 'Amount', 
+                                    prefixText: '₹ ',
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: isIncome ? AppColors.success : AppColors.error),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              _DatePickerButton(
+                                selectedDate: selectedDate,
+                                onDateSelected: (date) => setState(() => selectedDate = date),
+                              ),
+                            ],
+                          ),
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -919,8 +887,10 @@ void _showTransactionDialog(BuildContext context, WidgetRef ref, String initialT
                   ],
                 ),
               ),
-            ),
-            actions: [
+            );
+          },
+        ),
+        actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
                 onPressed: () async {
@@ -951,17 +921,23 @@ void _showTransactionDialog(BuildContext context, WidgetRef ref, String initialT
                     date: selectedDate,
                   );
 
-                  if (initialTransaction == null) {
-                    await ref.read(accountsRepositoryProvider).addTransaction(transaction);
-                  } else {
-                    await ref.read(accountsRepositoryProvider).updateTransaction(transaction);
-                  }
+                  try {
+                    if (initialTransaction == null) {
+                      await ref.read(accountsRepositoryProvider).addTransaction(transaction);
+                    } else {
+                      await ref.read(accountsRepositoryProvider).updateTransaction(transaction);
+                    }
 
-                  ref.invalidate(balanceSummaryProvider);
-                  ref.invalidate(ledgerEntriesProvider);
-                  ref.invalidate(transactionsProvider);
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  AppAlert.success(ref, initialTransaction == null ? 'Transaction recorded!' : 'Transaction updated!');
+                    ref.invalidate(balanceSummaryProvider);
+                    ref.invalidate(ledgerEntriesProvider);
+                    ref.invalidate(transactionsProvider);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    AppAlert.success(ref, initialTransaction == null ? 'Transaction recorded!' : 'Transaction updated!');
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      AppAlert.error(ref, e.toString().replaceAll('Exception: ', ''));
+                    }
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isIncome ? AppColors.success : AppColors.error,
@@ -1026,38 +1002,15 @@ Future<int?> _showAddCategoryDialog(BuildContext context, WidgetRef ref, String 
 Future<int?> _quickAddTransactionCategory(BuildContext context, WidgetRef ref, String type, String name) async {
   if (name.isEmpty) return null;
   final businessId = ref.read(activeBusinessIdProvider);
+  final catType = type == AppConstants.ledgerCredit ? 'income' : 'expense';
   final category = TransactionCategoryModel(
     businessId: businessId, 
     name: name.trim(), 
-    type: type == AppConstants.ledgerCredit ? 'income' : 'expense'
+    type: catType,
   );
   final id = await ref.read(accountsRepositoryProvider).addTransactionCategory(category);
-  final catType = type == AppConstants.ledgerCredit ? 'income' : 'expense';
   ref.invalidate(transactionCategoriesProvider(catType));
   return id;
-}
-
-class _PremiumFAB extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onPressed;
-
-  const _PremiumFAB({required this.label, required this.icon, required this.color, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return FloatingActionButton.extended(
-      heroTag: label,
-      onPressed: onPressed,
-      icon: Icon(icon, size: 20),
-      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5)),
-      backgroundColor: color,
-      foregroundColor: Colors.white,
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-    );
-  }
 }
 
 class _AccountsHeader extends ConsumerWidget {
@@ -1066,135 +1019,119 @@ class _AccountsHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Wallets & Accounts',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                      color: AppColors.primary.withValues(alpha: 0.8),
-                    ),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Wallets & Accounts',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                    color: AppColors.primary.withValues(alpha: 0.8),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Financial Assets',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -1,
-                      color: isDark ? Colors.white : AppColors.textLight,
-                    ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Financial Assets',
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                    color: isDark ? Colors.white : AppColors.textLight,
                   ),
-                ],
-              ),
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.compare_arrows_rounded, color: AppColors.primary),
-                    tooltip: 'Transfer Funds',
-                    onPressed: () => _showTransferDialog(context, ref),
-                    style: IconButton.styleFrom(
-                      backgroundColor: isDark ? AppColors.darkCard : Colors.white,
-                      padding: const EdgeInsets.all(12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showTransferDialog(context, ref),
+                        icon: const Icon(Icons.compare_arrows_rounded, size: 16),
+                        label: const Text('Transfer', style: TextStyle(fontSize: 13)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.category_rounded, color: AppColors.primary),
-                    onPressed: () => _showAccountCategories(context),
-                    style: IconButton.styleFrom(
-                      backgroundColor: isDark ? AppColors.darkCard : Colors.white,
-                      padding: const EdgeInsets.all(12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showTransactionDialog(context, ref, AppConstants.ledgerCredit),
+                        icon: const Icon(Icons.add_rounded, size: 16),
+                        label: const Text('Record', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAccountCategories(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Manage Categories', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 24),
-            ListTile(
-              leading: const Icon(Icons.south_west_rounded, color: AppColors.success),
-              title: const Text('Income Categories', style: TextStyle(fontWeight: FontWeight.w700)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _openCategoryManager(context, 'income');
-              },
+                  ],
+                ),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Wallets & Accounts',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                        color: AppColors.primary.withValues(alpha: 0.8),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Financial Assets',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                        color: isDark ? Colors.white : AppColors.textLight,
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _showTransferDialog(context, ref),
+                      icon: const Icon(Icons.compare_arrows_rounded, size: 18),
+                      label: const Text('Transfer Funds'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      onPressed: () => _showTransactionDialog(context, ref, AppConstants.ledgerCredit),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Record Transaction', style: TextStyle(fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.north_east_rounded, color: AppColors.error),
-              title: const Text('Expense Categories', style: TextStyle(fontWeight: FontWeight.w700)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _openCategoryManager(context, 'expense');
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _openCategoryManager(BuildContext context, String type) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => Consumer(
-          builder: (context, ref, child) => CategoryManagerScreen(
-            title: '${type[0].toUpperCase()}${type.substring(1)} Categories',
-            categoriesProvider: transactionCategoriesProvider(type),
-            nameExtractor: (cat) => (cat as TransactionCategoryModel).name,
-            onSave: (name, id) async {
-              final businessId = ref.read(activeBusinessIdProvider);
-              final category = TransactionCategoryModel(id: id, businessId: businessId, name: name, type: type);
-              if (id == null) {
-                await ref.read(accountsRepositoryProvider).addTransactionCategory(category);
-              } else {
-                await ref.read(accountsRepositoryProvider).updateTransactionCategory(category);
-              }
-              ref.invalidate(transactionCategoriesProvider(type));
-              return true;
-            },
-            onDelete: (id) async {
-              await ref.read(accountsRepositoryProvider).deleteTransactionCategory(id);
-              ref.invalidate(transactionCategoriesProvider(type));
-              return true;
-            },
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1208,160 +1145,195 @@ class _BalanceOverview extends ConsumerWidget {
     final balanceAsync = ref.watch(balanceSummaryProvider);
     final accountsAsync = ref.watch(accountsProvider);
 
-    return Column(
-      children: [
-        balanceAsync.when(
-          data: (data) => Column(
-            children: [
-              accountsAsync.when(
-                data: (accounts) {
-                  final totalBalance = accounts.fold(0.0, (sum, item) => sum + item.balance);
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: isDark 
-                          ? [AppColors.primary, const Color(0xFF4F46E5)]
-                          : [const Color(0xFF6366F1), const Color(0xFF818CF8)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(32),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Available Balance',
-                              style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 16),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
-                              child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 20),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            CurrencyFormatter.format(totalBalance),
-                            style: const TextStyle(color: Colors.white, fontSize: 44, fontWeight: FontWeight.w900, letterSpacing: -2),
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-                        Row(
-                          children: [
-                            Expanded(child: _MiniStat(label: 'Total Income', value: data.totalIncome, isIncrease: true)),
-                            Container(width: 1, height: 30, color: Colors.white24),
-                            const SizedBox(width: 24),
-                            Expanded(child: _MiniStat(label: 'Total Expense', value: data.totalExpenses, isIncrease: false)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack).fadeIn();
-                },
-                loading: () => Container(height: 180, decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(32))),
-                error: (_, _) => const SizedBox(),
-              ),
-              const SizedBox(height: 24),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  if (constraints.maxWidth < 450) {
-                    return Column(
-                      children: [
-                        _OverviewCard(
-                          label: 'Receivable',
-                          value: data.totalReceivable,
-                          color: AppColors.success,
-                          icon: Icons.call_received_rounded,
-                          isDark: isDark,
-                        ),
-                        const SizedBox(height: 16),
-                        _OverviewCard(
-                          label: 'Payable',
-                          value: data.totalPayable,
-                          color: AppColors.error,
-                          icon: Icons.call_made_rounded,
-                          isDark: isDark,
-                        ),
-                      ],
-                    );
-                  }
-                  return Row(
+    return balanceAsync.when(
+      data: (data) => accountsAsync.when(
+        data: (accounts) {
+          final totalBalance = accounts.fold(0.0, (sum, item) => sum + item.balance);
+
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final isDesktop = constraints.maxWidth >= 850;
+              final isTablet = constraints.maxWidth >= 550 && constraints.maxWidth < 850;
+
+              final availableCard = _AvailableBalanceCard(
+                totalBalance: totalBalance,
+                totalIncome: data.totalIncome,
+                totalExpenses: data.totalExpenses,
+                isDark: isDark,
+              );
+
+              final receivableCard = _OverviewCard(
+                label: 'Receivable',
+                value: data.totalReceivable,
+                color: AppColors.success,
+                icon: Icons.call_received_rounded,
+                isDark: isDark,
+              );
+
+              final payableCard = _OverviewCard(
+                label: 'Payable',
+                value: data.totalPayable,
+                color: AppColors.error,
+                icon: Icons.call_made_rounded,
+                isDark: isDark,
+              );
+
+              if (isDesktop) {
+                return IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: _OverviewCard(
-                          label: 'Receivable',
-                          value: data.totalReceivable,
-                          color: AppColors.success,
-                          icon: Icons.call_received_rounded,
-                          isDark: isDark,
-                        ),
-                      ),
+                      Expanded(flex: 5, child: availableCard),
                       const SizedBox(width: 16),
-                      Expanded(
-                        child: _OverviewCard(
-                          label: 'Payable',
-                          value: data.totalPayable,
-                          color: AppColors.error,
-                          icon: Icons.call_made_rounded,
-                          isDark: isDark,
-                        ),
-                      ),
+                      Expanded(flex: 4, child: receivableCard),
+                      const SizedBox(width: 16),
+                      Expanded(flex: 4, child: payableCard),
                     ],
-                  );
-                }
-              ),
-            ],
-          ),
-          loading: () => const _OverviewSkeleton(),
-          error: (e, _) => Center(child: Text('Error: $e')),
-        ),
-      ],
+                  ),
+                );
+              } else if (isTablet) {
+                return Column(
+                  children: [
+                    availableCard,
+                    const SizedBox(height: 16),
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: receivableCard),
+                          const SizedBox(width: 16),
+                          Expanded(child: payableCard),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              } else {
+                return Column(
+                  children: [
+                    availableCard,
+                    const SizedBox(height: 12),
+                    receivableCard,
+                    const SizedBox(height: 12),
+                    payableCard,
+                  ],
+                );
+              }
+            },
+          );
+        },
+        loading: () => const _OverviewSkeleton(),
+        error: (_, _) => const SizedBox.shrink(),
+      ),
+      loading: () => const _OverviewSkeleton(),
+      error: (e, _) => Center(child: Text('Error: $e')),
     );
   }
 }
 
-class _MiniStat extends StatelessWidget {
-  final String label;
-  final double value;
-  final bool isIncrease;
+class _AvailableBalanceCard extends StatelessWidget {
+  final double totalBalance;
+  final double totalIncome;
+  final double totalExpenses;
+  final bool isDark;
 
-  const _MiniStat({required this.label, required this.value, required this.isIncrease});
+  const _AvailableBalanceCard({
+    required this.totalBalance,
+    required this.totalIncome,
+    required this.totalExpenses,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            Icon(isIncrease ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded, size: 14, color: Colors.white),
-            const SizedBox(width: 4),
-            Text(
-              CurrencyFormatter.format(value),
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14),
-            ),
-          ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [AppColors.primary, const Color(0xFF4F46E5)]
+              : [const Color(0xFF6366F1), const Color(0xFF4F46E5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-      ],
-    );
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.25),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Available Balance',
+                style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 16),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              CurrencyFormatter.format(totalBalance),
+              style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.arrow_upward_rounded, size: 12, color: Colors.white70),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        'Inc: ${CurrencyFormatter.format(totalIncome)}',
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(width: 1, height: 14, color: Colors.white24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.arrow_downward_rounded, size: 12, color: Colors.white70),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        'Exp: ${CurrencyFormatter.format(totalExpenses)}',
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ).animate().scale(duration: 350.ms, curve: Curves.easeOutCubic).fadeIn();
   }
 }
 
@@ -1372,55 +1344,58 @@ class _OverviewCard extends StatelessWidget {
   final IconData icon;
   final bool isDark;
 
-  const _OverviewCard({required this.label, required this.value, required this.color, required this.icon, required this.isDark});
+  const _OverviewCard({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.icon,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(28),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkCard : Colors.white,
-          borderRadius: BorderRadius.circular(32),
-          border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-              blurRadius: 30,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)),
-                  child: Icon(icon, color: color, size: 24),
-                ),
-                Icon(Icons.trending_up_rounded, color: color.withValues(alpha: 0.3), size: 32),
-              ],
-            ),
-            const SizedBox(height: 24),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                CurrencyFormatter.format(value),
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -1),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder, width: 1.5),
+        boxShadow: [
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, color: color, size: 18),
               ),
+              Icon(Icons.trending_up_rounded, color: color.withValues(alpha: 0.3), size: 22),
+            ],
+          ),
+          const SizedBox(height: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              CurrencyFormatter.format(value),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5),
             ),
-            const SizedBox(height: 6),
-            Text(
-              label.toUpperCase(),
-              style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w800, letterSpacing: 1),
-            ),
-          ],
-        ),
-      );
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w800, letterSpacing: 0.8),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1461,16 +1436,18 @@ class _ConsolidatedLedger extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ledgerAsync = ref.watch(ledgerEntriesProvider);
 
+    final isMobile = MediaQuery.of(context).size.width < 650;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Financial Ledger', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
-            SizedBox(
-              width: 300,
-              child: TextField(
+        if (isMobile)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Financial Ledger', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+              const SizedBox(height: 12),
+              TextField(
                 onChanged: onSearch,
                 decoration: InputDecoration(
                   hintText: 'Search ledger...',
@@ -1480,9 +1457,28 @@ class _ConsolidatedLedger extends ConsumerWidget {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                 ),
               ),
-            ),
-          ],
-        ),
+            ],
+          )
+        else
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Financial Ledger', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+              SizedBox(
+                width: 300,
+                child: TextField(
+                  onChanged: onSearch,
+                  decoration: InputDecoration(
+                    hintText: 'Search ledger...',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    filled: true,
+                    fillColor: isDark ? AppColors.darkCard : Colors.white,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
+                ),
+              ),
+            ],
+          ),
         const SizedBox(height: 16),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,

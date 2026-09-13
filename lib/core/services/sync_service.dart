@@ -1,10 +1,9 @@
-// lib/core/services/sync_service.dart
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import '../database/database_helper.dart';
+import '../security/token_service.dart';
 
 class SyncService {
   final DatabaseHelper _db = DatabaseHelper.instance;
@@ -13,11 +12,14 @@ class SyncService {
   Timer? _syncTimer;
   bool _isSyncing = false;
 
-  void startAutoSync(String token) {
+  void startAutoSync([String? token]) {
     _syncTimer?.cancel();
     // Auto-sync every 60 seconds
-    _syncTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
-      syncNow(token);
+    _syncTimer = Timer.periodic(const Duration(seconds: 60), (timer) async {
+      final t = token ?? await TokenService.instance.getActiveToken();
+      if (t != null && t.isNotEmpty) {
+        syncNow(t);
+      }
     });
   }
 
@@ -26,15 +28,16 @@ class SyncService {
     _syncTimer = null;
   }
 
-  Future<void> syncNow(String token) async {
+  Future<void> syncNow([String? token]) async {
     if (_isSyncing) return;
     _isSyncing = true;
     
     try {
-      // if (kDebugMode) print("Starting background sync..."); // Suppress noisy starting log
-      await pushLocalChanges(token);
-      await pullRemoteChanges(token);
-      // if (kDebugMode) print("Sync completed successfully."); // Suppress noisy success log
+      final effectiveToken = token ?? await TokenService.instance.getActiveToken();
+      if (effectiveToken == null || effectiveToken.isEmpty) return;
+
+      await pushLocalChanges(effectiveToken);
+      await pullRemoteChanges(effectiveToken);
     } catch (e) {
       final errStr = e.toString();
       if (!errStr.contains("Failed to fetch") && !errStr.contains("Connection refused") && !errStr.contains("SocketException")) {
@@ -45,7 +48,10 @@ class SyncService {
     }
   }
 
-  Future<void> pushLocalChanges(String token) async {
+  Future<void> pushLocalChanges([String? token]) async {
+    final effectiveToken = token ?? await TokenService.instance.getActiveToken();
+    if (effectiveToken == null || effectiveToken.isEmpty) return;
+
     final queueItems = await _db.queryAll('sync_queue', orderBy: 'id ASC', limit: 100);
     if (queueItems.isEmpty) return;
 
@@ -56,6 +62,17 @@ class SyncService {
           payload = jsonDecode(item['payload'] as String);
         } catch (_) {}
       }
+
+      // Tokenize sensitive financial account payloads
+      if (item['table_name'] == 'accounts' && payload.isNotEmpty) {
+        if (payload['account_number'] != null && payload['account_token'] == null) {
+          payload['account_token'] = AccountTokenManager.tokenizeAccount(
+            payload['account_number'].toString(),
+            businessId: (payload['business_id'] as num?)?.toInt(),
+          );
+        }
+      }
+
       return {
         "table_name": item['table_name'],
         "record_id": item['record_id'],
@@ -69,7 +86,7 @@ class SyncService {
         Uri.parse("$_baseUrl/sync/push"),
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
+          "Authorization": "Bearer $effectiveToken",
         },
         body: jsonEncode({"records": records}),
       );
@@ -90,7 +107,10 @@ class SyncService {
     }
   }
 
-  Future<void> pullRemoteChanges(String token) async {
+  Future<void> pullRemoteChanges([String? token]) async {
+    final effectiveToken = token ?? await TokenService.instance.getActiveToken();
+    if (effectiveToken == null || effectiveToken.isEmpty) return;
+
     // List of tables to pull updates for
     final tables = [
       'categories', 'products', 'customers', 'suppliers', 
@@ -103,7 +123,7 @@ class SyncService {
         final response = await http.get(
           Uri.parse("$_baseUrl/sync/pull?table_name=$table"),
           headers: {
-            "Authorization": "Bearer $token",
+            "Authorization": "Bearer $effectiveToken",
           },
         );
 

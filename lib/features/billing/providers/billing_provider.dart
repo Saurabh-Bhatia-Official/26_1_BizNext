@@ -17,6 +17,7 @@ import '../../customers/models/customer_model.dart';
 import '../../inventory/models/product_discount.dart';
 import '../../customers/models/customer_discount.dart';
 import '../../accounts/providers/accounts_provider.dart';
+import '../../notifications/providers/notifications_provider.dart';
 
 final billingRepositoryProvider = Provider<BillingRepository>((ref) => BillingRepository());
 
@@ -131,29 +132,34 @@ class BillingNotifier extends StateNotifier<BillingState> {
   }
 
   double _resolveProductPrice(Product product, String scale, {CustomerModel? customer, double quantity = 1.0}) {
-    final effectiveScale = (customer?.customerTypeName != null && customer!.customerTypeName!.trim().isNotEmpty)
-        ? customer.customerTypeName!
-        : scale;
+    final effectiveScale = scale.trim().isNotEmpty ? scale : (customer?.customerTypeName ?? 'Standard');
     final lowerScale = effectiveScale.toLowerCase();
 
     // 1. Check allProductTierPricesProvider if available
     final tierMap = _ref.read(allProductTierPricesProvider).value;
     if (tierMap != null && product.id != null && tierMap.containsKey(product.id)) {
       final tiers = tierMap[product.id!]!;
+      final customerTypes = _ref.read(customerTypesProvider).value ?? [];
+      final matchedCatId = customerTypes.where((c) => c.name.toLowerCase() == lowerScale).firstOrNull?.id;
+
       final matchingTier = tiers.firstWhere(
         (t) =>
             ((customer?.customerTypeId != null && t.categoryId == customer!.customerTypeId) ||
-             (t.categoryName != null && t.categoryName!.toLowerCase() == lowerScale)) &&
+             (matchedCatId != null && t.categoryId == matchedCatId) ||
+             (t.categoryName != null && t.categoryName!.toLowerCase() == lowerScale) ||
+             (t.categoryName != null && lowerScale.contains(t.categoryName!.toLowerCase()))) &&
             quantity >= t.minQty &&
             (quantity <= t.maxQty),
         orElse: () => tiers.firstWhere(
           (t) =>
               (customer?.customerTypeId != null && t.categoryId == customer!.customerTypeId) ||
-              (t.categoryName != null && t.categoryName!.toLowerCase() == lowerScale),
+              (matchedCatId != null && t.categoryId == matchedCatId) ||
+              (t.categoryName != null && t.categoryName!.toLowerCase() == lowerScale) ||
+              (t.categoryName != null && lowerScale.contains(t.categoryName!.toLowerCase())),
           orElse: () => const ProductTierPrice(productId: 0, categoryId: 0, price: -1),
         ),
       );
-      if (matchingTier.price >= 0) {
+      if (matchingTier.price > 0) {
         return matchingTier.price;
       }
     }
@@ -194,7 +200,8 @@ class BillingNotifier extends StateNotifier<BillingState> {
     );
     final currentQty = existingIndex != -1 ? state.items[existingIndex].quantity : 0.0;
 
-    if (currentQty + 1 > product.stock) {
+    final inventoryTracking = _ref.read(featureSettingsProvider).inventoryTrackingEnabled;
+    if (inventoryTracking && (currentQty + 1 > product.stock)) {
       return 'Insufficient stock! Only ${product.stock} ${product.unit} available.';
     }
 
@@ -230,12 +237,30 @@ class BillingNotifier extends StateNotifier<BillingState> {
     }
 
     final item = state.items[index];
-    if (qty > item.product.stock) {
+    final inventoryTracking = _ref.read(featureSettingsProvider).inventoryTrackingEnabled;
+    if (inventoryTracking && qty > item.product.stock) {
       return 'Only ${item.product.stock} ${item.product.unit} available.';
     }
 
+    final customers = _ref.read(customersProvider).value ?? [];
+    final customer = state.selectedCustomerId != null
+        ? customers.where((c) => c.id == state.selectedCustomerId).firstOrNull
+        : null;
+    final activeScale = customer?.customerTypeName?.trim().isNotEmpty == true
+        ? customer!.customerTypeName!
+        : (item.priceScaleName ?? 'Standard');
+
     final updatedItems = [...state.items];
-    updatedItems[index] = item.copyWith(quantity: qty);
+    if (item.priceScaleName != 'Manual') {
+      final resolvedPrice = _resolveProductPrice(item.product, activeScale, customer: customer, quantity: qty);
+      updatedItems[index] = item.copyWith(
+        quantity: qty,
+        manualPrice: (resolvedPrice != item.product.sellingPrice) ? resolvedPrice : 0,
+      );
+    } else {
+      updatedItems[index] = item.copyWith(quantity: qty);
+    }
+
     state = state.copyWith(items: updatedItems);
     _applyAutomatedDiscounts();
     return null;
@@ -272,12 +297,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
         : null;
 
     final updatedItems = state.items.map((item) {
-      if (item.priceScaleName == 'Retail' ||
-          item.priceScaleName == 'Standard' ||
-          item.priceScaleName == 'Wholesale' ||
-          item.priceScaleName == 'Dealer' ||
-          item.priceScaleName == null ||
-          item.priceScaleName == scale) {
+      if (item.priceScaleName != 'Manual') {
         final newPrice = _resolveProductPrice(item.product, scale, customer: customer, quantity: item.quantity);
         return item.copyWith(
           manualPrice: newPrice != item.product.sellingPrice ? newPrice : 0,
@@ -300,12 +320,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
         : 'Standard';
 
     final updatedItems = state.items.map((item) {
-      if (item.priceScaleName == 'Retail' ||
-          item.priceScaleName == 'Standard' ||
-          item.priceScaleName == 'Wholesale' ||
-          item.priceScaleName == 'Dealer' ||
-          item.priceScaleName == null ||
-          item.priceScaleName == customerScale) {
+      if (item.priceScaleName != 'Manual') {
         final newPrice = _resolveProductPrice(item.product, customerScale, customer: customer, quantity: item.quantity);
         return item.copyWith(
           manualPrice: newPrice != item.product.sellingPrice ? newPrice : 0,
@@ -326,7 +341,14 @@ class BillingNotifier extends StateNotifier<BillingState> {
   void clearCustomer() {
     // Revert items back to standard prices
     final updatedItems = state.items.map((item) {
-      return item.copyWith(manualPrice: 0, priceScaleName: 'Standard');
+      if (item.priceScaleName != 'Manual') {
+        final newPrice = _resolveProductPrice(item.product, 'Standard', quantity: item.quantity);
+        return item.copyWith(
+          manualPrice: newPrice != item.product.sellingPrice ? newPrice : 0,
+          priceScaleName: 'Standard',
+        );
+      }
+      return item;
     }).toList();
 
     state = state.copyWith(clearCustomer: true, items: updatedItems);
@@ -498,6 +520,7 @@ class BillingNotifier extends StateNotifier<BillingState> {
       _ref.invalidate(inventoryStatsProvider);
       _ref.invalidate(saleHistoryProvider);
       _ref.invalidate(salesStatsProvider);
+      _ref.read(notificationsProvider.notifier).scanAndGenerateAlerts();
 
       // Update Customer Loyalty Points
       if (state.selectedCustomerId != null) {
