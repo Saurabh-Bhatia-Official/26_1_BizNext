@@ -4,6 +4,12 @@ set -euo pipefail
 VERSION="${1:-1.0.0}"
 # Strip leading 'v' if present (e.g. v1.0.0 -> 1.0.0)
 VERSION="${VERSION#v}"
+
+# Debian package versions MUST start with a digit [0-9]
+if [[ ! "$VERSION" =~ ^[0-9] ]]; then
+  CLEAN_VERSION=$(echo "$VERSION" | tr -c 'a-zA-Z0-9.+~-' '.')
+  VERSION="0.0.0+${CLEAN_VERSION}"
+fi
 OUTPUT_FILE="${2:-BizNext-Linux-x64.deb}"
 
 BUNDLE_DIR="build/linux/x64/release/bundle"

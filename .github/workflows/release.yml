@@ -123,7 +123,12 @@ jobs:
       - name: Package Linux Debian (.deb) Package
         run: |
           chmod +x scripts/package_linux_deb.sh
-          TAG="${{ github.ref_name || github.event.inputs.tag_name || '1.0.0' }}"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="${{ github.event.inputs.tag_name || '1.0.0' }}"
+          fi
+          if [ -z "$TAG" ]; then TAG="1.0.0"; fi
           ./scripts/package_linux_deb.sh "$TAG" "BizNext-Linux-x64.deb"
 
       - name: Upload Linux Artifacts
