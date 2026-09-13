@@ -10,6 +10,11 @@ on:
         description: 'Release Tag (e.g. v1.0.0)'
         required: false
         default: 'v1.0.0'
+      repository:
+        description: 'Target Release Repository (e.g. owner/repo). Defaults to current repository.'
+        required: false
+        type: string
+        default: ''
       draft:
         description: 'Create Draft Release'
         required: false
@@ -276,9 +281,16 @@ jobs:
           fi
           echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
 
+          TARGET_REPO="${{ github.event.inputs.repository }}"
+          if [ -z "$TARGET_REPO" ]; then
+            TARGET_REPO="${{ github.repository }}"
+          fi
+          echo "TARGET_REPO=$TARGET_REPO" >> $GITHUB_ENV
+
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          repository: ${{ env.TARGET_REPO }}
           tag_name: ${{ env.RELEASE_TAG }}
           name: BizNext ${{ env.RELEASE_TAG }}
           draft: ${{ github.event.inputs.draft || false }}
@@ -302,15 +314,15 @@ jobs:
             
             | Platform | File | Description |
             | :--- | :--- | :--- |
-            | **Windows** | [`BizNext-Windows-x64.exe`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Windows-x64.exe) | Complete installer with wizard & desktop shortcuts |
-            | **Windows** | [`BizNext-Windows-x64.zip`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Windows-x64.zip) | Portable standalone zip distribution |
-            | **Linux** | [`BizNext-Linux-x64.deb`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Linux-x64.deb) | Debian/Ubuntu package (`sudo dpkg -i` or `sudo apt install`) |
-            | **Linux** | [`BizNext-Linux-x64.zip`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Linux-x64.zip) | Portable standalone Linux bundle |
-            | **macOS** | [`BizNext-macOS.dmg`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-macOS.dmg) | Disk image with drag-and-drop to Applications folder |
-            | **macOS** | [`BizNext-macOS.zip`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-macOS.zip) | Portable macOS `.app` bundle |
-            | **Android** | [`BizNext-Android.apk`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Android.apk) | Production release APK for Android devices |
-            | **iOS** | [`BizNext-iOS.ipa`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-iOS.ipa) | Production release IPA for iOS devices |
-            | **Checksums** | [`SHA256SUMS.txt`](https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/SHA256SUMS.txt) | SHA256 integrity verification hashes |
+            | **Windows** | [`BizNext-Windows-x64.exe`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Windows-x64.exe) | Complete installer with wizard & desktop shortcuts |
+            | **Windows** | [`BizNext-Windows-x64.zip`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Windows-x64.zip) | Portable standalone zip distribution |
+            | **Linux** | [`BizNext-Linux-x64.deb`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Linux-x64.deb) | Debian/Ubuntu package (`sudo dpkg -i` or `sudo apt install`) |
+            | **Linux** | [`BizNext-Linux-x64.zip`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Linux-x64.zip) | Portable standalone Linux bundle |
+            | **macOS** | [`BizNext-macOS.dmg`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-macOS.dmg) | Disk image with drag-and-drop to Applications folder |
+            | **macOS** | [`BizNext-macOS.zip`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-macOS.zip) | Portable macOS `.app` bundle |
+            | **Android** | [`BizNext-Android.apk`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Android.apk) | Production release APK for Android devices |
+            | **iOS** | [`BizNext-iOS.ipa`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-iOS.ipa) | Production release IPA for iOS devices |
+            | **Checksums** | [`SHA256SUMS.txt`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/SHA256SUMS.txt) | SHA256 integrity verification hashes |
             
             ### Installation Instructions
             
