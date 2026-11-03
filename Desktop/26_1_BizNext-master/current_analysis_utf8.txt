@@ -1,0 +1,19 @@
+﻿Analyzing Sample...                                             
+
+  error - Expected to find '}' - lib\core\database\database_helper.dart:502:3 - expected_token
+   info - Unnecessary use of multiple underscores - lib\features\accounts\screens\accounts_screen.dart:177:33 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\accounts\screens\accounts_screen.dart:266:33 - unnecessary_underscores
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\accounts\screens\accounts_screen.dart:475:21 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\accounts\screens\accounts_screen.dart:641:27 - deprecated_member_use
+   info - Unnecessary use of multiple underscores - lib\features\accounts\screens\accounts_screen.dart:994:28 - unnecessary_underscores
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\accounts\screens\accounts_screen.dart:1374:29 - deprecated_member_use
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\accounts\screens\accounts_screen.dart:1385:29 - deprecated_member_use
+   info - Unnecessary use of multiple underscores - lib\features\accounts\screens\accounts_screen.dart:1397:34 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\billing\screens\pos_billing_screen.dart:603:30 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\billing\screens\sale_detail_screen.dart:34:24 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\billing\screens\sales_screen.dart:438:32 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\purchases\screens\add_purchase_screen.dart:329:28 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\purchases\screens\purchase_detail_screen.dart:149:33 - unnecessary_underscores
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\features\purchases\screens\purchase_screen.dart:289:27 - deprecated_member_use
+   info - Unnecessary use of multiple underscores - lib\features\purchases\screens\purchase_screen.dart:296:34 - unnecessary_underscores
+

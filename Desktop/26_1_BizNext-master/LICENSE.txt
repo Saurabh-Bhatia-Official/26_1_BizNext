@@ -1,0 +1,8 @@
+END USER LICENSE AGREEMENT
+
+By installing this software, you agree to the following terms and conditions:
+1. You may use this software for your business operations.
+2. The software is provided "as is", without warranty of any kind.
+3. You will not reverse engineer or distribute this software without permission.
+
+Enjoy using BizNext!
