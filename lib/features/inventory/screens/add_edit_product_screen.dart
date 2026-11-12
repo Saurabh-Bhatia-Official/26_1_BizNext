@@ -1,6 +1,5 @@
 // lib/features/inventory/screens/add_edit_product_screen.dart
 
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -17,6 +16,7 @@ import '../../../core/services/media_upload_service.dart';
 import '../../../core/services/shortcut_service.dart';
 import '../../../core/widgets/qr_scanner_screen.dart';
 import '../../../core/services/hardware_scanner_service.dart';
+import '../../../core/widgets/media_image.dart';
 
 class AddEditProductScreen extends ConsumerStatefulWidget {
   final Product? product;
@@ -948,9 +948,13 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     if (result != null && result.files.single.path != null) {
       setState(() => _selectedImagePath = result.files.single.path);
 
-      final finalUrl = await MediaUploadService.uploadMedia(result.files.single.path!);
-      if (mounted && finalUrl != result.files.single.path) {
-        setState(() => _selectedImagePath = finalUrl);
+      try {
+        final finalUrl = await MediaUploadService.uploadMedia(result.files.single.path!);
+        if (mounted) setState(() => _selectedImagePath = finalUrl);
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _selectedImagePath = null);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
       }
     }
   }
@@ -1065,8 +1069,8 @@ class _ImagePicker extends StatelessWidget {
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.file(
-                      File(imagePath!),
+                    child: MediaImage(
+                      source: imagePath!,
                       fit: BoxFit.contain,
                     ),
                   ),
