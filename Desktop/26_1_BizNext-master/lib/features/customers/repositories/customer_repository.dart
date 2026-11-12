@@ -8,13 +8,16 @@ class CustomerRepository {
   final DatabaseHelper _db = DatabaseHelper.instance;
 
   Future<List<CustomerModel>> getCustomers(int businessId) async {
-    final maps = await _db.rawQuery('''
+    final maps = await _db.rawQuery(
+      '''
       SELECT c.*, ct.name as customer_type_name
       FROM ${AppConstants.tblCustomers} c
       LEFT JOIN ${AppConstants.tblCustomerTypes} ct ON c.customer_type_id = ct.id
       WHERE c.business_id = ?
       ORDER BY c.name ASC
-    ''', [businessId]);
+    ''',
+      [businessId],
+    );
     return maps.map((m) => CustomerModel.fromMap(m)).toList();
   }
 
@@ -23,7 +26,11 @@ class CustomerRepository {
   }
 
   Future<int> updateCustomer(CustomerModel customer) async {
-    return await _db.update(AppConstants.tblCustomers, customer.toMap(), customer.id!);
+    return await _db.update(
+      AppConstants.tblCustomers,
+      customer.toMap(),
+      customer.id!,
+    );
   }
 
   Future<int> deleteCustomer(int id) async {
@@ -31,12 +38,15 @@ class CustomerRepository {
   }
 
   Future<CustomerModel?> getCustomerById(int id) async {
-    final maps = await _db.rawQuery('''
+    final maps = await _db.rawQuery(
+      '''
       SELECT c.*, ct.name as customer_type_name
       FROM ${AppConstants.tblCustomers} c
       LEFT JOIN ${AppConstants.tblCustomerTypes} ct ON c.customer_type_id = ct.id
       WHERE c.id = ?
-    ''', [id]);
+    ''',
+      [id],
+    );
     return maps.isNotEmpty ? CustomerModel.fromMap(maps.first) : null;
   }
 }

@@ -14,7 +14,8 @@ class AddEditCustomerScreen extends ConsumerStatefulWidget {
   const AddEditCustomerScreen({super.key, this.customer});
 
   @override
-  ConsumerState<AddEditCustomerScreen> createState() => _AddEditCustomerScreenState();
+  ConsumerState<AddEditCustomerScreen> createState() =>
+      _AddEditCustomerScreenState();
 }
 
 class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
@@ -42,7 +43,14 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
 
   @override
   void dispose() {
-    for (final c in [_nameCtrl, _phoneCtrl, _emailCtrl, _addressCtrl, _gstCtrl, _balanceCtrl]) {
+    for (final c in [
+      _nameCtrl,
+      _phoneCtrl,
+      _emailCtrl,
+      _addressCtrl,
+      _gstCtrl,
+      _balanceCtrl,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -53,9 +61,14 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final formState = ref.watch(customerFormProvider);
     final shortcuts = ref.watch(shortcutSettingsProvider);
-    final saveShortcut = shortcuts['save'] ?? ShortcutNotifier.defaults['save']?.defaultShortcut ?? '';
+    final saveShortcut =
+        shortcuts['save'] ??
+        ShortcutNotifier.defaults['save']?.defaultShortcut ??
+        '';
     final saveBtnLabel = isEditing ? 'Update Customer' : 'Create Customer';
-    final saveBtnText = saveShortcut.isNotEmpty ? '$saveBtnLabel ($saveShortcut)' : saveBtnLabel;
+    final saveBtnText = saveShortcut.isNotEmpty
+        ? '$saveBtnLabel ($saveShortcut)'
+        : saveBtnLabel;
 
     return AppShortcut(
       actionId: 'cancel',
@@ -75,7 +88,10 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 780),
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(horizontal: isPhone ? 14 : 24, vertical: isPhone ? 16 : 24),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isPhone ? 14 : 24,
+                    vertical: isPhone ? 16 : 24,
+                  ),
                   child: Form(
                     key: _formKey,
                     child: Column(
@@ -91,7 +107,8 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                               label: 'Customer Name',
                               hint: 'e.g. John Doe',
                               icon: Icons.person_rounded,
-                              validator: (v) => v?.isEmpty == true ? 'Name required' : null,
+                              validator: (v) =>
+                                  v?.isEmpty == true ? 'Name required' : null,
                             ),
                             const SizedBox(height: 18),
                             _ResponsiveCustomerRow(
@@ -150,7 +167,8 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                               hint: '0.00',
                               icon: Icons.account_balance_wallet_rounded,
                               keyboardType: TextInputType.number,
-                              helperText: 'Positive for receivable, Negative for payable',
+                              helperText:
+                                  'Positive for receivable, Negative for payable',
                             ),
                           ],
                         ),
@@ -165,11 +183,21 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                               onPressed: formState.isLoading ? null : _save,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
                               ),
                               child: formState.isLoading
-                                  ? const CircularProgressIndicator(color: Colors.white)
-                                  : Text(saveBtnText, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                                  ? const CircularProgressIndicator(
+                                      color: Colors.white,
+                                    )
+                                  : Text(
+                                      saveBtnText,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 16,
+                                      ),
+                                    ),
                             ),
                           ),
                         ).animate().slideY(begin: 0.2, end: 0),
@@ -200,7 +228,9 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
       balance: double.tryParse(_balanceCtrl.text) ?? 0,
     );
 
-    final success = await ref.read(customerFormProvider.notifier).saveCustomer(customer);
+    final success = await ref
+        .read(customerFormProvider.notifier)
+        .saveCustomer(customer);
     if (success && mounted) Navigator.pop(context);
   }
 }
@@ -254,12 +284,21 @@ class _CustomerFormCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCard : Colors.white,
         borderRadius: BorderRadius.circular(isPhone ? 18 : 26),
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder, width: 1.5),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          width: 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(fontSize: isPhone ? 15 : 16, fontWeight: FontWeight.w900)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: isPhone ? 15 : 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           SizedBox(height: isPhone ? 16 : 22),
           ...children,
         ],
@@ -310,7 +349,9 @@ class _CustomerField extends StatelessWidget {
         hintText: hint,
         helperText: helperText,
         prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
-        fillColor: isDark ? Colors.white.withValues(alpha: 0.03) : AppColors.lightBg,
+        fillColor: isDark
+            ? Colors.white.withValues(alpha: 0.03)
+            : AppColors.lightBg,
       ),
     );
   }
