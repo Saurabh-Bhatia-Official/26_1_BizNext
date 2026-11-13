@@ -20,6 +20,8 @@ import '../../billing/utils/invoice_service.dart';
 import '../../billing/models/sale_history_model.dart';
 import '../../../core/widgets/qr_scanner_screen.dart';
 import '../../../core/services/hardware_scanner_service.dart';
+import '../../../core/services/media_migration_service.dart';
+import '../../../core/services/media_upload_service.dart';
 import '../../auth/models/business_model.dart';
 import 'shortcut_settings_screen.dart';
 import '../../updater/screens/update_screen.dart';
@@ -423,6 +425,12 @@ class SettingsScreen extends ConsumerWidget {
                     onTap: () => _confirmRestore(context, ref),
                   ),
                   _SettingsTile(
+                    label: 'Migrate Images to Cloudinary',
+                    value: 'Upload existing local product and offer images to Cloudinary',
+                    icon: Icons.cloud_upload_rounded,
+                    onTap: () => _migrateImagesToCloudinary(context, ref),
+                  ),
+                  _SettingsTile(
                     label: 'Reset Shop Data',
                     value: 'Clear all data for THIS shop only',
                     icon: Icons.store_rounded,
@@ -739,6 +747,80 @@ class SettingsScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) AppAlert.error(ref, 'Backup failed: $e');
+    }
+  }
+
+  Future<void> _migrateImagesToCloudinary(BuildContext context, WidgetRef ref) async {
+    final businessId = ref.read(currentBusinessProvider)?.id;
+    if (businessId == null) {
+      AppAlert.error(ref, 'Select a business before migrating images.');
+      return;
+    }
+    if (!MediaUploadService.isConfigured) {
+      AppAlert.error(ref, 'Configure CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in Flutter build settings first.');
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Migrate images to Cloudinary?'),
+        content: const Text(
+          'This uploads local product images and offer posters for the active business. Successful records are updated to use Cloudinary URLs. Create a database backup first; migration may upload files and incur Cloudinary usage.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Start Migration')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    var completed = 0;
+    var total = 0;
+    var currentItem = 'Scanning local images…';
+    StateSetter? updateProgress;
+    final progressDialog = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) {
+          updateProgress = setState;
+          return AlertDialog(
+            title: const Text('Migrating images'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LinearProgressIndicator(value: total == 0 ? null : completed / total),
+                const SizedBox(height: 12),
+                Text(total == 0 ? currentItem : '$completed of $total — $currentItem'),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    try {
+      final result = await MediaMigrationService.migrateLocalMedia(
+        businessId: businessId,
+        onProgress: (progress) {
+          completed = progress.completed;
+          total = progress.total;
+          currentItem = progress.currentItem;
+          updateProgress?.call(() {});
+        },
+      );
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      await progressDialog;
+      AppAlert.success(ref, 'Cloudinary migration finished: ${result.migrated} uploaded, ${result.skipped} missing local files skipped, ${result.failed} failed.');
+    } catch (error) {
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      await progressDialog;
+      AppAlert.error(ref, 'Cloudinary migration failed: $error');
     }
   }
 
