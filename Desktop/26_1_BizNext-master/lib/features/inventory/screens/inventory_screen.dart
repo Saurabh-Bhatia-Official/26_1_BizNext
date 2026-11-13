@@ -1200,7 +1200,9 @@ void _showStockLedgerDialog(BuildContext context, WidgetRef ref, {int? productId
                                 rows: entries.map((e) {
                                   final type = e['transaction_type'] as String? ?? '';
                                   final qty = (e['quantity'] as num?)?.toDouble() ?? 0.0;
-                                  final isPositive = qty > 0;
+                                final isSale = type.toUpperCase().contains('SALE');
+final displayQty = isSale ? -qty.abs() : qty;
+final isPositive = displayQty > 0;
                                   final color = type.contains('PURCHASE') || type.contains('OPENING')
                                       ? Colors.green
                                       : (type.contains('SALE') ? Colors.blue : Colors.orange);
@@ -1219,7 +1221,7 @@ void _showStockLedgerDialog(BuildContext context, WidgetRef ref, {int? productId
                                       DataCell(Text(e['product_name'] as String? ?? 'Product')),
                                       DataCell(
                                         Text(
-                                          '${isPositive ? '+' : ''}$qty ${e['product_unit'] ?? ''}',
+                                          '${isPositive ? '+' : ''}$displayQty ${e['product_unit'] ?? ''}',
                                           style: TextStyle(fontWeight: FontWeight.w900, color: isPositive ? Colors.green : Colors.red),
                                         ),
                                       ),
