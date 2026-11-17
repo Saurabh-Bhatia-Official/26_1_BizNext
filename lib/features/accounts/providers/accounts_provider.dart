@@ -1,5 +1,5 @@
 // lib/features/accounts/providers/accounts_provider.dart
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/database/database_helper.dart';
@@ -317,13 +317,13 @@ class AccountsRepository {
     await _db.delete(AppConstants.tblAccounts, id);
   }
 
-  Future<void> addTransfer({
-    required int businessId,
-    required int fromAccountId,
-    required int toAccountId,
-    required double amount,
-    String? description,
-  }) async {
+    Future<void> addTransfer({
+      required int businessId,
+      required int fromAccountId,
+      required int toAccountId,
+      required double amount,
+      String? description,
+    }) async {
     await _db.transaction((txn) async {
       final date = DateTime.now();
       final dateStr = date.toIso8601String();
@@ -357,8 +357,12 @@ class AccountsRepository {
       });
 
       // 2. Credit to Destination
-      await txn.rawUpdate("UPDATE ${AppConstants.tblAccounts} SET balance = balance + ? WHERE id = ?", [amount, toAccountId]);
-      await txn.insert(AppConstants.tblLedger, {
+final updatedRows = await txn.rawUpdate(
+  "UPDATE ${AppConstants.tblAccounts} SET balance = balance + ? WHERE id = ?",
+  [amount, toAccountId],
+);
+
+await txn.insert(AppConstants.tblLedger, {
         'business_id': businessId,
         'entity_type': AppConstants.entityBusiness,
         'entity_id': 0,
