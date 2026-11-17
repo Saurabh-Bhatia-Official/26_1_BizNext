@@ -1,6 +1,7 @@
 // lib/features/customers/screens/add_edit_customer_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
@@ -107,20 +108,51 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                               label: 'Customer Name',
                               hint: 'e.g. John Doe',
                               icon: Icons.person_rounded,
-                              validator: (v) =>
-                                  v?.isEmpty == true ? 'Name required' : null,
+                             validator: (v) {
+  final value = v?.trim() ?? '';
+
+  if (value.isEmpty) {
+    return 'Customer name is required';
+  }
+
+  if (value.length < 2 || value.length > 100) {
+    return 'Name must be between 2 and 100 characters';
+  }
+
+  if (!RegExp(r'[A-Za-z]').hasMatch(value)) {
+    return 'Name must contain at least one letter';
+  }
+
+  return null;
+},
                             ),
                             const SizedBox(height: 18),
                             _ResponsiveCustomerRow(
                               isPhone: isPhone,
                               children: [
-                                _CustomerField(
-                                  controller: _phoneCtrl,
-                                  label: 'Phone Number',
-                                  hint: '+91...',
-                                  icon: Icons.phone_rounded,
-                                  keyboardType: TextInputType.phone,
-                                ),
+                               _CustomerField(
+  controller: _phoneCtrl,
+  label: 'Phone Number',
+  hint: '10-digit mobile number',
+  icon: Icons.phone_rounded,
+  keyboardType: TextInputType.number,
+  maxLength: 10,
+  inputFormatters: [
+    FilteringTextInputFormatter.digitsOnly,
+    LengthLimitingTextInputFormatter(10),
+  ],
+  validator: (v) {
+    final value = v?.trim() ?? '';
+
+    if (value.isEmpty) return null;
+
+    if (!RegExp(r'^[6-9][0-9]{9}$').hasMatch(value)) {
+      return 'Enter a valid 10-digit Indian mobile number';
+    }
+
+    return null;
+  },
+),
                                 _CustomerField(
                                   controller: _emailCtrl,
                                   label: 'Email Address',
@@ -147,12 +179,34 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                               keyboardType: TextInputType.multiline,
                             ),
                             const SizedBox(height: 18),
-                            _CustomerField(
-                              controller: _gstCtrl,
-                              label: 'GST Number',
-                              hint: 'Optional GSTIN',
-                              icon: Icons.receipt_long_rounded,
-                            ),
+                           _CustomerField(
+  controller: _gstCtrl,
+  label: 'GST Number',
+  hint: 'Optional GSTIN',
+  icon: Icons.receipt_long_rounded,
+  maxLength: 15,
+  textCapitalization: TextCapitalization.characters,
+  inputFormatters: [
+    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+    UpperCaseTextFormatter(),
+    LengthLimitingTextInputFormatter(15),
+  ],
+  validator: (v) {
+    final value = v?.trim() ?? '';
+
+    if (value.isEmpty) return null;
+
+    final gstRegex = RegExp(
+      r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$',
+    );
+
+    if (!gstRegex.hasMatch(value)) {
+      return 'Enter a valid 15-character GSTIN';
+    }
+
+    return null;
+  },
+),
                           ],
                         ),
                         SizedBox(height: isPhone ? 16 : 24),
@@ -324,7 +378,6 @@ class _CustomerFormCard extends StatelessWidget {
     ).animate().fadeIn(duration: 400.ms).slideX(begin: 0.1, end: 0);
   }
 }
-
 class _CustomerField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -335,16 +388,23 @@ class _CustomerField extends StatelessWidget {
   final String? helperText;
   final String? Function(String?)? validator;
 
-  const _CustomerField({
-    required this.controller,
-    required this.label,
-    required this.hint,
-    required this.icon,
-    this.maxLines = 1,
-    this.keyboardType,
-    this.helperText,
-    this.validator,
-  });
+  final List<TextInputFormatter>? inputFormatters;
+  final int? maxLength;
+  final TextCapitalization textCapitalization;
+
+ const _CustomerField({
+  required this.controller,
+  required this.label,
+  required this.hint,
+  required this.icon,
+  this.maxLines = 1,
+  this.keyboardType,
+  this.helperText,
+  this.validator,
+  this.inputFormatters,
+  this.maxLength,
+  this.textCapitalization = TextCapitalization.none,
+});
 
   @override
   Widget build(BuildContext context) {
@@ -355,22 +415,37 @@ class _CustomerField extends StatelessWidget {
         : (keyboardType ?? TextInputType.text);
     final effectiveInputAction = isMultiline ? null : TextInputAction.next;
 
-    return TextFormField(
-      controller: controller,
-      maxLines: maxLines,
-      keyboardType: effectiveKeyboardType,
-      textInputAction: effectiveInputAction,
-      validator: validator,
-      style: const TextStyle(fontWeight: FontWeight.w600),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        helperText: helperText,
-        prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
-        fillColor: isDark
-            ? Colors.white.withValues(alpha: 0.03)
-            : AppColors.lightBg,
-      ),
+   return TextFormField(
+  controller: controller,
+  maxLines: maxLines,
+  keyboardType: effectiveKeyboardType,
+  textInputAction: effectiveInputAction,
+  validator: validator,
+  inputFormatters: inputFormatters,
+  maxLength: maxLength,
+  textCapitalization: textCapitalization,
+  style: const TextStyle(fontWeight: FontWeight.w600),
+  decoration: InputDecoration(
+    labelText: label,
+    hintText: hint,
+    helperText: helperText,
+    prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
+    fillColor: isDark
+        ? Colors.white.withValues(alpha: 0.03)
+        : AppColors.lightBg,
+  ),
+);
+  }
+}
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return newValue.copyWith(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
     );
   }
 }
