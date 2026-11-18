@@ -329,70 +329,7 @@ _PremiumField(
     return null;
   },
 ),
-                              ],
-                            ),
-                         // ── 1. BASIC INFORMATION ──
-                        _FormCard(
-                          title: 'Product Information',
-                          subtitle: 'Core product identifiers, brand, categories and unit',
-                          icon: Icons.inventory_2_rounded,
-                          isDark: isDark,
-                          isMobile: isMobile,
-                          children: [
-                            _PremiumField(
-                              controller: _nameCtrl,
-                              label: 'Product Name *',
-                              hint: 'e.g. Basmati Rice 5kg, iPhone 15 Pro, Cotton T-Shirt',
-                              icon: Icons.title_rounded,
-                              externalError: _nameError,
-                              onChanged: (_) {
-                                if (_nameError != null) setState(() => _nameError = null);
-                              },
-                              validator: (v) {
-                                final name = v?.trim() ?? '';
-                                if (name.isEmpty) {
-                                  return 'Product name is required';
-                                }
-                                if (name.length < 2 || name.length > 100) {
-                                  return 'Product name must be between 2 and 100 characters';
-                                }
-                                if (!RegExp(r'[a-zA-Z]').hasMatch(name)) {
-                                  return 'Product name must contain at least one letter';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            _PremiumField(
-                              controller: _brandCtrl,
-                              label: 'Brand / Manufacturer',
-                              hint: 'e.g. Tata, Apple, Nestle',
-                              icon: Icons.business_rounded,
-                              validator: (value) {
-                                final brand = value?.trim() ?? '';
-                                if (brand.isEmpty) return null;
-                                if (!RegExp(r'[a-zA-Z]').hasMatch(brand)) {
-                                  return 'Brand must contain at least one letter';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            _PremiumField(
-                              controller: _hsnSacCtrl,
-                              label: 'HSN / SAC Code',
-                              hint: 'e.g. 10063020, 85171300',
-                              icon: Icons.numbers_rounded,
-                              keyboardType: TextInputType.number,
-                              validator: (value) {
-                                final code = value?.trim() ?? '';
-                                if (code.isEmpty) return null;
-                                if (!RegExp(r'^(?:[0-9]{4}|[0-9]{6}|[0-9]{8})$').hasMatch(code)) {
-                                  return 'Enter a valid 4, 6 or 8 digit HSN/SAC code';
-                                }
-                                return null;
-                              },
-                            ),
+
                             const SizedBox(height: 16),
                             _PremiumField(
                               controller: _skuCtrl,
