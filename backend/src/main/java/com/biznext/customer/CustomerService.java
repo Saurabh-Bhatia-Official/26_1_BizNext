@@ -110,6 +110,10 @@ public class CustomerService {
     }
 
     private void validateCustomer(CustomerRequest request, Long ignoreId) {
+        if (request.businessId() == null || request.businessId() <= 0) {
+            throw new CustomerApiException("A valid business ID is required.");
+        }
+
         if (request.name() == null || request.name().trim().isEmpty()) {
             throw new CustomerApiException("Customer name is required.");
         }
@@ -121,6 +125,11 @@ public class CustomerService {
 
         if (normalizedPhone.length() < 10 || normalizedPhone.length() > 15) {
             throw new CustomerApiException("Please enter a valid mobile number.");
+        }
+
+        String trimmedEmail = request.email() == null ? null : request.email().trim();
+        if (trimmedEmail != null && !trimmedEmail.isEmpty() && !trimmedEmail.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+            throw new CustomerApiException("Please enter a valid email address.");
         }
 
         Optional<CustomerEntity> duplicate = customerRepository.findByBusinessIdAndPhoneNormalized(

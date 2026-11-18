@@ -24,7 +24,11 @@ class CustomerApiService {
     required int businessId,
     int? ignoreId,
   }) async {
-    final name = customer.name.trim();
+    if (businessId <= 0) {
+      throw const CustomerApiException('A valid business ID is required.');
+    }
+
+    final name = (customer.name ?? '').trim();
     if (name.isEmpty) {
       throw const CustomerApiException('Customer name is required.');
     }
@@ -36,6 +40,14 @@ class CustomerApiService {
 
     if (phone.length < 10 || phone.length > 15) {
       throw const CustomerApiException('Please enter a valid mobile number.');
+    }
+
+    final email = (customer.email ?? '').trim();
+    if (email.isNotEmpty) {
+      final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+      if (!emailRegex.hasMatch(email)) {
+        throw const CustomerApiException('Please enter a valid email address.');
+      }
     }
 
     // Duplicate checks are authoritative on the backend/database. This avoids

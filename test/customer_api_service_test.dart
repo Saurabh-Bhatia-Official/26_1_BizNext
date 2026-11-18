@@ -33,5 +33,20 @@ void main() {
         completes,
       );
     });
+
+    test('rejects an invalid email address', () async {
+      await expectLater(
+        CustomerApiService.validateCustomer(
+          CustomerModel(
+            businessId: 1,
+            name: 'Alice Johnson',
+            phone: '9876543210',
+            email: 'not-an-email',
+          ),
+          businessId: 1,
+        ),
+        throwsA(isA<CustomerApiException>()),
+      );
+    });
   });
 }
