@@ -266,6 +266,79 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                           isDark: isDark,
                           isMobile: isMobile,
                           children: [
+                           _PremiumField(
+  controller: _nameCtrl,
+  label: 'Product Name *',
+  hint: 'e.g. Basmati Rice 5kg, iPhone 15 Pro, Cotton T-Shirt',
+  icon: Icons.title_rounded,
+  externalError: _nameError,
+  onChanged: (_) {
+    if (_nameError != null) setState(() => _nameError = null);
+  },
+  validator: (v) {
+    final name = v?.trim() ?? '';
+
+    if (name.isEmpty) {
+      return 'Product name is required';
+    }
+
+    if (name.length < 2 || name.length > 100) {
+      return 'Product name must be between 2 and 100 characters';
+    }
+
+    if (!RegExp(r'[a-zA-Z]').hasMatch(name)) {
+      return 'Product name must contain at least one letter';
+    }
+
+    return null;
+  },
+),
+                            const SizedBox(height: 16),
+_PremiumField(
+  controller: _brandCtrl,
+  label: 'Brand / Manufacturer',
+  hint: 'e.g. Tata, Apple, Nestle',
+  icon: Icons.business_rounded,
+  validator: (value) {
+    final brand = value?.trim() ?? '';
+
+    if (brand.isEmpty) return null;
+
+    if (!RegExp(r'[a-zA-Z]').hasMatch(brand)) {
+      return 'Brand must contain at least one letter';
+    }
+
+    return null;
+  },
+),_PremiumField(
+  controller: _hsnSacCtrl,
+  label: 'HSN / SAC Code',
+  hint: 'e.g. 10063020, 85171300',
+  icon: Icons.numbers_rounded,
+  keyboardType: TextInputType.number,
+  validator: (value) {
+    final code = value?.trim() ?? '';
+
+    if (code.isEmpty) return null;
+
+    if (!RegExp(r'^(?:[0-9]{4}|[0-9]{6}|[0-9]{8})$')
+        .hasMatch(code)) {
+      return 'Enter a valid 4, 6 or 8 digit HSN/SAC code';
+    }
+
+    return null;
+  },
+),
+                              ],
+                            ),
+                         // ── 1. BASIC INFORMATION ──
+                        _FormCard(
+                          title: 'Product Information',
+                          subtitle: 'Core product identifiers, brand, categories and unit',
+                          icon: Icons.inventory_2_rounded,
+                          isDark: isDark,
+                          isMobile: isMobile,
+                          children: [
                             _PremiumField(
                               controller: _nameCtrl,
                               label: 'Product Name *',
@@ -275,80 +348,128 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                               onChanged: (_) {
                                 if (_nameError != null) setState(() => _nameError = null);
                               },
-                              validator: (v) => v?.trim().isEmpty == true ? 'Product name is required' : null,
+                              validator: (v) {
+                                final name = v?.trim() ?? '';
+                                if (name.isEmpty) {
+                                  return 'Product name is required';
+                                }
+                                if (name.length < 2 || name.length > 100) {
+                                  return 'Product name must be between 2 and 100 characters';
+                                }
+                                if (!RegExp(r'[a-zA-Z]').hasMatch(name)) {
+                                  return 'Product name must contain at least one letter';
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 16),
-
-                            _ResponsiveRow(
-                              isMobile: isMobile,
-                              children: [
-                                _PremiumField(
-                                  controller: _brandCtrl,
-                                  label: 'Brand / Manufacturer',
-                                  hint: 'e.g. Tata, Apple, Nestle',
-                                  icon: Icons.business_rounded,
-                                ),
-                                _PremiumField(
-                                  controller: _hsnSacCtrl,
-                                  label: 'HSN / SAC Code',
-                                  hint: 'e.g. 10063020, 85171300',
-                                  icon: Icons.numbers_rounded,
-                                  keyboardType: TextInputType.number,
-                                ),
-                              ],
+                            _PremiumField(
+                              controller: _brandCtrl,
+                              label: 'Brand / Manufacturer',
+                              hint: 'e.g. Tata, Apple, Nestle',
+                              icon: Icons.business_rounded,
+                              validator: (value) {
+                                final brand = value?.trim() ?? '';
+                                if (brand.isEmpty) return null;
+                                if (!RegExp(r'[a-zA-Z]').hasMatch(brand)) {
+                                  return 'Brand must contain at least one letter';
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 16),
+                            _PremiumField(
+                              controller: _hsnSacCtrl,
+                              label: 'HSN / SAC Code',
+                              hint: 'e.g. 10063020, 85171300',
+                              icon: Icons.numbers_rounded,
+                              keyboardType: TextInputType.number,
+                              validator: (value) {
+                                final code = value?.trim() ?? '';
+                                if (code.isEmpty) return null;
+                                if (!RegExp(r'^(?:[0-9]{4}|[0-9]{6}|[0-9]{8})$').hasMatch(code)) {
+                                  return 'Enter a valid 4, 6 or 8 digit HSN/SAC code';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _PremiumField(
+                              controller: _skuCtrl,
+                              label: 'SKU / Item Code',
+                              hint: 'e.g. RICE-001',
+                              icon: Icons.tag_rounded,
+                              suffix: IconButton(
+                                icon: const Icon(
+                                  Icons.auto_fix_high_rounded,
+                                  size: 20,
+                                  color: AppColors.primary,
+                                ),
+                                tooltip: 'Auto-generate SKU',
+                                onPressed: _generateSku,
+                              ),
+                              validator: (value) {
+                                final sku = value?.trim() ?? '';
+                                if (sku.isEmpty) return null;
+                                if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(sku)) {
+                                  return 'Use only letters, numbers, hyphens and underscores';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            _PremiumField(
+                              controller: _barcodeCtrl,
+                              label: 'Barcode / EAN / UPC',
+                              hint: 'Scan or enter barcode number',
+                              icon: Icons.qr_code_scanner_rounded,
+                              keyboardType: TextInputType.number,
+                              suffix: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.qr_code_scanner_rounded,
+                                      size: 20,
+                                      color: AppColors.primary,
+                                    ),
+                                    tooltip: 'Scan barcode with camera',
+                                    onPressed: () async {
+                                      final code = await Navigator.push<String>(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => const QRScannerScreen(),
+                                        ),
+                                      );
 
-                            _ResponsiveRow(
-                              isMobile: isMobile,
-                              children: [
-                                _PremiumField(
-                                  controller: _skuCtrl,
-                                  label: 'SKU / Item Code',
-                                  hint: 'e.g. RICE-001',
-                                  icon: Icons.tag_rounded,
-                                  suffix: IconButton(
-                                    icon: const Icon(Icons.auto_fix_high_rounded, size: 20, color: AppColors.primary),
-                                    tooltip: 'Auto-generate SKU',
-                                    onPressed: _generateSku,
+                                      if (code != null && code.isNotEmpty) {
+                                        setState(() {
+                                          _barcodeCtrl.text = code;
+                                        });
+                                      }
+                                    },
                                   ),
-                                ),
-                                _PremiumField(
-                                  controller: _barcodeCtrl,
-                                  label: 'Barcode / EAN / UPC',
-                                  hint: 'Scan or enter barcode number',
-                                  icon: Icons.qr_code_scanner_rounded,
-                                  keyboardType: TextInputType.text,
-                                  suffix: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.qr_code_scanner_rounded, size: 20, color: AppColors.primary),
-                                        tooltip: 'Scan barcode with camera',
-                                        onPressed: () async {
-                                          final code = await Navigator.push<String>(
-                                            context,
-                                            MaterialPageRoute(builder: (context) => const QRScannerScreen()),
-                                          );
-                                          if (code != null && code.isNotEmpty) {
-                                            setState(() {
-                                              _barcodeCtrl.text = code;
-                                            });
-                                          }
-                                        },
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.auto_fix_normal_rounded, size: 20, color: AppColors.primary),
-                                        tooltip: 'Auto-generate barcode',
-                                        onPressed: _generateBarcode,
-                                      ),
-                                    ],
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.auto_fix_normal_rounded,
+                                      size: 20,
+                                      color: AppColors.primary,
+                                    ),
+                                    tooltip: 'Auto-generate barcode',
+                                    onPressed: _generateBarcode,
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
+                              validator: (value) {
+                                final barcode = value?.trim() ?? '';
+                                if (barcode.isEmpty) return null;
+                                if (!RegExp(r'^(?:[0-9]{8}|[0-9]{12}|[0-9]{13}|[0-9]{14})$').hasMatch(barcode)) {
+                                  return 'Enter a valid 8, 12, 13 or 14 digit barcode';
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 16),
-
                             _PremiumField(
                               controller: _descCtrl,
                               label: 'Description & Notes',
@@ -358,7 +479,6 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                               icon: Icons.description_rounded,
                             ),
                             const SizedBox(height: 16),
-
                             _ResponsiveRow(
                               isMobile: isMobile,
                               children: [
@@ -398,7 +518,6 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                               ],
                             ),
                             const SizedBox(height: 16),
-
                             _ResponsiveRow(
                               isMobile: isMobile,
                               children: [
@@ -440,37 +559,66 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                             _ResponsiveRow(
                               isMobile: isMobile,
                               children: [
-                                _PremiumField(
-                                  controller: _purchasePriceCtrl,
-                                  label: 'Purchase Cost / Rate (WAC) ₹',
-                                  hint: '0.00',
-                                  icon: Icons.shopping_bag_rounded,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                ),
-                                _PremiumField(
-                                  controller: _mrpCtrl,
-                                  label: 'MRP (Maximum Retail Price) ₹',
-                                  hint: '0.00',
-                                  icon: Icons.verified_rounded,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                ),
+                              _PremiumField(
+  controller: _purchasePriceCtrl,
+  label: 'Purchase Cost / Rate (WAC) ₹',
+  hint: '0.00',
+  icon: Icons.shopping_bag_rounded,
+  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+  validator: (value) {
+    final price = value?.trim() ?? '';
+
+    if (price.isEmpty) return null;
+
+    if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(price)) {
+      return 'Enter a valid price (maximum 2 decimal places)';
+    }
+
+    return null;
+  },
+),
+                              _PremiumField(
+  controller: _mrpCtrl,
+  label: 'MRP (Maximum Retail Price) ₹',
+  hint: '0.00',
+  icon: Icons.verified_rounded,
+  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+  validator: (value) {
+    final mrp = value?.trim() ?? '';
+
+    if (mrp.isEmpty) return null;
+
+    if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(mrp)) {
+      return 'Enter a valid MRP (maximum 2 decimal places)';
+    }
+
+    return null;
+  },
+),
                               ],
                             ),
                             const SizedBox(height: 16),
 
-                            _PremiumField(
-                              controller: _sellingPriceCtrl,
-                              label: 'margin (Retail) ₹ *',
-                              hint: '0.00',
-                              icon: Icons.sell_rounded,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Selling price is required';
-                                final numVal = double.tryParse(v);
-                                if (numVal == null || numVal < 0) return 'Enter a valid positive price';
-                                return null;
-                              },
-                            ),
+                           _PremiumField(
+  controller: _sellingPriceCtrl,
+  label: 'margin (Retail) ₹ *',
+  hint: '0.00',
+  icon: Icons.sell_rounded,
+  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+  validator: (v) {
+    final price = v?.trim() ?? '';
+
+    if (price.isEmpty) {
+      return 'Selling price is required';
+    }
+
+    if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(price)) {
+      return 'Enter a valid price (maximum 2 decimal places)';
+    }
+
+    return null;
+  },
+),
                             const SizedBox(height: 20),
 
                             // Tiered Custom Price Lists
@@ -517,6 +665,17 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                                               hint: '0.00',
                                               icon: Icons.handshake_rounded,
                                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                              validator: (value) {
+  final price = value?.trim() ?? '';
+
+  if (price.isEmpty) return null;
+
+  if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(price)) {
+    return 'Enter a valid price (maximum 2 decimal places)';
+  }
+
+  return null;
+},
                                             ),
                                             if (i + 1 < cats.length)
                                               _PremiumField(
@@ -603,20 +762,41 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                               isMobile: isMobile,
                               children: [
                                 if (!isEditing)
-                                  _PremiumField(
-                                    controller: _stockCtrl,
-                                    label: 'Initial Opening Stock Quantity',
-                                    hint: '0',
-                                    icon: Icons.inventory_2_rounded,
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  ),
                                 _PremiumField(
-                                  controller: _minStockCtrl,
-                                  label: 'Low Stock Alert Threshold',
-                                  hint: '5',
-                                  icon: Icons.notifications_active_rounded,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                ),
+  controller: _stockCtrl,
+  label: 'Initial Opening Stock Quantity',
+  hint: '0',
+  icon: Icons.inventory_2_rounded,
+  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+  validator: (value) {
+    final stock = value?.trim() ?? '';
+
+    if (stock.isEmpty) return null;
+
+    if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(stock)) {
+      return 'Enter a valid quantity (maximum 2 decimal places)';
+    }
+
+    return null;
+  },
+),_PremiumField(
+  controller: _minStockCtrl,
+  label: 'Low Stock Alert Threshold',
+  hint: '5',
+  icon: Icons.notifications_active_rounded,
+  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+  validator: (value) {
+    final stock = value?.trim() ?? '';
+
+    if (stock.isEmpty) return null;
+
+    if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(stock)) {
+      return 'Enter a valid quantity (maximum 2 decimal places)';
+    }
+
+    return null;
+  },
+),
                               ],
                             ),
                             const SizedBox(height: 16),
@@ -631,6 +811,8 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                           ],
                         ),
                         const SizedBox(height: 28),
+
+                     const SizedBox(height: 28),
 
                         // ── ACTION BUTTONS ──
                         isMobile
@@ -710,10 +892,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         ),
       ),
     ),
-    );
-  }
-
-  Widget _buildLiveMarginHud(bool isDark) {
+  );
+}
+ Widget _buildLiveMarginHud(bool isDark) {
     final cost = double.tryParse(_purchasePriceCtrl.text) ?? 0.0;
     final sell = double.tryParse(_sellingPriceCtrl.text) ?? 0.0;
     if (cost <= 0 && sell <= 0) return const SizedBox.shrink();
