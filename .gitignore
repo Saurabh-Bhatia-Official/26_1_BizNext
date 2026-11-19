@@ -18,6 +18,12 @@ backend/.env.*
 .swiftpm/
 migrate_working_dir/
 
+# Backend build output
+backend/target/
+backend/.classpath
+backend/.project
+backend/.settings/
+
 # IntelliJ related
 *.iml
 *.ipr
