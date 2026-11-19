@@ -4,13 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/customer_model.dart';
 import '../repositories/customer_repository.dart';
+import '../services/customer_api_service.dart';
 import '../../loyalty/providers/loyalty_provider.dart';
-import '../../../core/database/database_providers.dart';
 
 final customerRepositoryProvider = Provider<CustomerRepository>((ref) => CustomerRepository());
 
 final customersProvider = FutureProvider.autoDispose<List<CustomerModel>>((ref) async {
-  ref.watch(databaseVersionProvider); // Global auto-refresh
   final businessId = ref.watch(activeBusinessIdProvider);
   return ref.watch(customerRepositoryProvider).getCustomers(businessId);
 });
@@ -39,13 +38,21 @@ class CustomerFormNotifier extends StateNotifier<AsyncValue<void>> {
   Future<bool> saveCustomer(CustomerModel customer) async {
     if (mounted) state = const AsyncValue.loading();
     try {
-      if (customer.id == null) {
+      final businessId = _ref.read(activeBusinessIdProvider);
+      final hydratedCustomer = customer.businessId == 0
+          ? customer.copyWith(businessId: businessId)
+          : customer.copyWith(businessId: businessId);
+
+      if (hydratedCustomer.id == null) {
         final lSettings = _ref.read(loyaltySettingsProvider);
         final initialPoints = (lSettings != null && lSettings.isActive) ? lSettings.welcomePoints : 0.0;
-        await _repo.insertCustomer(customer.copyWith(loyaltyPoints: initialPoints));
+        await CustomerApiService.createCustomer(
+          hydratedCustomer.copyWith(loyaltyPoints: initialPoints),
+        );
       } else {
-        await _repo.updateCustomer(customer);
+        await CustomerApiService.updateCustomer(hydratedCustomer);
       }
+      _ref.invalidate(customersProvider);
       if (mounted) state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
@@ -57,7 +64,9 @@ class CustomerFormNotifier extends StateNotifier<AsyncValue<void>> {
   Future<bool> deleteCustomer(int id) async {
     if (mounted) state = const AsyncValue.loading();
     try {
-      await _repo.deleteCustomer(id);
+      final businessId = _ref.read(activeBusinessIdProvider);
+      await CustomerApiService.deleteCustomer(id, businessId: businessId);
+      _ref.invalidate(customersProvider);
       if (mounted) state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {

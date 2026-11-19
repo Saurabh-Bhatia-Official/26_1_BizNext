@@ -3,10 +3,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/notification_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/customer_model.dart';
 import '../providers/customer_provider.dart';
+import '../services/customer_api_service.dart';
 import '../../../core/services/shortcut_service.dart';
 
 class AddEditCustomerScreen extends ConsumerStatefulWidget {
@@ -91,7 +93,12 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                               label: 'Customer Name',
                               hint: 'e.g. John Doe',
                               icon: Icons.person_rounded,
-                              validator: (v) => v?.isEmpty == true ? 'Name required' : null,
+                              validator: (v) {
+                                final value = (v ?? '').trim();
+                                if (value.isEmpty) return 'Name is required';
+                                if (value.length < 2) return 'Enter a valid customer name';
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 18),
                             _ResponsiveCustomerRow(
@@ -103,6 +110,15 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                                   hint: '+91...',
                                   icon: Icons.phone_rounded,
                                   keyboardType: TextInputType.phone,
+                                  validator: (v) {
+                                    final value = (v ?? '').trim();
+                                    if (value.isEmpty) return 'Mobile number is required';
+                                    final digits = CustomerApiService.normalizePhone(value);
+                                    if (digits.length < 10 || digits.length > 15) {
+                                      return 'Enter a valid mobile number';
+                                    }
+                                    return null;
+                                  },
                                 ),
                                 _CustomerField(
                                   controller: _emailCtrl,
@@ -110,6 +126,12 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                                   hint: 'john@example.com',
                                   icon: Icons.email_rounded,
                                   keyboardType: TextInputType.emailAddress,
+                                  validator: (v) {
+                                    final value = (v ?? '').trim();
+                                    if (value.isEmpty) return null;
+                                    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+                                    return emailRegex.hasMatch(value) ? null : 'Enter a valid email';
+                                  },
                                 ),
                               ],
                             ),
@@ -201,7 +223,18 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
     );
 
     final success = await ref.read(customerFormProvider.notifier).saveCustomer(customer);
-    if (success && mounted) Navigator.pop(context);
+    if (success && mounted) {
+      Navigator.pop(context);
+      return;
+    }
+
+    if (!success && mounted) {
+      final error = ref.read(customerFormProvider).asError.error;
+      final message = error is CustomerApiException
+          ? error.message
+          : (error?.toString() ?? 'Failed to save customer.');
+      AppAlert.error(ref, message);
+    }
   }
 }
 
