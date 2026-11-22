@@ -37,6 +37,9 @@ public class CloudinaryProductStorage {
     @Value("${CLOUDINARY_API_SECRET:}")
     private String apiSecret;
 
+    @Value("${CLOUDINARY_UPLOAD_PRESET:ml_default}")
+    private String uploadPreset;
+
     public UploadedImage upload(MultipartFile file) {
         validateImage(file);
         ensureConfigured();
@@ -53,8 +56,28 @@ public class CloudinaryProductStorage {
                     return safeFilename(file.getOriginalFilename());
                 }
             });
-            ResponseEntity<Map> response = restTemplate.postForEntity(endpoint("image/upload"),
-                    new HttpEntity<>(fields, multipartHeaders()), Map.class);
+            ResponseEntity<Map> response;
+            try {
+                response = restTemplate.postForEntity(endpoint("image/upload"),
+                        new HttpEntity<>(fields, multipartHeaders()), Map.class);
+            } catch (HttpStatusCodeException exception) {
+                if (exception.getStatusCode().value() == 403) {
+                    logger.info("Signed upload not permitted for current API key role, using upload preset '{}'.", getUploadPreset());
+                    MultiValueMap<String, Object> presetFields = new LinkedMultiValueMap<>();
+                    presetFields.add("file", new ByteArrayResource(content) {
+                        @Override
+                        public String getFilename() {
+                            return safeFilename(file.getOriginalFilename());
+                        }
+                    });
+                    presetFields.add("upload_preset", getUploadPreset());
+                    response = restTemplate.postForEntity(endpoint("image/upload"),
+                            new HttpEntity<>(presetFields, multipartHeaders()), Map.class);
+                } else {
+                    throw exception;
+                }
+            }
+
             Object secureUrl = response.getBody() == null ? null : response.getBody().get("secure_url");
             Object returnedPublicId = response.getBody() == null ? null : response.getBody().get("public_id");
             if (response.getStatusCode().isError() || !(secureUrl instanceof String url)
@@ -128,13 +151,13 @@ public class CloudinaryProductStorage {
                 .orElse("");
         LinkedMultiValueMap<String, Object> fields = new LinkedMultiValueMap<>();
         signingParameters.forEach(fields::add);
-        fields.add("api_key", apiKey);
-        fields.add("signature", sha1(canonical + apiSecret));
+        fields.add("api_key", getApiKey());
+        fields.add("signature", sha1(canonical + getApiSecret()));
         return fields;
     }
 
     private String endpoint(String action) {
-        return "https://api.cloudinary.com/v1_1/" + cloudName + "/" + action;
+        return "https://api.cloudinary.com/v1_1/" + getCloudName() + "/" + action;
     }
 
     private HttpHeaders multipartHeaders() {
@@ -144,9 +167,37 @@ public class CloudinaryProductStorage {
     }
 
     private void ensureConfigured() {
-        if (cloudName.isBlank() || apiKey.isBlank() || apiSecret.isBlank()) {
+        if (getCloudName().isBlank() || getApiKey().isBlank() || getApiSecret().isBlank()) {
             throw new ApiException("Product image storage is not configured.", HttpStatus.SERVICE_UNAVAILABLE);
         }
+    }
+
+    private String getCloudName() {
+        return clean(cloudName);
+    }
+
+    private String getApiKey() {
+        return clean(apiKey);
+    }
+
+    private String getApiSecret() {
+        return clean(apiSecret);
+    }
+
+    private String getUploadPreset() {
+        String cleaned = clean(uploadPreset);
+        return cleaned.isBlank() ? "ml_default" : cleaned;
+    }
+
+    private static String clean(String value) {
+        if (value == null) return "";
+        String cleaned = value.trim();
+        if (cleaned.length() >= 2
+                && ((cleaned.startsWith("\"") && cleaned.endsWith("\""))
+                || (cleaned.startsWith("'") && cleaned.endsWith("'")))) {
+            cleaned = cleaned.substring(1, cleaned.length() - 1).trim();
+        }
+        return cleaned;
     }
 
     private static String safeFilename(String filename) {

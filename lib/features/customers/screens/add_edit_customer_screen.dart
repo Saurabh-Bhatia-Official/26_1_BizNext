@@ -229,7 +229,7 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
     }
 
     if (!success && mounted) {
-      final error = ref.read(customerFormProvider).asError.error;
+      final error = ref.read(customerFormProvider).asError?.error;
       final message = error is CustomerApiException
           ? error.message
           : (error?.toString() ?? 'Failed to save customer.');

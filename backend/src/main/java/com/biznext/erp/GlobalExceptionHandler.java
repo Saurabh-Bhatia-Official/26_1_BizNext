@@ -54,6 +54,41 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", ex.getMessage());
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+        if (ex.getMessage() != null) {
+            String msg = ex.getMessage().toLowerCase();
+            if (msg.contains("duplicate") || msg.contains("already exists")) {
+                status = HttpStatus.CONFLICT;
+            } else if (msg.contains("not found")) {
+                status = HttpStatus.NOT_FOUND;
+            } else if (msg.contains("invalid username or password")) {
+                status = HttpStatus.UNAUTHORIZED;
+            }
+        }
+        body.put("status", status.value());
+        return ResponseEntity.status(status).body(body);
+    }
+
+    @ExceptionHandler(org.springframework.dao.EmptyResultDataAccessException.class)
+    public ResponseEntity<Map<String, Object>> handleEmptyResult(org.springframework.dao.EmptyResultDataAccessException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", "Requested record was not found.");
+        body.put("status", HttpStatus.NOT_FOUND.value());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    @ExceptionHandler(java.util.NoSuchElementException.class)
+    public ResponseEntity<Map<String, Object>> handleNoSuchElement(java.util.NoSuchElementException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", ex.getMessage() != null && !ex.getMessage().isBlank() ? ex.getMessage() : "Requested record was not found.");
+        body.put("status", HttpStatus.NOT_FOUND.value());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
         logger.error("Unhandled API request failure: {}", ex.getClass().getSimpleName());

@@ -7,7 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_constants.dart';
-import '../../../core/database/database_helper.dart';
+import '../../../core/services/backend_api_service.dart';
 import '../../../core/providers/notification_provider.dart';
 import '../../../core/services/backup_service.dart';
 import '../../../core/theme/app_theme.dart';
@@ -165,7 +165,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (ok == true) {
       setState(() => _isLoading = true);
       try {
-        await DatabaseHelper.instance.resetSoftware();
+        await BackendApiService.post('auth/purge-sample', {'businessId': 1});
         if (mounted) {
           AppAlert.success(ref, 'Software reset successfully. Restarting workspace...');
           await Future.delayed(const Duration(seconds: 2));
@@ -220,7 +220,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (ok == true) {
       setState(() => _isLoading = true);
       try {
-        await DatabaseHelper.instance.cleanSampleData(1);
+        await BackendApiService.post('auth/purge-sample', {'businessId': 1});
         if (mounted) {
           AppAlert.success(ref, 'Sample transactions purged cleanly.');
         }

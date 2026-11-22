@@ -150,7 +150,7 @@ class ProductApiService {
     return productFromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  static Future<List<Product>> getCategories({required int businessId}) async {
+  static Future<List<Category>> getCategories({required int businessId}) async {
     final response = await http.get(
       _uri('/categories', {'businessId': '$businessId'}),
       headers: await _headers(),

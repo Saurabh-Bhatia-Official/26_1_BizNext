@@ -6,7 +6,7 @@ import '../../../core/providers/theme_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/services/backup_service.dart';
-import '../../../core/database/database_helper.dart';
+import '../../../core/services/backend_api_service.dart';
 import '../../../core/providers/notification_provider.dart';
 import '../providers/settings_provider.dart';
 import '../../loyalty/screens/loyalty_settings_screen.dart';
@@ -721,7 +721,7 @@ class SettingsScreen extends ConsumerWidget {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await DatabaseHelper.instance.resetSoftware();
+              await BackendApiService.post('auth/purge-sample', {'businessId': 1});
               if (context.mounted) {
                 AppAlert.success(ref, 'Software reset successfully.');
                 ref.read(authProvider.notifier).logout();
@@ -859,7 +859,9 @@ class SettingsScreen extends ConsumerWidget {
             onPressed: () async {
               Navigator.pop(ctx);
               try {
-                await DatabaseHelper.instance.resetBusinessData(business.id!);
+                await BackendApiService.post(
+                    'auth/purge-sample',
+                    {'businessId': business.id!});
                 if (context.mounted) {
                   AppAlert.success(ref, 'Shop data reset successfully. Re-initializing...');
                   await Future.delayed(const Duration(seconds: 1));

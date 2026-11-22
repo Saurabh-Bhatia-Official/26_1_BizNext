@@ -1,56 +1,42 @@
-// lib/features/suppliers/repositories/supplier_repository.dart
-
-import '../../../core/constants/app_constants.dart';
-import '../../../core/database/database_helper.dart';
 import '../models/supplier_model.dart';
+import '../services/supplier_api_service.dart';
 
 class SupplierRepository {
-  final DatabaseHelper _db = DatabaseHelper.instance;
-
   Future<List<SupplierModel>> getSuppliers(int businessId, {bool includeInactive = false}) async {
-    String where = 'business_id = ?';
-    if (!includeInactive) {
-      where += ' AND is_active = 1';
-    }
-    final maps = await _db.queryAll(
-      AppConstants.tblSuppliers,
-      where: where,
-      whereArgs: [businessId],
-      orderBy: 'name ASC',
+    return SupplierApiService.getSuppliers(
+      businessId: businessId,
+      includeInactive: includeInactive,
     );
-    return maps.map((m) => SupplierModel.fromMap(m)).toList();
   }
 
   Future<SupplierModel?> getSupplierById(int id, int businessId) async {
-    final maps = await _db.queryAll(
-      AppConstants.tblSuppliers,
-      where: 'id = ? AND business_id = ?',
-      whereArgs: [id, businessId],
-    );
-    return maps.isNotEmpty ? SupplierModel.fromMap(maps.first) : null;
+    return SupplierApiService.getSupplierById(id: id, businessId: businessId);
   }
 
   Future<int> insertSupplier(SupplierModel supplier) async {
-    return await _db.insert(AppConstants.tblSuppliers, supplier.toMap());
+    final created = await SupplierApiService.create(supplier);
+    return created.id ?? 0;
   }
 
   Future<int> updateSupplier(SupplierModel supplier) async {
-    return await _db.update(AppConstants.tblSuppliers, supplier.toMap(), supplier.id!);
+    final updated = await SupplierApiService.update(supplier);
+    return updated.id ?? supplier.id ?? 0;
   }
 
   Future<int> deleteSupplier(int id) async {
-    // Soft delete
-    return await _db.update(AppConstants.tblSuppliers, {'is_active': 0}, id);
+    throw UnimplementedError(
+      'Call deleteSupplierByBusiness(id, businessId) instead.',
+    );
   }
 
   Future<List<Map<String, dynamic>>> getSupplierPurchases(int supplierId, int businessId) async {
-    return await _db.rawQuery('''
-      SELECT p.*, COUNT(pi.id) as total_items
-      FROM ${AppConstants.tblPurchases} p
-      LEFT JOIN ${AppConstants.tblPurchaseItems} pi ON p.id = pi.purchase_id
-      WHERE p.supplier_id = ? AND p.business_id = ?
-      GROUP BY p.id
-      ORDER BY p.date DESC
-    ''', [supplierId, businessId]);
+    return const [];
+  }
+
+  Future<void> deleteSupplierByBusiness({
+    required int id,
+    required int businessId,
+  }) async {
+    await SupplierApiService.delete(id: id, businessId: businessId);
   }
 }

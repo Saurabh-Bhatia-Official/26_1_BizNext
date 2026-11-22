@@ -29,4 +29,27 @@ public class AccountService {
         AccountEntity entity = new AccountEntity(request.businessId(), request.code().trim(), request.name().trim(), request.type().trim());
         return AccountResponse.fromEntity(repository.save(entity));
     }
+
+    public AccountResponse updateAccount(Long businessId, Long id, AccountRequest request) {
+        AccountEntity entity = repository.findById(id)
+                .orElseThrow(() -> new ApiException("Account not found.", HttpStatus.NOT_FOUND));
+        if (!businessId.equals(entity.getBusinessId())
+                || !businessId.equals(request.businessId())) {
+            throw new ApiException("Account does not belong to this business.", HttpStatus.BAD_REQUEST);
+        }
+        entity.setCode(request.code().trim());
+        entity.setName(request.name().trim());
+        entity.setType(request.type().trim());
+        return AccountResponse.fromEntity(repository.save(entity));
+    }
+
+    public void deleteAccount(Long businessId, Long id) {
+        AccountEntity entity = repository.findById(id)
+                .orElseThrow(() -> new ApiException("Account not found.", HttpStatus.NOT_FOUND));
+        if (!businessId.equals(entity.getBusinessId())) {
+            throw new ApiException("Account does not belong to this business.", HttpStatus.BAD_REQUEST);
+        }
+        entity.setActive(false);
+        repository.save(entity);
+    }
 }

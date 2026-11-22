@@ -4,11 +4,13 @@ Spring Boot 3.3.4 / Java 17 REST API.
 
 ## Neon PostgreSQL
 
-Set `DATABASE_URL` to the Neon connection URL (`postgresql://...` or `jdbc:postgresql://...`) or configure `PGHOST`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD` separately. Use the Neon pooled hostname when appropriate. SSL and channel binding default to `require` for the individual-variable configuration. HikariCP pool settings use `NEON_POOL_SIZE` and `NEON_MIN_IDLE`. The API refuses to start without a database host or URL; it never falls back to local file storage.
+Set `DATABASE_URL` or `NEON_DATABASE_URL` to the Neon connection URL (`postgresql://...` or `jdbc:postgresql://...`), or configure `PGHOST`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD` separately (`PGPORT` defaults to `5432`). SSL and channel binding default to `require`. HikariCP pool settings use `NEON_POOL_SIZE` and `NEON_MIN_IDLE`.
+
+For local development, copy `.env.example` to the ignored `backend/.env`, then populate it with rotated credentials from your secret manager. Spring imports that file explicitly; `.env.example` is not loaded. When starting from the repository root, the `backend/.env` path is also supported. Start the API with `mvn spring-boot:run` from the `backend` directory. The API fails fast with a clear configuration error when credentials are missing and never falls back to local file storage. Never put active credentials in `.env.example`, source code, or logs.
 
 Product image uploads are signed by the backend and use `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`. Keep these values only in the backend deployment secret store. Product image request bodies use multipart form data with a JSON `product` part and an optional `image` file part. JPG/JPEG, PNG, and WEBP are accepted up to 5 MB.
 
-Copy variable names from `.env.example` into a local secret store or shell environment. The application does not load `.env` files automatically. Do not commit real credentials. A Neon password was previously present in the repository's datasource configuration; rotate that credential before deploying.
+Cloudinary variables are backend-only secrets. Rotate any credentials that were previously stored in tracked project files before using them.
 
 Flyway applies versioned schema migrations at startup. `V3__products_module_schema.sql` creates the business-scoped product categories and products tables, case-insensitive business-scoped SKU uniqueness, category relationship, validation checks, and product query indexes. Existing local SQLite products/categories are not automatically copied; seed or import those records through a trusted migration before using the Neon catalog.
 

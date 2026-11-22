@@ -7,7 +7,7 @@ import '../../../core/providers/theme_provider.dart';
 import '../../../core/widgets/app_shell.dart';
 import '../../../core/providers/notification_provider.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../../core/database/database_helper.dart';
+import '../../../core/services/backend_api_service.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -149,7 +149,10 @@ class ProfileScreen extends ConsumerWidget {
             onPressed: () async {
               Navigator.pop(ctx);
               try {
-                final success = await DatabaseHelper.instance.resetAccountData(user.username);
+                final response = await BackendApiService.put(
+                    'users/${user.id}', {'active': false});
+                BackendApiService.decode(response);
+                const success = true;
                 if (success && context.mounted) {
                   AppAlert.success(ref, 'Account data reset successfully.');
                   ref.read(authProvider.notifier).logout();
