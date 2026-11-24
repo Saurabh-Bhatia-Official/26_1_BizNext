@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 C:\BizNext\26_1_BizNext-master\backend\src\test\java\com\biznext\customer\CustomerServiceTest.java
 C:\BizNext\26_1_BizNext-master\backend\src\test\java\com\biznext\erp\database\ApiInvestigationTest.java
 C:\BizNext\26_1_BizNext-master\backend\src\test\java\com\biznext\erp\database\DatabaseConfigurationTest.java
@@ -7,3 +8,15 @@ C:\BizNext\26_1_BizNext-master\backend\src\test\java\com\biznext\erp\InventoryMo
 C:\BizNext\26_1_BizNext-master\backend\src\test\java\com\biznext\erp\JournalEntryServiceTest.java
 C:\BizNext\26_1_BizNext-master\backend\src\test\java\com\biznext\erp\ProductServiceTest.java
 C:\BizNext\26_1_BizNext-master\backend\src\test\java\com\biznext\erp\SalesReturnServiceTest.java
+=======
+C:\Users\INTEL\Desktop\26_1_BizNext\backend\src\test\java\com\biznext\customer\CustomerServiceTest.java
+C:\Users\INTEL\Desktop\26_1_BizNext\backend\src\test\java\com\biznext\erp\database\ApiInvestigationTest.java
+C:\Users\INTEL\Desktop\26_1_BizNext\backend\src\test\java\com\biznext\erp\database\DatabaseConfigurationTest.java
+C:\Users\INTEL\Desktop\26_1_BizNext\backend\src\test\java\com\biznext\erp\database\HibernateContextIntegrationTest.java
+C:\Users\INTEL\Desktop\26_1_BizNext\backend\src\test\java\com\biznext\erp\database\NeonConnectivityIntegrationTest.java
+C:\Users\INTEL\Desktop\26_1_BizNext\backend\src\test\java\com\biznext\erp\database\QueryFixExperimentTest.java
+C:\Users\INTEL\Desktop\26_1_BizNext\backend\src\test\java\com\biznext\erp\InventoryMovementServiceTest.java
+C:\Users\INTEL\Desktop\26_1_BizNext\backend\src\test\java\com\biznext\erp\JournalEntryServiceTest.java
+C:\Users\INTEL\Desktop\26_1_BizNext\backend\src\test\java\com\biznext\erp\ProductServiceTest.java
+C:\Users\INTEL\Desktop\26_1_BizNext\backend\src\test\java\com\biznext\erp\SalesReturnServiceTest.java
+>>>>>>> 7879563f805fffec516cb1afd4a6398f3010773c
