@@ -4,12 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/supplier_model.dart';
 import '../repositories/supplier_repository.dart';
-import '../../../core/database/database_providers.dart';
-
 final supplierRepositoryProvider = Provider<SupplierRepository>((ref) => SupplierRepository());
 
 final suppliersProvider = FutureProvider.autoDispose<List<SupplierModel>>((ref) async {
-  ref.watch(databaseVersionProvider);
   final businessId = ref.watch(activeBusinessIdProvider);
   return ref.watch(supplierRepositoryProvider).getSuppliers(businessId);
 });
@@ -54,7 +51,8 @@ class SupplierFormNotifier extends StateNotifier<AsyncValue<void>> {
   Future<bool> deleteSupplier(int id) async {
     if (mounted) state = const AsyncValue.loading();
     try {
-      await _repo.deleteSupplier(id);
+      final businessId = _ref.read(activeBusinessIdProvider);
+      await _repo.deleteSupplierByBusiness(id: id, businessId: businessId);
       if (mounted) state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {

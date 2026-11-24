@@ -8,8 +8,8 @@ import '../../inventory/providers/inventory_provider.dart';
 import '../models/offer.dart';
 import '../providers/discount_provider.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:io';
 import '../../../core/services/media_upload_service.dart';
+import '../../../core/widgets/media_image.dart';
 
 class OffersScreen extends ConsumerStatefulWidget {
   const OffersScreen({super.key});
@@ -419,8 +419,12 @@ class _AddOfferDialogState extends ConsumerState<_AddOfferDialog> {
                   onTap: () async {
                     final result = await FilePicker.platform.pickFiles(type: FileType.image);
                     if (result != null && result.files.single.path != null) {
-                      final savedPath = await MediaUploadService.uploadMedia(result.files.single.path!);
-                      setState(() => _posterPath = savedPath);
+                      try {
+                        final savedPath = await MediaUploadService.uploadMedia(result.files.single.path!);
+                        setState(() => _posterPath = savedPath);
+                      } catch (error) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+                      }
                     }
                   },
                   borderRadius: BorderRadius.circular(16),
@@ -432,13 +436,13 @@ class _AddOfferDialogState extends ConsumerState<_AddOfferDialog> {
                       borderRadius: BorderRadius.circular(16),
                       color: isDark ? Colors.white.withValues(alpha: 0.05) : AppColors.primary.withValues(alpha: 0.02),
                     ),
-                    child: _posterPath != null && _posterPath!.isNotEmpty && File(_posterPath!).existsSync()
+                    child: MediaImage.isAvailable(_posterPath)
                         ? Stack(
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(16),
-                                child: Image.file(
-                                  File(_posterPath!),
+                                child: MediaImage(
+                                  source: _posterPath!,
                                   fit: BoxFit.cover,
                                   width: double.infinity,
                                   height: double.infinity,
@@ -560,7 +564,7 @@ class _OfferCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hasPoster = offer.posterPath != null && offer.posterPath!.isNotEmpty && File(offer.posterPath!).existsSync();
+    final hasPoster = MediaImage.isAvailable(offer.posterPath);
     
     return Container(
       decoration: BoxDecoration(
@@ -582,8 +586,8 @@ class _OfferCard extends ConsumerWidget {
               width: double.infinity,
               color: isDark ? Colors.white.withValues(alpha: 0.05) : AppColors.lightBg,
               child: hasPoster
-                  ? Image.file(
-                      File(offer.posterPath!),
+                    ? MediaImage(
+                      source: offer.posterPath!,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) => _buildPlaceholderBanner(isDark),
                     )
@@ -757,7 +761,7 @@ class _ViewOfferDialog extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (offer.posterPath != null && offer.posterPath!.isNotEmpty && File(offer.posterPath!).existsSync()) ...[
+              if (MediaImage.isAvailable(offer.posterPath)) ...[
                 Container(
                   height: 200,
                   width: double.infinity,
@@ -767,8 +771,8 @@ class _ViewOfferDialog extends ConsumerWidget {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: Image.file(
-                      File(offer.posterPath!),
+                    child: MediaImage(
+                      source: offer.posterPath!,
                       fit: BoxFit.contain,
                     ),
                   ),

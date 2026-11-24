@@ -1,11 +1,8 @@
-// lib/features/billing/providers/sales_stats_provider.dart
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_constants.dart';
-import '../../../core/database/database_helper.dart';
+
+import '../../../core/services/backend_api_service.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/sale_history_model.dart';
-import '../../../core/database/database_providers.dart';
 
 class SalesStats {
   final double todaySales;
@@ -26,112 +23,137 @@ class SalesStats {
 }
 
 class SalesStatsRepository {
-  final DatabaseHelper _db = DatabaseHelper.instance;
+  Future<List<Map<String, dynamic>>> _sales(int businessId) async {
+    final response = await BackendApiService.get(
+      'sales',
+      {'businessId': '$businessId'},
+    );
+    final decoded = BackendApiService.decode(response);
+    if (decoded is! List) return const [];
+    return decoded
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+  }
 
   Future<SalesStats> getStats(int businessId) async {
+    final sales = await _sales(businessId);
     final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
-    final weekStart = DateTime(now.year, now.month, now.day - 6).toIso8601String();
-    final monthStart = DateTime(now.year, now.month, 1).toIso8601String();
+    final today = DateTime(now.year, now.month, now.day);
+    final week = today.subtract(const Duration(days: 6));
+    final month = DateTime(now.year, now.month, 1);
 
-    // Today's stats
-    final todayResult = await _db.rawQuery(
-      "SELECT COALESCE(SUM(grand_total), 0) as total, COUNT(*) as count FROM ${AppConstants.tblSales} WHERE business_id = ? AND date >= ? AND status = 'completed'",
-      [businessId, todayStart],
-    );
-
-    // This week
-    final weekResult = await _db.rawQuery(
-      "SELECT COALESCE(SUM(grand_total), 0) as total FROM ${AppConstants.tblSales} WHERE business_id = ? AND date >= ? AND status = 'completed'",
-      [businessId, weekStart],
-    );
-
-    // This month
-    final monthResult = await _db.rawQuery(
-      "SELECT COALESCE(SUM(grand_total), 0) as total FROM ${AppConstants.tblSales} WHERE business_id = ? AND date >= ? AND status = 'completed'",
-      [businessId, monthStart],
-    );
-
-    // Last 7 days breakdown
-    final last7Days = <double>[];
-    for (int i = 6; i >= 0; i--) {
-      final dayStart = DateTime(now.year, now.month, now.day - i).toIso8601String();
-      final dayEnd = DateTime(now.year, now.month, now.day - i + 1).toIso8601String();
-      final dayResult = await _db.rawQuery(
-        "SELECT COALESCE(SUM(grand_total), 0) as total FROM ${AppConstants.tblSales} WHERE business_id = ? AND date >= ? AND date < ? AND status = 'completed'",
-        [businessId, dayStart, dayEnd],
+    double sumFor(DateTime from, [DateTime? before]) {
+      return sales.where((sale) {
+        if (sale['status']?.toString() != 'completed') return false;
+        final date = DateTime.tryParse(sale['date']?.toString() ?? '');
+        if (date == null) return false;
+        return !date.isBefore(from) && (before == null || date.isBefore(before));
+      }).fold<double>(
+        0,
+        (sum, sale) =>
+            sum + ((sale['grand_total'] as num?)?.toDouble() ?? 0),
       );
-      last7Days.add((dayResult.first['total'] as num?)?.toDouble() ?? 0);
     }
 
-    // Recent 5 sales
-    final recentSales = await _db.rawQuery(
-      "SELECT s.*, c.name as customer_name FROM ${AppConstants.tblSales} s LEFT JOIN ${AppConstants.tblCustomers} c ON s.customer_id = c.id WHERE s.business_id = ? AND s.status = 'completed' ORDER BY s.date DESC LIMIT 5",
-      [businessId],
-    );
+    final last7Days = List<double>.generate(7, (index) {
+      final day = today.subtract(Duration(days: 6 - index));
+      return sumFor(day, day.add(const Duration(days: 1)));
+    });
+    final todaySales = sumFor(today);
+    final todayTransactions = sales.where((sale) {
+      if (sale['status']?.toString() != 'completed') return false;
+      final date = DateTime.tryParse(sale['date']?.toString() ?? '');
+      return date != null && !date.isBefore(today);
+    }).length;
 
     return SalesStats(
-      todaySales: (todayResult.first['total'] as num?)?.toDouble() ?? 0,
-      todayTransactions: (todayResult.first['count'] as int?) ?? 0,
-      weekSales: (weekResult.first['total'] as num?)?.toDouble() ?? 0,
-      monthSales: (monthResult.first['total'] as num?)?.toDouble() ?? 0,
+      todaySales: todaySales,
+      todayTransactions: todayTransactions,
+      weekSales: sumFor(week),
+      monthSales: sumFor(month),
       last7DaysSales: last7Days,
-      recentSales: recentSales,
+      recentSales: sales.take(5).toList(),
     );
   }
 
-  Future<List<Map<String, dynamic>>> getSaleHistory(int businessId, {int limit = 50, int offset = 0}) async {
-    return await _db.rawQuery(
-      "SELECT s.*, c.name as customer_name FROM ${AppConstants.tblSales} s LEFT JOIN ${AppConstants.tblCustomers} c ON s.customer_id = c.id WHERE s.business_id = ? ORDER BY s.date DESC LIMIT ? OFFSET ?",
-      [businessId, limit, offset],
-    );
+  Future<List<Map<String, dynamic>>> getSaleHistory(
+    int businessId, {
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final sales = await _sales(businessId);
+    return sales.skip(offset).take(limit).toList();
   }
 
-  Future<List<Map<String, dynamic>>> getSaleHistoryByCustomer(int customerId) async {
-    return await _db.rawQuery(
-      "SELECT s.*, c.name as customer_name FROM ${AppConstants.tblSales} s LEFT JOIN ${AppConstants.tblCustomers} c ON s.customer_id = c.id WHERE s.customer_id = ? ORDER BY s.date DESC",
-      [customerId],
-    );
+  Future<List<Map<String, dynamic>>> getSaleHistoryByCustomer(
+      int customerId) async {
+    final response =
+        await BackendApiService.get('sales', {'businessId': '1'});
+    final decoded = BackendApiService.decode(response);
+    if (decoded is! List) return const [];
+    return decoded
+        .where((item) =>
+            item is Map &&
+            ((item['customer_id'] ?? item['customerId']) as num?)?.toInt() ==
+                customerId)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
   }
 
   Future<List<Map<String, dynamic>>> getSaleItems(int saleId) async {
-    return await _db.rawQuery(
-      "SELECT * FROM ${AppConstants.tblSaleItems} WHERE sale_id = ?",
-      [saleId],
+    final response = await BackendApiService.get(
+      'sales/$saleId',
+      {'businessId': '1'},
     );
+    final decoded = BackendApiService.decode(response);
+    if (decoded is! Map) return const [];
+    final items = decoded['items'];
+    if (items is! List) return const [];
+    return items
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
   }
 
   Future<SaleHistoryModel?> getSaleById(int id) async {
-    final saleResult = await _db.rawQuery(
-      "SELECT s.*, c.name as customer_name, c.phone as customer_phone, c.address as customer_address, a.name as account_name FROM ${AppConstants.tblSales} s LEFT JOIN ${AppConstants.tblCustomers} c ON s.customer_id = c.id LEFT JOIN ${AppConstants.tblAccounts} a ON s.account_id = a.id WHERE s.id = ?",
-      [id],
+    final response = await BackendApiService.get(
+      'sales/$id',
+      {'businessId': '1'},
     );
-    if (saleResult.isEmpty) return null;
-
-    final itemResults = await getSaleItems(id);
-    final items = itemResults.map((m) => SaleHistoryItemModel.fromMap(m)).toList();
-    return SaleHistoryModel.fromMap(saleResult.first, items);
+    final decoded = BackendApiService.decode(response);
+    if (decoded is! Map<String, dynamic>) return null;
+    final items = await getSaleItems(id);
+    return SaleHistoryModel.fromMap(
+      decoded,
+      items.map(SaleHistoryItemModel.fromMap).toList(),
+    );
   }
 }
 
-final salesStatsRepositoryProvider = Provider<SalesStatsRepository>((ref) => SalesStatsRepository());
+final salesStatsRepositoryProvider =
+    Provider<SalesStatsRepository>((ref) => SalesStatsRepository());
 
-final salesStatsProvider = FutureProvider.autoDispose<SalesStats>((ref) async {
-  ref.watch(databaseVersionProvider); // Global auto-refresh
+final salesStatsProvider =
+    FutureProvider.autoDispose<SalesStats>((ref) async {
   final businessId = ref.watch(activeBusinessIdProvider);
   return ref.watch(salesStatsRepositoryProvider).getStats(businessId);
 });
 
-final saleHistoryProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  ref.watch(databaseVersionProvider); // Global auto-refresh
+final saleHistoryProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final businessId = ref.watch(activeBusinessIdProvider);
   return ref.watch(salesStatsRepositoryProvider).getSaleHistory(businessId);
 });
 
-final customerSaleHistoryProvider = FutureProvider.autoDispose.family<List<Map<String, dynamic>>, int>((ref, customerId) async {
-  return ref.watch(salesStatsRepositoryProvider).getSaleHistoryByCustomer(customerId);
+final customerSaleHistoryProvider =
+    FutureProvider.autoDispose.family<List<Map<String, dynamic>>, int>(
+        (ref, customerId) async {
+  return ref
+      .watch(salesStatsRepositoryProvider)
+      .getSaleHistoryByCustomer(customerId);
 });
 
-final saleDetailProvider = FutureProvider.autoDispose.family<SaleHistoryModel?, int>((ref, saleId) async {
+final saleDetailProvider =
+    FutureProvider.autoDispose.family<SaleHistoryModel?, int>(
+        (ref, saleId) async {
   return ref.watch(salesStatsRepositoryProvider).getSaleById(saleId);
 });

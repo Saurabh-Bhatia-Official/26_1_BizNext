@@ -67,69 +67,70 @@ class Product {
       purchasePrice > 0 ? (profit / purchasePrice) * 100 : 0;
 
   factory Product.fromMap(Map<String, dynamic> map) => Product(
-        id: map['id'] as int?,
-        name: map['name'] as String,
-        sku: map['sku'] as String?,
-        barcode: (map['barcode'] as String?)?.trim().isNotEmpty == true
-            ? (map['barcode'] as String)
-            : (map['sku'] as String?),
-        description: map['description'] as String?,
-        categoryId: map['category_id'] as int?,
-        categoryName: map['category_name'] as String?,
-        subcategoryId: map['subcategory_id'] as int?,
-        subcategoryName: map['subcategory_name'] as String?,
-        brand: map['brand'] as String?,
-        hsnSac: map['hsn_sac'] as String?,
-        purchasePrice: (map['purchase_price'] as num?)?.toDouble() ?? 0,
-        mrp: (map['mrp'] as num?)?.toDouble() ?? 0,
-        sellingPrice: (map['selling_price'] as num?)?.toDouble() ?? 0,
-        minSellingPrice: (map['min_selling_price'] as num?)?.toDouble() ?? 0,
-        wholesalePrice: (map['wholesale_price'] as num?)?.toDouble() ?? 0,
-        dealerPrice: (map['dealer_price'] as num?)?.toDouble() ?? 0,
-        stock: (map['stock'] as num?)?.toDouble() ?? 0,
-        minStock: (map['min_stock'] as num?)?.toDouble() ?? 5,
-        unit: map['unit'] as String? ?? 'pcs',
-        gstPercent: (map['gst_percent'] as num?)?.toDouble() ?? 0,
-        defaultSupplierId: map['default_supplier_id'] as int?,
-        defaultSupplierName: map['default_supplier_name'] as String?,
-        isActive: (map['is_active'] as int?) == 1,
-        createdAt: map['created_at'] != null
-            ? DateTime.tryParse(map['created_at'] as String)
-            : null,
-        updatedAt: map['updated_at'] != null
-            ? DateTime.tryParse(map['updated_at'] as String)
-            : null,
-        imagePath: map['image_path'] as String?,
-      );
+    id: map['id'] as int?,
+    name: map['name'] as String,
+    sku: map['sku'] as String?,
+    barcode: (map['barcode'] as String?)?.trim().isNotEmpty == true
+        ? (map['barcode'] as String)
+        : (map['sku'] as String?),
+    description: map['description'] as String?,
+    categoryId: map['category_id'] as int?,
+    categoryName: map['category_name'] as String?,
+    subcategoryId: map['subcategory_id'] as int?,
+    subcategoryName: map['subcategory_name'] as String?,
+    brand: map['brand'] as String?,
+    hsnSac: map['hsn_sac'] as String?,
+    purchasePrice: (map['purchase_price'] as num?)?.toDouble() ?? 0,
+    mrp: (map['mrp'] as num?)?.toDouble() ?? 0,
+    sellingPrice: (map['selling_price'] as num?)?.toDouble() ?? 0,
+    minSellingPrice: (map['min_selling_price'] as num?)?.toDouble() ?? 0,
+    wholesalePrice: (map['wholesale_price'] as num?)?.toDouble() ?? 0,
+    dealerPrice: (map['dealer_price'] as num?)?.toDouble() ?? 0,
+    stock: (map['stock'] as num?)?.toDouble() ?? 0,
+    minStock: (map['min_stock'] as num?)?.toDouble() ?? 5,
+    unit: map['unit'] as String? ?? 'pcs',
+    gstPercent: (map['gst_percent'] as num?)?.toDouble() ?? 0,
+    defaultSupplierId: map['default_supplier_id'] as int?,
+    defaultSupplierName: map['default_supplier_name'] as String?,
+    isActive: (map['is_active'] as int?) == 1,
+    createdAt: map['created_at'] != null
+        ? DateTime.tryParse(map['created_at'] as String)
+        : null,
+    updatedAt: map['updated_at'] != null
+        ? DateTime.tryParse(map['updated_at'] as String)
+        : null,
+    imagePath: map['image_path'] as String?,
+  );
 
   Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'name': name,
-        'sku': sku,
-        'barcode': (barcode != null && barcode!.trim().isNotEmpty) ? barcode : sku,
-        'description': description,
-        'category_id': categoryId,
-        'subcategory_id': subcategoryId,
-        'brand': brand,
-        'hsn_sac': hsnSac,
-        'purchase_price': purchasePrice,
-        'mrp': mrp,
-        'selling_price': sellingPrice,
-        'min_selling_price': minSellingPrice,
-        'wholesale_price': wholesalePrice,
-        'dealer_price': dealerPrice,
-        'stock': stock,
-        'min_stock': minStock,
-        'unit': unit,
-        'gst_percent': gstPercent,
-        'default_supplier_id': defaultSupplierId,
-        'is_active': isActive ? 1 : 0,
-        'updated_at': DateTime.now().toIso8601String(),
-        'image_path': imagePath,
-      };
+    if (id != null) 'id': id,
+    'name': name,
+    'sku': sku,
+    'barcode': (barcode != null && barcode!.trim().isNotEmpty) ? barcode : sku,
+    'description': description,
+    'category_id': categoryId,
+    'subcategory_id': subcategoryId,
+    'brand': brand,
+    'hsn_sac': hsnSac,
+    'purchase_price': purchasePrice,
+    'mrp': mrp,
+    'selling_price': sellingPrice,
+    'min_selling_price': minSellingPrice,
+    'wholesale_price': wholesalePrice,
+    'dealer_price': dealerPrice,
+    'stock': stock,
+    'min_stock': minStock,
+    'unit': unit,
+    'gst_percent': gstPercent,
+    'default_supplier_id': defaultSupplierId,
+    'is_active': isActive ? 1 : 0,
+    'updated_at': DateTime.now().toIso8601String(),
+    'image_path': imagePath,
+  };
 
   Product copyWith({
     int? id,
+    bool clearId = false,
     String? name,
     String? sku,
     String? barcode,
@@ -156,7 +157,7 @@ class Product {
     String? imagePath,
   }) {
     return Product(
-      id: id ?? this.id,
+      id: clearId ? null : (id ?? this.id),
       name: name ?? this.name,
       sku: sku ?? this.sku,
       barcode: barcode ?? this.barcode,
@@ -202,20 +203,20 @@ class CustomerType {
   });
 
   factory CustomerType.fromMap(Map<String, dynamic> map) => CustomerType(
-        id: map['id'] as int?,
-        name: map['name'] as String,
-        code: map['code'] as String?,
-        description: map['description'] as String?,
-        isActive: (map['is_active'] as int? ?? 1) == 1,
-      );
+    id: map['id'] as int?,
+    name: map['name'] as String,
+    code: map['code'] as String?,
+    description: map['description'] as String?,
+    isActive: (map['is_active'] as int? ?? 1) == 1,
+  );
 
   Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'name': name,
-        'code': code,
-        'description': description,
-        'is_active': isActive ? 1 : 0,
-      };
+    if (id != null) 'id': id,
+    'name': name,
+    'code': code,
+    'description': description,
+    'is_active': isActive ? 1 : 0,
+  };
 }
 
 // ── Price Category Model (Legacy Alias) ────────────────────────────────────
@@ -225,15 +226,10 @@ class PriceCategory {
 
   const PriceCategory({this.id, required this.name});
 
-  factory PriceCategory.fromMap(Map<String, dynamic> map) => PriceCategory(
-        id: map['id'] as int?,
-        name: map['name'] as String,
-      );
+  factory PriceCategory.fromMap(Map<String, dynamic> map) =>
+      PriceCategory(id: map['id'] as int?, name: map['name'] as String);
 
-  Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'name': name,
-      };
+  Map<String, dynamic> toMap() => {if (id != null) 'id': id, 'name': name};
 }
 
 // ── Product Tiered Price Model ─────────────────────────────────────────────
@@ -258,7 +254,8 @@ class ProductTierPrice {
     this.discountPercent = 0,
   });
 
-  factory ProductTierPrice.fromMap(Map<String, dynamic> map) => ProductTierPrice(
+  factory ProductTierPrice.fromMap(Map<String, dynamic> map) =>
+      ProductTierPrice(
         id: (map['id'] as num?)?.toInt(),
         productId: (map['product_id'] as num?)?.toInt() ?? 0,
         categoryId: (map['category_id'] as num?)?.toInt() ?? 0,
@@ -270,14 +267,14 @@ class ProductTierPrice {
       );
 
   Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'product_id': productId,
-        'category_id': categoryId,
-        'min_qty': minQty,
-        'max_qty': maxQty,
-        'price': price,
-        'discount_percent': discountPercent,
-      };
+    if (id != null) 'id': id,
+    'product_id': productId,
+    'category_id': categoryId,
+    'min_qty': minQty,
+    'max_qty': maxQty,
+    'price': price,
+    'discount_percent': discountPercent,
+  };
 }
 
 // ── Category Model ────────────────────────────────────────────────────────────
@@ -301,24 +298,24 @@ class Category {
   });
 
   factory Category.fromMap(Map<String, dynamic> map) => Category(
-        id: map['id'] as int?,
-        name: map['name'] as String,
-        code: map['code'] as String?,
-        description: map['description'] as String?,
-        imagePath: map['image_path'] as String?,
-        displayOrder: map['display_order'] as int? ?? 0,
-        isActive: (map['is_active'] as int? ?? 1) == 1,
-      );
+    id: map['id'] as int?,
+    name: map['name'] as String,
+    code: map['code'] as String?,
+    description: map['description'] as String?,
+    imagePath: map['image_path'] as String?,
+    displayOrder: map['display_order'] as int? ?? 0,
+    isActive: (map['is_active'] as int? ?? 1) == 1,
+  );
 
   Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'name': name,
-        'code': code,
-        'description': description,
-        'image_path': imagePath,
-        'display_order': displayOrder,
-        'is_active': isActive ? 1 : 0,
-      };
+    if (id != null) 'id': id,
+    'name': name,
+    'code': code,
+    'description': description,
+    'image_path': imagePath,
+    'display_order': displayOrder,
+    'is_active': isActive ? 1 : 0,
+  };
 }
 
 // ── Subcategory Model ─────────────────────────────────────────────────────────
@@ -340,22 +337,22 @@ class Subcategory {
   });
 
   factory Subcategory.fromMap(Map<String, dynamic> map) => Subcategory(
-        id: map['id'] as int?,
-        categoryId: map['category_id'] as int,
-        name: map['name'] as String,
-        code: map['code'] as String?,
-        description: map['description'] as String?,
-        isActive: (map['is_active'] as int? ?? 1) == 1,
-      );
+    id: map['id'] as int?,
+    categoryId: map['category_id'] as int,
+    name: map['name'] as String,
+    code: map['code'] as String?,
+    description: map['description'] as String?,
+    isActive: (map['is_active'] as int? ?? 1) == 1,
+  );
 
   Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'category_id': categoryId,
-        'name': name,
-        'code': code,
-        'description': description,
-        'is_active': isActive ? 1 : 0,
-      };
+    if (id != null) 'id': id,
+    'category_id': categoryId,
+    'name': name,
+    'code': code,
+    'description': description,
+    'is_active': isActive ? 1 : 0,
+  };
 }
 
 // ── Supplier Product Mapping Model ──────────────────────────────────────────
@@ -381,28 +378,28 @@ class SupplierProduct {
   });
 
   factory SupplierProduct.fromMap(Map<String, dynamic> map) => SupplierProduct(
-        id: map['id'] as int?,
-        supplierId: map['supplier_id'] as int,
-        productId: map['product_id'] as int,
-        supplierSku: map['supplier_sku'] as String?,
-        supplierBarcode: map['supplier_barcode'] as String?,
-        lastPurchasePrice: (map['last_purchase_price'] as num?)?.toDouble() ?? 0,
-        lastPurchaseDate: map['last_purchase_date'] != null
-            ? DateTime.tryParse(map['last_purchase_date'] as String)
-            : null,
-        lastPurchaseQty: (map['last_purchase_qty'] as num?)?.toDouble() ?? 0,
-      );
+    id: map['id'] as int?,
+    supplierId: map['supplier_id'] as int,
+    productId: map['product_id'] as int,
+    supplierSku: map['supplier_sku'] as String?,
+    supplierBarcode: map['supplier_barcode'] as String?,
+    lastPurchasePrice: (map['last_purchase_price'] as num?)?.toDouble() ?? 0,
+    lastPurchaseDate: map['last_purchase_date'] != null
+        ? DateTime.tryParse(map['last_purchase_date'] as String)
+        : null,
+    lastPurchaseQty: (map['last_purchase_qty'] as num?)?.toDouble() ?? 0,
+  );
 
   Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'supplier_id': supplierId,
-        'product_id': productId,
-        'supplier_sku': supplierSku,
-        'supplier_barcode': supplierBarcode,
-        'last_purchase_price': lastPurchasePrice,
-        'last_purchase_date': lastPurchaseDate?.toIso8601String(),
-        'last_purchase_qty': lastPurchaseQty,
-      };
+    if (id != null) 'id': id,
+    'supplier_id': supplierId,
+    'product_id': productId,
+    'supplier_sku': supplierSku,
+    'supplier_barcode': supplierBarcode,
+    'last_purchase_price': lastPurchasePrice,
+    'last_purchase_date': lastPurchaseDate?.toIso8601String(),
+    'last_purchase_qty': lastPurchaseQty,
+  };
 }
 
 // ── Product Batch Model ──────────────────────────────────────────────────────
@@ -436,30 +433,30 @@ class ProductBatch {
       expiryDate != null && expiryDate!.isBefore(now ?? DateTime.now());
 
   factory ProductBatch.fromMap(Map<String, dynamic> map) => ProductBatch(
-        id: map['id'] as int?,
-        productId: map['product_id'] as int,
-        batchNumber: map['batch_number'] as String,
-        mfgDate: map['mfg_date'] != null
-            ? DateTime.tryParse(map['mfg_date'] as String)
-            : null,
-        expiryDate: map['expiry_date'] != null
-            ? DateTime.tryParse(map['expiry_date'] as String)
-            : null,
-        purchaseRate: (map['purchase_rate'] as num?)?.toDouble() ?? 0,
-        quantity: (map['quantity'] as num?)?.toDouble() ?? 0,
-        supplierId: map['supplier_id'] as int?,
-        warehouseId: map['warehouse_id'] as int?,
-      );
+    id: map['id'] as int?,
+    productId: map['product_id'] as int,
+    batchNumber: map['batch_number'] as String,
+    mfgDate: map['mfg_date'] != null
+        ? DateTime.tryParse(map['mfg_date'] as String)
+        : null,
+    expiryDate: map['expiry_date'] != null
+        ? DateTime.tryParse(map['expiry_date'] as String)
+        : null,
+    purchaseRate: (map['purchase_rate'] as num?)?.toDouble() ?? 0,
+    quantity: (map['quantity'] as num?)?.toDouble() ?? 0,
+    supplierId: map['supplier_id'] as int?,
+    warehouseId: map['warehouse_id'] as int?,
+  );
 
   Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'product_id': productId,
-        'batch_number': batchNumber,
-        'mfg_date': mfgDate?.toIso8601String(),
-        'expiry_date': expiryDate?.toIso8601String(),
-        'purchase_rate': purchaseRate,
-        'quantity': quantity,
-        'supplier_id': supplierId,
-        'warehouse_id': warehouseId,
-      };
+    if (id != null) 'id': id,
+    'product_id': productId,
+    'batch_number': batchNumber,
+    'mfg_date': mfgDate?.toIso8601String(),
+    'expiry_date': expiryDate?.toIso8601String(),
+    'purchase_rate': purchaseRate,
+    'quantity': quantity,
+    'supplier_id': supplierId,
+    'warehouse_id': warehouseId,
+  };
 }

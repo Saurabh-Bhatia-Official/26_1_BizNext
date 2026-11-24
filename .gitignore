@@ -3,6 +3,12 @@
 *.log
 *.pyc
 *.swp
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
 .DS_Store
 .atom/
 .build/
@@ -11,6 +17,12 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+
+# Backend build output
+backend/target/
+backend/.classpath
+backend/.project
+backend/.settings/
 
 # IntelliJ related
 *.iml

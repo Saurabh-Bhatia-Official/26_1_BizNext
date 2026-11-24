@@ -1,6 +1,5 @@
 // lib/features/inventory/screens/add_edit_product_screen.dart
 
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -13,10 +12,10 @@ import '../providers/inventory_provider.dart';
 import '../../suppliers/providers/supplier_provider.dart';
 import '../../../core/widgets/searchable_dropdown.dart';
 import '../../settings/providers/settings_provider.dart';
-import '../../../core/services/media_upload_service.dart';
 import '../../../core/services/shortcut_service.dart';
 import '../../../core/widgets/qr_scanner_screen.dart';
 import '../../../core/services/hardware_scanner_service.dart';
+import '../../../core/widgets/media_image.dart';
 
 class AddEditProductScreen extends ConsumerStatefulWidget {
   final Product? product;
@@ -24,7 +23,8 @@ class AddEditProductScreen extends ConsumerStatefulWidget {
   const AddEditProductScreen({super.key, this.product, this.initialName});
 
   @override
-  ConsumerState<AddEditProductScreen> createState() => _AddEditProductScreenState();
+  ConsumerState<AddEditProductScreen> createState() =>
+      _AddEditProductScreenState();
 }
 
 class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
@@ -54,11 +54,25 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   double _selectedGst = 0;
   bool _isActive = true;
   String? _selectedImagePath;
+  bool _removeImage = false;
+  bool _isSaving = false;
 
   String? _nameError;
+  String? _skuError;
 
   bool get isEditing => widget.product != null;
-  static const _units = ['pcs', 'kg', 'g', 'l', 'ml', 'box', 'pack', 'm', 'bundle', 'pair'];
+  static const _units = [
+    'pcs',
+    'kg',
+    'g',
+    'l',
+    'ml',
+    'box',
+    'pack',
+    'm',
+    'bundle',
+    'pair',
+  ];
 
   String _formatNum(double? val) {
     if (val == null || val <= 0) return '';
@@ -72,19 +86,33 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   void initState() {
     super.initState();
     final p = widget.product;
-    _nameCtrl = TextEditingController(text: p?.name ?? widget.initialName ?? '');
+    _nameCtrl = TextEditingController(
+      text: p?.name ?? widget.initialName ?? '',
+    );
     _skuCtrl = TextEditingController(text: p?.sku ?? '');
     _barcodeCtrl = TextEditingController(text: p?.barcode ?? '');
     _brandCtrl = TextEditingController(text: p?.brand ?? '');
     _hsnSacCtrl = TextEditingController(text: p?.hsnSac ?? '');
     _descCtrl = TextEditingController(text: p?.description ?? '');
-    _purchasePriceCtrl = TextEditingController(text: p != null ? _formatNum(p.purchasePrice) : '');
+    _purchasePriceCtrl = TextEditingController(
+      text: p != null ? _formatNum(p.purchasePrice) : '',
+    );
     _mrpCtrl = TextEditingController(text: p != null ? _formatNum(p.mrp) : '');
-    _sellingPriceCtrl = TextEditingController(text: p != null ? _formatNum(p.sellingPrice) : '');
-    _wholesalePriceCtrl = TextEditingController(text: p != null ? _formatNum(p.wholesalePrice) : '');
-    _dealerPriceCtrl = TextEditingController(text: p != null ? _formatNum(p.dealerPrice) : '');
-    _stockCtrl = TextEditingController(text: p != null ? _formatNum(p.stock) : '0');
-    _minStockCtrl = TextEditingController(text: p != null ? _formatNum(p.minStock) : '5');
+    _sellingPriceCtrl = TextEditingController(
+      text: p != null ? _formatNum(p.sellingPrice) : '',
+    );
+    _wholesalePriceCtrl = TextEditingController(
+      text: p != null ? _formatNum(p.wholesalePrice) : '',
+    );
+    _dealerPriceCtrl = TextEditingController(
+      text: p != null ? _formatNum(p.dealerPrice) : '',
+    );
+    _stockCtrl = TextEditingController(
+      text: p != null ? _formatNum(p.stock) : '0',
+    );
+    _minStockCtrl = TextEditingController(
+      text: p != null ? _formatNum(p.minStock) : '5',
+    );
 
     // Attach listeners for live profit margin calculations
     _purchasePriceCtrl.addListener(_onPriceInputsChanged);
@@ -108,13 +136,17 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   }
 
   Future<void> _loadTieredPrices() async {
-    final prices = await ref.read(productRepositoryProvider).getProductPrices(widget.product!.id!);
+    final prices = await ref
+        .read(productRepositoryProvider)
+        .getProductPrices(widget.product!.id!);
     if (mounted) {
       for (final p in prices) {
         if (_tieredPriceCtrls.containsKey(p.categoryId)) {
           _tieredPriceCtrls[p.categoryId]!.text = _formatNum(p.price);
         } else {
-          _tieredPriceCtrls[p.categoryId] = TextEditingController(text: _formatNum(p.price));
+          _tieredPriceCtrls[p.categoryId] = TextEditingController(
+            text: _formatNum(p.price),
+          );
         }
       }
       setState(() {});
@@ -127,9 +159,19 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     _sellingPriceCtrl.removeListener(_onPriceInputsChanged);
 
     for (final c in [
-      _nameCtrl, _skuCtrl, _barcodeCtrl, _brandCtrl, _hsnSacCtrl, _descCtrl,
-      _purchasePriceCtrl, _mrpCtrl, _sellingPriceCtrl,
-      _wholesalePriceCtrl, _dealerPriceCtrl, _stockCtrl, _minStockCtrl
+      _nameCtrl,
+      _skuCtrl,
+      _barcodeCtrl,
+      _brandCtrl,
+      _hsnSacCtrl,
+      _descCtrl,
+      _purchasePriceCtrl,
+      _mrpCtrl,
+      _sellingPriceCtrl,
+      _wholesalePriceCtrl,
+      _dealerPriceCtrl,
+      _stockCtrl,
+      _minStockCtrl,
     ]) {
       c.dispose();
     }
@@ -142,8 +184,11 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   void _generateSku() {
     final name = _nameCtrl.text.trim();
     final cleanPrefix = name.replaceAll(RegExp(r'[^a-zA-Z]'), '').toUpperCase();
-    final prefix = cleanPrefix.length >= 3 ? cleanPrefix.substring(0, 3) : (cleanPrefix.isEmpty ? 'SKU' : cleanPrefix);
-    final stamp = (DateTime.now().millisecondsSinceEpoch % 90000 + 10000).toString();
+    final prefix = cleanPrefix.length >= 3
+        ? cleanPrefix.substring(0, 3)
+        : (cleanPrefix.isEmpty ? 'SKU' : cleanPrefix);
+    final stamp = (DateTime.now().millisecondsSinceEpoch % 90000 + 10000)
+        .toString();
     final generatedCode = '$prefix-$stamp';
     setState(() {
       _skuCtrl.text = generatedCode;
@@ -154,13 +199,19 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   }
 
   void _generateBarcode() {
-    final stamp = (DateTime.now().millisecondsSinceEpoch % 900000000000 + 100000000000).toString();
+    final stamp =
+        (DateTime.now().millisecondsSinceEpoch % 900000000000 + 100000000000)
+            .toString();
     setState(() {
       _barcodeCtrl.text = stamp;
       if (_skuCtrl.text.trim().isEmpty) {
         final name = _nameCtrl.text.trim();
-        final cleanPrefix = name.replaceAll(RegExp(r'[^a-zA-Z]'), '').toUpperCase();
-        final prefix = cleanPrefix.length >= 3 ? cleanPrefix.substring(0, 3) : (cleanPrefix.isEmpty ? 'SKU' : cleanPrefix);
+        final cleanPrefix = name
+            .replaceAll(RegExp(r'[^a-zA-Z]'), '')
+            .toUpperCase();
+        final prefix = cleanPrefix.length >= 3
+            ? cleanPrefix.substring(0, 3)
+            : (cleanPrefix.isEmpty ? 'SKU' : cleanPrefix);
         _skuCtrl.text = '$prefix-${stamp.substring(stamp.length - 5)}';
       }
     });
@@ -170,15 +221,27 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final categoriesAsync = ref.watch(categoriesProvider);
-    final subcategoriesAsync = ref.watch(subcategoriesProvider(_selectedCategoryId));
+    final subcategoriesAsync = ref.watch(
+      subcategoriesProvider(_selectedCategoryId),
+    );
     final suppliersAsync = ref.watch(suppliersProvider);
     final priceCatsAsync = ref.watch(customerTypesProvider);
     final shortcuts = ref.watch(shortcutSettingsProvider);
-    final saveShortcut = shortcuts['save'] ?? ShortcutNotifier.defaults['save']?.defaultShortcut ?? '';
-    final cancelShortcut = shortcuts['cancel'] ?? ShortcutNotifier.defaults['cancel']?.defaultShortcut ?? '';
+    final saveShortcut =
+        shortcuts['save'] ??
+        ShortcutNotifier.defaults['save']?.defaultShortcut ??
+        '';
+    final cancelShortcut =
+        shortcuts['cancel'] ??
+        ShortcutNotifier.defaults['cancel']?.defaultShortcut ??
+        '';
     final saveBtnLabel = isEditing ? 'Save Changes' : 'Create Product';
-    final saveBtnText = saveShortcut.isNotEmpty ? '$saveBtnLabel ($saveShortcut)' : saveBtnLabel;
-    final cancelBtnText = cancelShortcut.isNotEmpty ? 'Cancel ($cancelShortcut)' : 'Cancel';
+    final saveBtnText = saveShortcut.isNotEmpty
+        ? '$saveBtnLabel ($saveShortcut)'
+        : saveBtnLabel;
+    final cancelBtnText = cancelShortcut.isNotEmpty
+        ? 'Cancel ($cancelShortcut)'
+        : 'Cancel';
     return HardwareBarcodeScannerListener(
       onBarcodeScanned: (code) {
         setState(() {
@@ -188,15 +251,23 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.qr_code_scanner_rounded, color: Colors.white, size: 20),
+                const Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: Text('Barcode "$code" scanned into product form')),
+                Expanded(
+                  child: Text('Barcode "$code" scanned into product form'),
+                ),
               ],
             ),
             backgroundColor: AppColors.primaryDark,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       },
@@ -204,512 +275,740 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         actionId: 'cancel',
         onPressed: () => Navigator.maybePop(context),
         child: Scaffold(
-        backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
-        appBar: AppBar(
-          title: Text(
-            isEditing ? 'Edit Product' : 'New Product Master',
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-          ),
-          backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-          elevation: 0.5,
-          centerTitle: true,
-          actions: [
-            if (isEditing)
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
-                tooltip: 'Delete Product',
-                onPressed: _confirmDelete,
-              ),
-            TextButton.icon(
-              onPressed: _saveProduct,
-              icon: const Icon(Icons.check_rounded, size: 18),
-              label: const Text('Save', style: TextStyle(fontWeight: FontWeight.w800)),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
+          backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
+          appBar: AppBar(
+            title: Text(
+              isEditing ? 'Edit Product' : 'New Product Master',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
             ),
-            const SizedBox(width: 8),
-          ],
-        ),
-        body: LayoutBuilder(
-          builder: (context, constraints) {
-            final isMobile = constraints.maxWidth < 680;
-            final double horizontalPadding = isMobile ? 16.0 : 32.0;
+            backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+            elevation: 0.5,
+            centerTitle: true,
+            actions: [
+              if (isEditing)
+                IconButton(
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: AppColors.error,
+                  ),
+                  tooltip: 'Delete Product',
+                  onPressed: _confirmDelete,
+                ),
+              TextButton.icon(
+                onPressed: _saveProduct,
+                icon: const Icon(Icons.check_rounded, size: 18),
+                label: const Text(
+                  'Save',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+          body: LayoutBuilder(
+            builder: (context, constraints) {
+              final isMobile = constraints.maxWidth < 680;
+              final double horizontalPadding = isMobile ? 16.0 : 32.0;
 
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 960),
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 20),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // ── PRODUCT IMAGE CARD ──
-                        _ImagePicker(
-                          imagePath: _selectedImagePath,
-                          onPick: _pickImage,
-                          onRemove: () => setState(() => _selectedImagePath = null),
-                          isDark: isDark,
-                          isMobile: isMobile,
-                        ),
-                        const SizedBox(height: 20),
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 960),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: horizontalPadding,
+                      vertical: 20,
+                    ),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // ── PRODUCT IMAGE CARD ──
+                          _ImagePicker(
+                            imagePath: _selectedImagePath,
+                            onPick: _pickImage,
+                            onRemove: () => setState(() {
+                              _selectedImagePath = null;
+                              _removeImage = true;
+                            }),
+                            isDark: isDark,
+                            isMobile: isMobile,
+                          ),
+                          const SizedBox(height: 20),
 
-                        // ── 1. BASIC INFORMATION ──
-                        _FormCard(
-                          title: 'Product Information',
-                          subtitle: 'Core product identifiers, brand, categories and unit',
-                          icon: Icons.inventory_2_rounded,
-                          isDark: isDark,
-                          isMobile: isMobile,
-                          children: [
-                            _PremiumField(
-                              controller: _nameCtrl,
-                              label: 'Product Name *',
-                              hint: 'e.g. Basmati Rice 5kg, iPhone 15 Pro, Cotton T-Shirt',
-                              icon: Icons.title_rounded,
-                              externalError: _nameError,
-                              onChanged: (_) {
-                                if (_nameError != null) setState(() => _nameError = null);
-                              },
-                              validator: (v) => v?.trim().isEmpty == true ? 'Product name is required' : null,
-                            ),
-                            const SizedBox(height: 16),
+                          // ── 1. BASIC INFORMATION ──
+                          _FormCard(
+                            title: 'Product Information',
+                            subtitle:
+                                'Core product identifiers, brand, categories and unit',
+                            icon: Icons.inventory_2_rounded,
+                            isDark: isDark,
+                            isMobile: isMobile,
+                            children: [
+                              _PremiumField(
+                                controller: _nameCtrl,
+                                label: 'Product Name *',
+                                hint:
+                                    'e.g. Basmati Rice 5kg, iPhone 15 Pro, Cotton T-Shirt',
+                                icon: Icons.title_rounded,
+                                externalError: _nameError,
+                                onChanged: (_) {
+                                  if (_nameError != null)
+                                    setState(() => _nameError = null);
+                                },
+                                validator: (v) => v?.trim().isEmpty == true
+                                    ? 'Product name is required'
+                                    : null,
+                              ),
+                              const SizedBox(height: 16),
 
-                            _ResponsiveRow(
-                              isMobile: isMobile,
-                              children: [
-                                _PremiumField(
-                                  controller: _brandCtrl,
-                                  label: 'Brand / Manufacturer',
-                                  hint: 'e.g. Tata, Apple, Nestle',
-                                  icon: Icons.business_rounded,
-                                ),
-                                _PremiumField(
-                                  controller: _hsnSacCtrl,
-                                  label: 'HSN / SAC Code',
-                                  hint: 'e.g. 10063020, 85171300',
-                                  icon: Icons.numbers_rounded,
-                                  keyboardType: TextInputType.number,
+                              _ResponsiveRow(
+                                isMobile: isMobile,
+                                children: [
+                                  _PremiumField(
+                                    controller: _brandCtrl,
+                                    label: 'Brand / Manufacturer',
+                                    hint: 'e.g. Tata, Apple, Nestle',
+                                    icon: Icons.business_rounded,
+                                  ),
+                                  _PremiumField(
+                                    controller: _hsnSacCtrl,
+                                    label: 'HSN / SAC Code',
+                                    hint: 'e.g. 10063020, 85171300',
+                                    icon: Icons.numbers_rounded,
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+
+                              _ResponsiveRow(
+                                isMobile: isMobile,
+                                children: [
+                                  _PremiumField(
+                                    controller: _skuCtrl,
+                                    label: 'SKU / Item Code',
+                                    hint: 'e.g. RICE-001',
+                                    icon: Icons.tag_rounded,
+                                    externalError: _skuError,
+                                    onChanged: (_) {
+                                      if (_skuError != null) {
+                                        setState(() => _skuError = null);
+                                      }
+                                    },
+                                    suffix: IconButton(
+                                      icon: const Icon(
+                                        Icons.auto_fix_high_rounded,
+                                        size: 20,
+                                        color: AppColors.primary,
+                                      ),
+                                      tooltip: 'Auto-generate SKU',
+                                      onPressed: _generateSku,
+                                    ),
+                                  ),
+                                  _PremiumField(
+                                    controller: _barcodeCtrl,
+                                    label: 'Barcode / EAN / UPC',
+                                    hint: 'Scan or enter barcode number',
+                                    icon: Icons.qr_code_scanner_rounded,
+                                    keyboardType: TextInputType.text,
+                                    suffix: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.qr_code_scanner_rounded,
+                                            size: 20,
+                                            color: AppColors.primary,
+                                          ),
+                                          tooltip: 'Scan barcode with camera',
+                                          onPressed: () async {
+                                            final code =
+                                                await Navigator.push<String>(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) =>
+                                                        const QRScannerScreen(),
+                                                  ),
+                                                );
+                                            if (code != null &&
+                                                code.isNotEmpty) {
+                                              setState(() {
+                                                _barcodeCtrl.text = code;
+                                              });
+                                            }
+                                          },
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.auto_fix_normal_rounded,
+                                            size: 20,
+                                            color: AppColors.primary,
+                                          ),
+                                          tooltip: 'Auto-generate barcode',
+                                          onPressed: _generateBarcode,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+
+                              _PremiumField(
+                                controller: _descCtrl,
+                                label: 'Description & Notes',
+                                hint:
+                                    'Specifications, dimensions, or internal notes',
+                                maxLines: 2,
+                                keyboardType: TextInputType.multiline,
+                                icon: Icons.description_rounded,
+                              ),
+                              const SizedBox(height: 16),
+
+                              _ResponsiveRow(
+                                isMobile: isMobile,
+                                children: [
+                                  categoriesAsync.when(
+                                    data: (cats) => _PremiumDropdown<int?>(
+                                      value: _selectedCategoryId,
+                                      label: 'Category',
+                                      addLabel: 'Add New Category',
+                                      onAdd: (name) =>
+                                          _quickAddCategory(context, ref, name),
+                                      items: cats
+                                          .map(
+                                            (c) => SearchableDropdownItem(
+                                              value: c.id,
+                                              label: c.name,
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (v) {
+                                        setState(() {
+                                          _selectedCategoryId = v;
+                                          _selectedSubcategoryId = null;
+                                        });
+                                      },
+                                      icon: Icons.category_rounded,
+                                    ),
+                                    loading: () =>
+                                        const LinearProgressIndicator(),
+                                    error: (_, _) => const SizedBox.shrink(),
+                                  ),
+                                  subcategoriesAsync.when(
+                                    data: (subs) => _PremiumDropdown<int?>(
+                                      value: _selectedSubcategoryId,
+                                      label: 'Subcategory',
+                                      addLabel: _selectedCategoryId != null
+                                          ? 'Add Subcategory'
+                                          : null,
+                                      onAdd: _selectedCategoryId != null
+                                          ? (name) => _quickAddSubcategory(
+                                              context,
+                                              ref,
+                                              name,
+                                              _selectedCategoryId!,
+                                            )
+                                          : null,
+                                      items: subs
+                                          .map(
+                                            (s) => SearchableDropdownItem(
+                                              value: s.id,
+                                              label: s.name,
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (v) => setState(
+                                        () => _selectedSubcategoryId = v,
+                                      ),
+                                      icon: Icons
+                                          .subdirectory_arrow_right_rounded,
+                                    ),
+                                    loading: () =>
+                                        const LinearProgressIndicator(),
+                                    error: (_, _) => const SizedBox.shrink(),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+
+                              _ResponsiveRow(
+                                isMobile: isMobile,
+                                children: [
+                                  _PremiumDropdown<String>(
+                                    value: _selectedUnit,
+                                    label: 'Base Measurement Unit',
+                                    items: _units
+                                        .map(
+                                          (u) => SearchableDropdownItem(
+                                            value: u,
+                                            label: u,
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (v) => setState(
+                                      () => _selectedUnit = v ?? 'pcs',
+                                    ),
+                                    icon: Icons.straighten_rounded,
+                                  ),
+                                  suppliersAsync.when(
+                                    data: (suppliers) => _PremiumDropdown<int?>(
+                                      value: _selectedSupplierId,
+                                      label: 'Default Supplier / Vendor',
+                                      items: suppliers
+                                          .map(
+                                            (s) => SearchableDropdownItem(
+                                              value: s.id,
+                                              label: s.name,
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (v) => setState(
+                                        () => _selectedSupplierId = v,
+                                      ),
+                                      icon: Icons.local_shipping_rounded,
+                                    ),
+                                    loading: () =>
+                                        const LinearProgressIndicator(),
+                                    error: (_, _) => const SizedBox.shrink(),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          // ── 2. PRICING & MARGIN MATRIX ──
+                          _FormCard(
+                            title: 'Pricing & Margins',
+                            subtitle:
+                                'Standard retail, cost price, price floors & live margin calculation',
+                            icon: Icons.price_change_rounded,
+                            isDark: isDark,
+                            isMobile: isMobile,
+                            children: [
+                              // Real-time Profit & Margin HUD
+                              _buildLiveMarginHud(isDark),
+
+                              _ResponsiveRow(
+                                isMobile: isMobile,
+                                children: [
+                                  _PremiumField(
+                                    controller: _purchasePriceCtrl,
+                                    label: 'Purchase Cost / Rate (WAC) ₹',
+                                    hint: '0.00',
+                                    icon: Icons.shopping_bag_rounded,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                  ),
+                                  _PremiumField(
+                                    controller: _mrpCtrl,
+                                    label: 'MRP (Maximum Retail Price) ₹',
+                                    hint: '0.00',
+                                    icon: Icons.verified_rounded,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+
+                              _PremiumField(
+                                controller: _sellingPriceCtrl,
+                                label: 'Standard Selling Price (Retail) ₹ *',
+                                hint: '0.00',
+                                icon: Icons.sell_rounded,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty)
+                                    return 'Selling price is required';
+                                  final numVal = double.tryParse(v);
+                                  if (numVal == null || numVal < 0)
+                                    return 'Enter a valid positive price';
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 20),
+
+                              // Tiered Custom Price Lists
+                              const Align(
+                                alignment: Alignment.centerLeft,
+                                child: _SubLabel(text: 'Customer Price Tiers'),
+                              ),
+                              const SizedBox(height: 8),
+
+                              priceCatsAsync.when(
+                                data: (allCats) {
+                                  final cats = allCats.where((c) {
+                                    final lower = c.name.toLowerCase();
+                                    return lower != 'retail' &&
+                                        lower != 'standard';
+                                  }).toList();
+
+                                  if (cats.isEmpty) {
+                                    return Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? Colors.white.withValues(
+                                                alpha: 0.02,
+                                              )
+                                            : AppColors.lightBg,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Row(
+                                        children: [
+                                          Icon(
+                                            Icons.info_outline_rounded,
+                                            size: 16,
+                                            color: AppColors.textMuted,
+                                          ),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            'No custom price tiers configured. Manage tiers in Settings.',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textMuted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+                                  return Column(
+                                    children: [
+                                      for (int i = 0; i < cats.length; i += 2)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 16,
+                                          ),
+                                          child: _ResponsiveRow(
+                                            isMobile: isMobile,
+                                            children: [
+                                              _PremiumField(
+                                                controller: _getTierCtrl(
+                                                  cats[i],
+                                                ),
+                                                label:
+                                                    '${cats[i].name} Price ₹',
+                                                hint: '0.00',
+                                                icon: Icons.handshake_rounded,
+                                                keyboardType:
+                                                    const TextInputType.numberWithOptions(
+                                                      decimal: true,
+                                                    ),
+                                              ),
+                                              if (i + 1 < cats.length)
+                                                _PremiumField(
+                                                  controller: _getTierCtrl(
+                                                    cats[i + 1],
+                                                  ),
+                                                  label:
+                                                      '${cats[i + 1].name} Price ₹',
+                                                  hint: '0.00',
+                                                  icon: Icons.handshake_rounded,
+                                                  keyboardType:
+                                                      const TextInputType.numberWithOptions(
+                                                        decimal: true,
+                                                      ),
+                                                )
+                                              else if (!isMobile)
+                                                const SizedBox.shrink(),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                                loading: () => const LinearProgressIndicator(),
+                                error: (_, _) => const SizedBox(),
+                              ),
+
+                              // GST Rates Selection
+                              if (ref
+                                  .watch(featureSettingsProvider)
+                                  .gstEnabled) ...[
+                                const SizedBox(height: 16),
+                                const _SubLabel(text: 'GST Tax Bracket'),
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: AppConstants.gstRates
+                                      .map(
+                                        (rate) => _ChoiceTag(
+                                          label: rate == 0
+                                              ? '0% (Exempt)'
+                                              : '${rate.toInt()}% GST',
+                                          isSelected: _selectedGst == rate,
+                                          onTap: () => setState(
+                                            () => _selectedGst = rate,
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
                                 ),
                               ],
-                            ),
-                            const SizedBox(height: 16),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
 
-                            _ResponsiveRow(
-                              isMobile: isMobile,
-                              children: [
-                                _PremiumField(
-                                  controller: _skuCtrl,
-                                  label: 'SKU / Item Code',
-                                  hint: 'e.g. RICE-001',
-                                  icon: Icons.tag_rounded,
-                                  suffix: IconButton(
-                                    icon: const Icon(Icons.auto_fix_high_rounded, size: 20, color: AppColors.primary),
-                                    tooltip: 'Auto-generate SKU',
-                                    onPressed: _generateSku,
-                                  ),
-                                ),
-                                _PremiumField(
-                                  controller: _barcodeCtrl,
-                                  label: 'Barcode / EAN / UPC',
-                                  hint: 'Scan or enter barcode number',
-                                  icon: Icons.qr_code_scanner_rounded,
-                                  keyboardType: TextInputType.text,
-                                  suffix: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.qr_code_scanner_rounded, size: 20, color: AppColors.primary),
-                                        tooltip: 'Scan barcode with camera',
-                                        onPressed: () async {
-                                          final code = await Navigator.push<String>(
-                                            context,
-                                            MaterialPageRoute(builder: (context) => const QRScannerScreen()),
-                                          );
-                                          if (code != null && code.isNotEmpty) {
-                                            setState(() {
-                                              _barcodeCtrl.text = code;
-                                            });
-                                          }
-                                        },
+                          // ── 3. INVENTORY & STOCK CARD ──
+                          _FormCard(
+                            title: isEditing
+                                ? 'Stock Status (Audited)'
+                                : 'Opening Inventory',
+                            subtitle:
+                                'Current physical quantity and low-stock alert trigger',
+                            icon: Icons.warehouse_rounded,
+                            isDark: isDark,
+                            isMobile: isMobile,
+                            children: [
+                              if (isEditing) ...[
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.08,
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.2,
                                       ),
-                                      IconButton(
-                                        icon: const Icon(Icons.auto_fix_normal_rounded, size: 20, color: AppColors.primary),
-                                        tooltip: 'Auto-generate barcode',
-                                        onPressed: _generateBarcode,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.lock_clock_rounded,
+                                        color: AppColors.primary,
+                                        size: 28,
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'Current Stock: ${widget.product!.stock} ${widget.product!.unit}',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 15,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            const Text(
+                                              'To maintain audit integrity, stock levels update automatically via Purchases, Sales, Returns & Adjustments.',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.textMuted,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
+                                const SizedBox(height: 16),
                               ],
-                            ),
-                            const SizedBox(height: 16),
 
-                            _PremiumField(
-                              controller: _descCtrl,
-                              label: 'Description & Notes',
-                              hint: 'Specifications, dimensions, or internal notes',
-                              maxLines: 2,
-                              keyboardType: TextInputType.multiline,
-                              icon: Icons.description_rounded,
-                            ),
-                            const SizedBox(height: 16),
-
-                            _ResponsiveRow(
-                              isMobile: isMobile,
-                              children: [
-                                categoriesAsync.when(
-                                  data: (cats) => _PremiumDropdown<int?>(
-                                    value: _selectedCategoryId,
-                                    label: 'Category',
-                                    addLabel: 'Add New Category',
-                                    onAdd: (name) => _quickAddCategory(context, ref, name),
-                                    items: cats.map((c) => SearchableDropdownItem(value: c.id, label: c.name)).toList(),
-                                    onChanged: (v) {
-                                      setState(() {
-                                        _selectedCategoryId = v;
-                                        _selectedSubcategoryId = null;
-                                      });
-                                    },
-                                    icon: Icons.category_rounded,
-                                  ),
-                                  loading: () => const LinearProgressIndicator(),
-                                  error: (_, _) => const SizedBox.shrink(),
-                                ),
-                                subcategoriesAsync.when(
-                                  data: (subs) => _PremiumDropdown<int?>(
-                                    value: _selectedSubcategoryId,
-                                    label: 'Subcategory',
-                                    addLabel: _selectedCategoryId != null ? 'Add Subcategory' : null,
-                                    onAdd: _selectedCategoryId != null 
-                                      ? (name) => _quickAddSubcategory(context, ref, name, _selectedCategoryId!)
-                                      : null,
-                                    items: subs.map((s) => SearchableDropdownItem(value: s.id, label: s.name)).toList(),
-                                    onChanged: (v) => setState(() => _selectedSubcategoryId = v),
-                                    icon: Icons.subdirectory_arrow_right_rounded,
-                                  ),
-                                  loading: () => const LinearProgressIndicator(),
-                                  error: (_, _) => const SizedBox.shrink(),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-
-                            _ResponsiveRow(
-                              isMobile: isMobile,
-                              children: [
-                                _PremiumDropdown<String>(
-                                  value: _selectedUnit,
-                                  label: 'Base Measurement Unit',
-                                  items: _units.map((u) => SearchableDropdownItem(value: u, label: u)).toList(),
-                                  onChanged: (v) => setState(() => _selectedUnit = v ?? 'pcs'),
-                                  icon: Icons.straighten_rounded,
-                                ),
-                                suppliersAsync.when(
-                                  data: (suppliers) => _PremiumDropdown<int?>(
-                                    value: _selectedSupplierId,
-                                    label: 'Default Supplier / Vendor',
-                                    items: suppliers.map((s) => SearchableDropdownItem(value: s.id, label: s.name)).toList(),
-                                    onChanged: (v) => setState(() => _selectedSupplierId = v),
-                                    icon: Icons.local_shipping_rounded,
-                                  ),
-                                  loading: () => const LinearProgressIndicator(),
-                                  error: (_, _) => const SizedBox.shrink(),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
-                        // ── 2. PRICING & MARGIN MATRIX ──
-                        _FormCard(
-                          title: 'Pricing & Margins',
-                          subtitle: 'Standard retail, cost price, price floors & live margin calculation',
-                          icon: Icons.price_change_rounded,
-                          isDark: isDark,
-                          isMobile: isMobile,
-                          children: [
-                            // Real-time Profit & Margin HUD
-                            _buildLiveMarginHud(isDark),
-
-                            _ResponsiveRow(
-                              isMobile: isMobile,
-                              children: [
-                                _PremiumField(
-                                  controller: _purchasePriceCtrl,
-                                  label: 'Purchase Cost / Rate (WAC) ₹',
-                                  hint: '0.00',
-                                  icon: Icons.shopping_bag_rounded,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                ),
-                                _PremiumField(
-                                  controller: _mrpCtrl,
-                                  label: 'MRP (Maximum Retail Price) ₹',
-                                  hint: '0.00',
-                                  icon: Icons.verified_rounded,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-
-                            _PremiumField(
-                              controller: _sellingPriceCtrl,
-                              label: 'Standard Selling Price (Retail) ₹ *',
-                              hint: '0.00',
-                              icon: Icons.sell_rounded,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Selling price is required';
-                                final numVal = double.tryParse(v);
-                                if (numVal == null || numVal < 0) return 'Enter a valid positive price';
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Tiered Custom Price Lists
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: _SubLabel(text: 'Customer Price Tiers'),
-                            ),
-                            const SizedBox(height: 8),
-
-                            priceCatsAsync.when(
-                              data: (allCats) {
-                                final cats = allCats.where((c) {
-                                  final lower = c.name.toLowerCase();
-                                  return lower != 'retail' && lower != 'standard';
-                                }).toList();
-
-                                if (cats.isEmpty) {
-                                  return Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: isDark ? Colors.white.withValues(alpha: 0.02) : AppColors.lightBg,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Row(
-                                      children: [
-                                        Icon(Icons.info_outline_rounded, size: 16, color: AppColors.textMuted),
-                                        SizedBox(width: 8),
-                                        Text('No custom price tiers configured. Manage tiers in Settings.', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                                      ],
-                                    ),
-                                  );
-                                }
-                                return Column(
-                                  children: [
-                                    for (int i = 0; i < cats.length; i += 2)
-                                      Padding(
-                                        padding: const EdgeInsets.only(bottom: 16),
-                                        child: _ResponsiveRow(
-                                          isMobile: isMobile,
-                                          children: [
-                                            _PremiumField(
-                                              controller: _getTierCtrl(cats[i]),
-                                              label: '${cats[i].name} Price ₹',
-                                              hint: '0.00',
-                                              icon: Icons.handshake_rounded,
-                                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                            ),
-                                            if (i + 1 < cats.length)
-                                              _PremiumField(
-                                                controller: _getTierCtrl(cats[i + 1]),
-                                                label: '${cats[i + 1].name} Price ₹',
-                                                hint: '0.00',
-                                                icon: Icons.handshake_rounded,
-                                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                              )
-                                            else if (!isMobile)
-                                              const SizedBox.shrink(),
-                                          ],
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              },
-                              loading: () => const LinearProgressIndicator(),
-                              error: (_, _) => const SizedBox(),
-                            ),
-
-                            // GST Rates Selection
-                            if (ref.watch(featureSettingsProvider).gstEnabled) ...[
-                              const SizedBox(height: 16),
-                              const _SubLabel(text: 'GST Tax Bracket'),
-                              const SizedBox(height: 10),
-                              Wrap(
-                                spacing: 10,
-                                runSpacing: 10,
-                                children: AppConstants.gstRates.map((rate) => _ChoiceTag(
-                                  label: rate == 0 ? '0% (Exempt)' : '${rate.toInt()}% GST',
-                                  isSelected: _selectedGst == rate,
-                                  onTap: () => setState(() => _selectedGst = rate),
-                                )).toList(),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
-                        // ── 3. INVENTORY & STOCK CARD ──
-                        _FormCard(
-                          title: isEditing ? 'Stock Status (Audited)' : 'Opening Inventory',
-                          subtitle: 'Current physical quantity and low-stock alert trigger',
-                          icon: Icons.warehouse_rounded,
-                          isDark: isDark,
-                          isMobile: isMobile,
-                          children: [
-                            if (isEditing) ...[
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.lock_clock_rounded, color: AppColors.primary, size: 28),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Current Stock: ${widget.product!.stock} ${widget.product!.unit}',
-                                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          const Text(
-                                            'To maintain audit integrity, stock levels update automatically via Purchases, Sales, Returns & Adjustments.',
-                                            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                            ],
-
-                            _ResponsiveRow(
-                              isMobile: isMobile,
-                              children: [
-                                if (!isEditing)
-                                  _PremiumField(
-                                    controller: _stockCtrl,
-                                    label: 'Initial Opening Stock Quantity',
-                                    hint: '0',
-                                    icon: Icons.inventory_2_rounded,
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  ),
-                                _PremiumField(
-                                  controller: _minStockCtrl,
-                                  label: 'Low Stock Alert Threshold',
-                                  hint: '5',
-                                  icon: Icons.notifications_active_rounded,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-
-                            _SwitchRow(
-                              label: 'Active Product Status',
-                              subtitle: 'Allow item to be searched, sold, and included in stock calculations',
-                              value: _isActive,
-                              onChanged: (v) => setState(() => _isActive = v),
-                              isDark: isDark,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 28),
-
-                        // ── ACTION BUTTONS ──
-                        isMobile
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                              _ResponsiveRow(
+                                isMobile: isMobile,
                                 children: [
-                                  AppShortcut(
-                                    actionId: 'save',
-                                    onPressed: _saveProduct,
-                                    child: ElevatedButton.icon(
-                                      onPressed: _saveProduct,
-                                      icon: const Icon(Icons.check_circle_rounded, size: 20),
-                                      label: Text(saveBtnText, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                                      style: ElevatedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(vertical: 18),
-                                        backgroundColor: AppColors.primary,
-                                        foregroundColor: Colors.white,
-                                        elevation: 3,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                      ),
+                                  if (!isEditing)
+                                    _PremiumField(
+                                      controller: _stockCtrl,
+                                      label: 'Initial Opening Stock Quantity',
+                                      hint: '0',
+                                      icon: Icons.inventory_2_rounded,
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                            decimal: true,
+                                          ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  OutlinedButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 16),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                    ),
-                                    child: Text(cancelBtnText, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                                  _PremiumField(
+                                    controller: _minStockCtrl,
+                                    label: 'Low Stock Alert Threshold',
+                                    hint: '5',
+                                    icon: Icons.notifications_active_rounded,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
                                   ),
                                 ],
-                              )
-                            : Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(vertical: 18),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                      ),
-                                      child: Text(cancelBtnText, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    flex: 2,
-                                    child: AppShortcut(
+                              ),
+                              const SizedBox(height: 16),
+
+                              _SwitchRow(
+                                label: 'Active Product Status',
+                                subtitle:
+                                    'Allow item to be searched, sold, and included in stock calculations',
+                                value: _isActive,
+                                onChanged: (v) => setState(() => _isActive = v),
+                                isDark: isDark,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 28),
+
+                          // ── ACTION BUTTONS ──
+                          isMobile
+                              ? Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    AppShortcut(
                                       actionId: 'save',
-                                      onPressed: _saveProduct,
+                                      onPressed: _isSaving
+                                          ? null
+                                          : _saveProduct,
                                       child: ElevatedButton.icon(
-                                        onPressed: _saveProduct,
-                                        icon: const Icon(Icons.check_circle_rounded, size: 20),
-                                        label: Text(saveBtnText, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                                        onPressed: _isSaving
+                                            ? null
+                                            : _saveProduct,
+                                        icon: const Icon(
+                                          Icons.check_circle_rounded,
+                                          size: 20,
+                                        ),
+                                        label: Text(
+                                          saveBtnText,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 16,
+                                          ),
+                                        ),
                                         style: ElevatedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(vertical: 18),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 18,
+                                          ),
                                           backgroundColor: AppColors.primary,
                                           foregroundColor: Colors.white,
-                                          elevation: 4,
-                                          shadowColor: AppColors.primary.withValues(alpha: 0.4),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          elevation: 3,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                        const SizedBox(height: 36),
-                      ],
+                                    const SizedBox(height: 12),
+                                    OutlinedButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 16,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        cancelBtnText,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 18,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          cancelBtnText,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      flex: 2,
+                                      child: AppShortcut(
+                                        actionId: 'save',
+                                        onPressed: _isSaving
+                                            ? null
+                                            : _saveProduct,
+                                        child: ElevatedButton.icon(
+                                          onPressed: _isSaving
+                                              ? null
+                                              : _saveProduct,
+                                          icon: const Icon(
+                                            Icons.check_circle_rounded,
+                                            size: 20,
+                                          ),
+                                          label: Text(
+                                            saveBtnText,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 18,
+                                            ),
+                                            backgroundColor: AppColors.primary,
+                                            foregroundColor: Colors.white,
+                                            elevation: 4,
+                                            shadowColor: AppColors.primary
+                                                .withValues(alpha: 0.4),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                          const SizedBox(height: 36),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
-    ),
     );
   }
 
@@ -734,7 +1033,10 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       decoration: BoxDecoration(
         color: statusColor.withValues(alpha: isDark ? 0.12 : 0.07),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: statusColor.withValues(alpha: 0.3), width: 1.2),
+        border: Border.all(
+          color: statusColor.withValues(alpha: 0.3),
+          width: 1.2,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -749,7 +1051,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  isLoss ? 'Warning: Selling Below Cost Rate' : 'Live Margin & Profit Intelligence',
+                  isLoss
+                      ? 'Warning: Selling Below Cost Rate'
+                      : 'Live Margin & Profit Intelligence',
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
@@ -758,7 +1062,10 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(8),
@@ -808,7 +1115,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
         final lower = cat.name.toLowerCase();
         if (lower.contains('wholesale') && widget.product!.wholesalePrice > 0) {
           initialText = _formatNum(widget.product!.wholesalePrice);
-        } else if ((lower.contains('dealer') || lower.contains('distributor')) && widget.product!.dealerPrice > 0) {
+        } else if ((lower.contains('dealer') ||
+                lower.contains('distributor')) &&
+            widget.product!.dealerPrice > 0) {
           initialText = _formatNum(widget.product!.dealerPrice);
         }
       }
@@ -818,16 +1127,21 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   }
 
   void _saveProduct() async {
+    if (_isSaving) return;
     setState(() => _nameError = null);
+    setState(() => _skuError = null);
     if (!_formKey.currentState!.validate()) return;
 
-    final tieredPrices = _tieredPriceCtrls.entries.map((e) {
-      return ProductTierPrice(
-        productId: widget.product?.id ?? 0,
-        categoryId: e.key,
-        price: double.tryParse(e.value.text) ?? 0,
-      );
-    }).where((p) => p.price > 0).toList();
+    final tieredPrices = _tieredPriceCtrls.entries
+        .map((e) {
+          return ProductTierPrice(
+            productId: widget.product?.id ?? 0,
+            categoryId: e.key,
+            price: double.tryParse(e.value.text) ?? 0,
+          );
+        })
+        .where((p) => p.price > 0)
+        .toList();
 
     ref.read(productTieredPricesProvider.notifier).state = tieredPrices;
 
@@ -840,7 +1154,9 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       if (ct != null) {
         final lower = ct.name.toLowerCase();
         if (lower.contains('wholesale') && tp.price > 0) wholesale = tp.price;
-        if ((lower.contains('dealer') || lower.contains('distributor')) && tp.price > 0) dealer = tp.price;
+        if ((lower.contains('dealer') || lower.contains('distributor')) &&
+            tp.price > 0)
+          dealer = tp.price;
       }
     }
 
@@ -874,16 +1190,29 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       imagePath: _selectedImagePath,
     );
 
+    setState(() => _isSaving = true);
     try {
-      final success = await ref.read(productFormProvider.notifier).saveProduct(product);
+      final success = await ref
+          .read(productFormProvider.notifier)
+          .saveProduct(
+            product,
+            imagePath: _selectedImagePath,
+            removeImage: _removeImage,
+          );
       if (success && mounted) {
         Navigator.pop(context, product);
+      } else if (mounted) {
+        final error = ref.read(productFormProvider).error;
+        final message = error?.toString() ?? 'The product could not be saved.';
+        if (message.toLowerCase().contains('sku')) {
+          setState(() => _skuError = message);
+        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
-    } on DuplicateProductNameException catch (e) {
-      if (mounted) {
-        setState(() => _nameError = 'A product named "${e.name}" already exists.');
-        _formKey.currentState!.validate();
-      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -893,26 +1222,36 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Delete Product?'),
-        content: const Text('This will remove this item from active inventory. You can restore it afterwards.'),
+        content: const Text(
+          'This permanently deletes the product if no inventory or return history depends on it.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
               final productId = widget.product!.id!;
               final productName = widget.product!.name;
-              await ref.read(productFormProvider.notifier).deleteProduct(productId);
+              final deleted = await ref
+                  .read(productFormProvider.notifier)
+                  .deleteProduct(productId);
               if (mounted) {
-                ref.read(notificationProvider.notifier).showWithUndo(
-                  message: '"$productName" archived',
-                  onUndo: () async {
-                    await ref.read(productRepositoryProvider).restoreProduct(productId);
-                    ref.invalidate(productsProvider);
-                    ref.invalidate(inventoryStatsProvider);
-                    AppAlert.success(ref, '"$productName" has been restored');
-                  },
-                );
-                Navigator.pop(context);
+                if (deleted) {
+                  AppAlert.success(ref, '"$productName" deleted');
+                  Navigator.pop(context);
+                } else {
+                  final error = ref.read(productFormProvider).error;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        error?.toString() ?? 'Product could not be deleted.',
+                      ),
+                    ),
+                  );
+                }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
@@ -923,8 +1262,14 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     );
   }
 
-  void _quickAddCategory(BuildContext context, WidgetRef ref, String name) async {
-    final success = await ref.read(productFormProvider.notifier).saveCategory(Category(name: name));
+  void _quickAddCategory(
+    BuildContext context,
+    WidgetRef ref,
+    String name,
+  ) async {
+    final success = await ref
+        .read(productFormProvider.notifier)
+        .saveCategory(Category(name: name));
     if (success) {
       final cats = await ref.read(categoriesProvider.future);
       final added = cats.firstWhere((c) => c.name == name);
@@ -932,10 +1277,15 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
     }
   }
 
-  void _quickAddSubcategory(BuildContext context, WidgetRef ref, String name, int categoryId) async {
-    final success = await ref.read(productFormProvider.notifier).saveSubcategory(
-      Subcategory(categoryId: categoryId, name: name),
-    );
+  void _quickAddSubcategory(
+    BuildContext context,
+    WidgetRef ref,
+    String name,
+    int categoryId,
+  ) async {
+    final success = await ref
+        .read(productFormProvider.notifier)
+        .saveSubcategory(Subcategory(categoryId: categoryId, name: name));
     if (success) {
       final subs = await ref.read(subcategoriesProvider(categoryId).future);
       final added = subs.firstWhere((s) => s.name == name);
@@ -944,14 +1294,33 @@ class _AddEditProductScreenState extends ConsumerState<AddEditProductScreen> {
   }
 
   Future<void> _pickImage() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: false);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+    );
     if (result != null && result.files.single.path != null) {
-      setState(() => _selectedImagePath = result.files.single.path);
-
-      final finalUrl = await MediaUploadService.uploadMedia(result.files.single.path!);
-      if (mounted && finalUrl != result.files.single.path) {
-        setState(() => _selectedImagePath = finalUrl);
+      final path = result.files.single.path!;
+      final extension = path.split('.').last.toLowerCase();
+      if (!{'jpg', 'jpeg', 'png', 'webp'}.contains(extension)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Choose a JPG, JPEG, PNG, or WEBP image.'),
+          ),
+        );
+        return;
       }
+      if (result.files.single.size > 5 * 1024 * 1024) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Product images must be 5 MB or smaller.'),
+          ),
+        );
+        return;
+      }
+      setState(() {
+        _selectedImagePath = path;
+        _removeImage = false;
+      });
     }
   }
 }
@@ -963,14 +1332,13 @@ class _ResponsiveRow extends StatelessWidget {
   final List<Widget> children;
   static const double spacing = 16.0;
 
-  const _ResponsiveRow({
-    required this.isMobile,
-    required this.children,
-  });
+  const _ResponsiveRow({required this.isMobile, required this.children});
 
   @override
   Widget build(BuildContext context) {
-    final nonNullChildren = children.where((w) => w is! SizedBox || (w.width != 0 && w.height != 0)).toList();
+    final nonNullChildren = children
+        .where((w) => w is! SizedBox || (w.width != 0 && w.height != 0))
+        .toList();
     if (nonNullChildren.isEmpty) return const SizedBox.shrink();
 
     if (isMobile) {
@@ -1015,12 +1383,20 @@ class _HudMetric extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted),
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textMuted,
+          ),
         ),
         const SizedBox(height: 4),
         Text(
           value,
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: color),
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+            color: color,
+          ),
         ),
       ],
     );
@@ -1065,10 +1441,7 @@ class _ImagePicker extends StatelessWidget {
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
-                    child: Image.file(
-                      File(imagePath!),
-                      fit: BoxFit.contain,
-                    ),
+                    child: MediaImage(source: imagePath!, fit: BoxFit.contain),
                   ),
                 ),
                 Positioned(
@@ -1080,7 +1453,11 @@ class _ImagePicker extends StatelessWidget {
                         radius: 18,
                         backgroundColor: Colors.black.withValues(alpha: 0.65),
                         child: IconButton(
-                          icon: const Icon(Icons.edit_rounded, size: 16, color: Colors.white),
+                          icon: const Icon(
+                            Icons.edit_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          ),
                           tooltip: 'Change Photo',
                           onPressed: onPick,
                         ),
@@ -1088,9 +1465,15 @@ class _ImagePicker extends StatelessWidget {
                       const SizedBox(width: 8),
                       CircleAvatar(
                         radius: 18,
-                        backgroundColor: AppColors.error.withValues(alpha: 0.85),
+                        backgroundColor: AppColors.error.withValues(
+                          alpha: 0.85,
+                        ),
                         child: IconButton(
-                          icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.white),
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            size: 16,
+                            color: Colors.white,
+                          ),
                           tooltip: 'Remove Photo',
                           onPressed: onRemove,
                         ),
@@ -1122,12 +1505,18 @@ class _ImagePicker extends StatelessWidget {
                     const SizedBox(height: 10),
                     const Text(
                       'Upload Product Photo',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     const Text(
                       'Tap to browse files • Supports PNG, JPG, WebP',
-                      style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                   ],
                 ),
@@ -1273,18 +1662,31 @@ class _PremiumField extends StatelessWidget {
         hintText: hint,
         hintStyle: const TextStyle(fontSize: 13, color: AppColors.textMuted),
         labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        prefixIcon: Icon(icon, size: 20, color: AppColors.primary.withValues(alpha: 0.7)),
+        prefixIcon: Icon(
+          icon,
+          size: 20,
+          color: AppColors.primary.withValues(alpha: 0.7),
+        ),
         suffixIcon: suffix,
         filled: true,
-        fillColor: isDark ? Colors.white.withValues(alpha: 0.03) : AppColors.lightBg,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        fillColor: isDark
+            ? Colors.white.withValues(alpha: 0.03)
+            : AppColors.lightBg,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+          borderSide: BorderSide(
+            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+          borderSide: BorderSide(
+            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -1338,7 +1740,11 @@ class _ChoiceTag extends StatelessWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
-  const _ChoiceTag({required this.label, required this.isSelected, required this.onTap});
+  const _ChoiceTag({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1348,10 +1754,14 @@ class _ChoiceTag extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.primary.withValues(alpha: 0.05),
+          color: isSelected
+              ? AppColors.primary
+              : AppColors.primary.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.primary.withValues(alpha: 0.15),
+            color: isSelected
+                ? AppColors.primary
+                : AppColors.primary.withValues(alpha: 0.15),
             width: 1.4,
           ),
         ),
@@ -1376,7 +1786,11 @@ class _SubLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     text,
-    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.textMuted),
+    style: const TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w800,
+      color: AppColors.textMuted,
+    ),
   );
 }
 
@@ -1401,7 +1815,9 @@ class _SwitchRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.03) : AppColors.lightBg,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.03)
+            : AppColors.lightBg,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -1410,13 +1826,29 @@ class _SwitchRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                  ),
+                ),
               ],
             ),
           ),
-          Switch.adaptive(value: value, onChanged: onChanged, activeTrackColor: AppColors.primary),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeTrackColor: AppColors.primary,
+          ),
         ],
       ),
     );

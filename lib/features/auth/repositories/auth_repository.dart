@@ -1,92 +1,99 @@
-// lib/features/auth/repositories/auth_repository.dart
-
-import '../../../core/constants/app_constants.dart';
-import '../../../core/database/database_helper.dart';
+import '../../../core/services/backend_api_service.dart';
+import '../../../core/security/token_service.dart';
 import '../models/business_model.dart';
 import '../models/user_model.dart';
 
 class AuthRepository {
-  final DatabaseHelper _db = DatabaseHelper.instance;
-
-  // ── Authentication ─────────────────────────────────────────────────────────
-
-  /// Returns user if credentials match, null otherwise.
   Future<UserModel?> login(String username, String password) async {
-    final rows = await _db.queryAll(
-      AppConstants.tblUsers,
-      where: 'username = ? AND is_active = 1',
-      whereArgs: [username.trim().toLowerCase()],
+    final response = await BackendApiService.post('auth/login', {
+      'username': username,
+      'password': password,
+    });
+    final decoded = BackendApiService.decode(response);
+    if (decoded is! Map<String, dynamic>) return null;
+    await TokenService.instance.generateAndSaveSessionToken(
+      userId: (decoded['userId'] as num).toInt(),
+      businessId: (decoded['businessId'] as num?)?.toInt() ?? 1,
+      username: decoded['username'] as String? ?? username,
+      role: decoded['role'] as String? ?? 'owner',
     );
-
-    if (rows.isEmpty) return null;
-
-    final user = UserModel.fromMap(rows.first);
-    if (!DatabaseHelper.verifyPassword(password, user.passwordHash)) return null;
-
-    return user;
+    return UserModel(
+      id: (decoded['userId'] as num).toInt(),
+      username: decoded['username'] as String? ?? username,
+      passwordHash: '',
+      fullName: decoded['fullName'] as String? ?? username,
+      role: decoded['role'] as String? ?? 'owner',
+    );
   }
 
   Future<UserModel?> getUserById(int id) async {
-    final row = await _db.queryById(AppConstants.tblUsers, id);
-    return row != null ? UserModel.fromMap(row) : null;
+    final response = await BackendApiService.get('users/$id');
+    final decoded = BackendApiService.decode(response);
+    return decoded is Map<String, dynamic> ? _userFromJson(decoded) : null;
   }
 
-  // ── Business ───────────────────────────────────────────────────────────────
-
-  /// All businesses accessible by a user, with their role in each.
   Future<List<BusinessModel>> getBusinessesForUser(int userId) async {
-    final rows = await _db.rawQuery('''
-      SELECT b.*, ub.role AS user_role
-      FROM ${AppConstants.tblBusinesses} b
-      INNER JOIN ${AppConstants.tblUserBusinesses} ub
-        ON b.id = ub.business_id
-      WHERE ub.user_id = ? AND b.is_active = 1
-      ORDER BY b.name ASC
-    ''', [userId]);
-
-    return rows.map(BusinessModel.fromMap).toList();
+    final response = await BackendApiService.get(
+      'businesses',
+      {'userId': '$userId'},
+    );
+    final decoded = BackendApiService.decode(response);
+    if (decoded is! List) return const [];
+    return decoded
+        .map((item) => _businessFromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   Future<BusinessModel?> getBusinessById(int id) async {
-    final row = await _db.queryById(AppConstants.tblBusinesses, id);
-    return row != null ? BusinessModel.fromMap(row) : null;
+    final response = await BackendApiService.get('businesses/$id');
+    final decoded = BackendApiService.decode(response);
+    return decoded is Map<String, dynamic>
+        ? _businessFromJson(decoded)
+        : null;
   }
 
-  /// Creates a new business and links it to the user.
   Future<BusinessModel> createBusiness({
     required BusinessModel business,
     required int userId,
-    String role = AppConstants.roleOwner,
+    String role = 'owner',
   }) async {
-    final data = business.toMap();
-    data['owner_id'] = userId;
-
-    final bizId = await _db.insert(AppConstants.tblBusinesses, data);
-
-    // Link user ↔ business
-    await _db.insert(AppConstants.tblUserBusinesses, {
-      'user_id': userId,
-      'business_id': bizId,
-      'role': role,
+    final response = await BackendApiService.post('businesses', {
+      'name': business.name,
+      'type': business.type,
+      'address': business.address,
+      'phone': business.phone,
+      'email': business.email,
+      'gstNumber': business.gstNumber,
+      'currency': business.currency,
+      'currencySymbol': business.currencySymbol,
+      'ownerId': userId,
     });
-
-    // Seed all default data for new business (Categories, Accounts, Settings)
-    await _db.seedBusinessDefaults(bizId);
-
-    return business.copyWith(id: bizId, ownerId: userId);
+    final decoded = BackendApiService.decode(response);
+    return decoded is Map<String, dynamic>
+        ? _businessFromJson(decoded)
+        : business;
   }
 
   Future<BusinessModel> updateBusiness(BusinessModel business) async {
-    await _db.update(AppConstants.tblBusinesses, business.toMap(), business.id!);
-    return business;
+    final response = await BackendApiService.put('businesses/${business.id}', {
+      'name': business.name,
+      'type': business.type,
+      'address': business.address,
+      'phone': business.phone,
+      'email': business.email,
+      'gstNumber': business.gstNumber,
+      'currency': business.currency,
+      'currencySymbol': business.currencySymbol,
+    });
+    final decoded = BackendApiService.decode(response);
+    return decoded is Map<String, dynamic>
+        ? _businessFromJson(decoded)
+        : business;
   }
 
   Future<void> deleteBusiness(int id) async {
-    // Soft delete: set is_active = 0
-    await _db.update(AppConstants.tblBusinesses, {'is_active': 0}, id);
+    await BackendApiService.delete('businesses/$id');
   }
-
-  // ── User Management ────────────────────────────────────────────────────────
 
   Future<UserModel> createUser({
     required String username,
@@ -94,36 +101,38 @@ class AuthRepository {
     required String fullName,
     String? email,
     String? phone,
-    String role = AppConstants.roleAdmin,
+    String role = 'admin',
     required int businessId,
   }) async {
-    final user = UserModel(
-      username: username.trim().toLowerCase(),
-      passwordHash: DatabaseHelper.hashPassword(password),
-      fullName: fullName.trim(),
-      email: email?.trim(),
-      phone: phone?.trim(),
-      role: role,
-    );
-
-    final userId = await _db.insert(AppConstants.tblUsers, user.toMap());
-
-    await _db.insert(AppConstants.tblUserBusinesses, {
-      'user_id': userId,
-      'business_id': businessId,
+    final response = await BackendApiService.post('auth/register', {
+      'username': username,
+      'password': password,
+      'fullName': fullName,
+      'email': email,
+      'phone': phone,
       'role': role,
+      'businessId': businessId,
     });
-
-    return user.copyWith(id: userId);
+    final decoded = BackendApiService.decode(response);
+    return decoded is Map<String, dynamic>
+        ? _userFromJson(decoded)
+        : UserModel(
+            username: username,
+            passwordHash: '',
+            fullName: fullName,
+            email: email,
+            phone: phone,
+            role: role,
+          );
   }
 
   Future<bool> isUsernameTaken(String username) async {
-    final rows = await _db.queryAll(
-      AppConstants.tblUsers,
-      where: 'username = ?',
-      whereArgs: [username.trim().toLowerCase()],
+    final response = await BackendApiService.get(
+      'auth/usernames',
+      {'username': username},
     );
-    return rows.isNotEmpty;
+    final decoded = BackendApiService.decode(response);
+    return decoded is Map && decoded['taken'] == true;
   }
 
   Future<UserModel> registerUser({
@@ -133,45 +142,85 @@ class AuthRepository {
     String? email,
     String? phone,
   }) async {
-    final user = UserModel(
-      username: username.trim().toLowerCase(),
-      passwordHash: DatabaseHelper.hashPassword(password),
-      fullName: fullName.trim(),
-      email: email?.trim(),
-      phone: phone?.trim(),
-      role: AppConstants.roleOwner,
+    return createUser(
+      username: username,
+      password: password,
+      fullName: fullName,
+      email: email,
+      phone: phone,
+      businessId: 1,
     );
-
-    final userId = await _db.insert(AppConstants.tblUsers, user.toMap());
-    return user.copyWith(id: userId);
   }
 
   Future<List<UserModel>> getAllUsers() async {
-    final rows = await _db.queryAll(AppConstants.tblUsers, where: 'is_active = 1', orderBy: 'full_name ASC');
-    return rows.map(UserModel.fromMap).toList();
+    final response = await BackendApiService.get('users');
+    final decoded = BackendApiService.decode(response);
+    if (decoded is! List) return const [];
+    return decoded
+        .map((item) => _userFromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<UserModel>> getUsersForBusiness(int businessId) async {
-    final rows = await _db.rawQuery('''
-      SELECT u.*
-      FROM ${AppConstants.tblUsers} u
-      INNER JOIN ${AppConstants.tblUserBusinesses} ub ON u.id = ub.user_id
-      WHERE ub.business_id = ? AND u.is_active = 1
-      ORDER BY u.full_name ASC
-    ''', [businessId]);
-    return rows.map(UserModel.fromMap).toList();
+    final response = await BackendApiService.get(
+      'users',
+      {'businessId': '$businessId'},
+    );
+    final decoded = BackendApiService.decode(response);
+    if (decoded is! List) return const [];
+    return decoded
+        .map((item) => _userFromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> changePassword(int userId, String newPassword) async {
-    await _db.update(
-      AppConstants.tblUsers,
-      {'password_hash': DatabaseHelper.hashPassword(newPassword)},
-      userId,
-    );
+    await BackendApiService.put('users/$userId/password', {
+      'password': newPassword,
+    });
   }
 
   Future<UserModel> updateUser(UserModel user) async {
-    await _db.update(AppConstants.tblUsers, user.toMap(), user.id!);
-    return user;
+    final response = await BackendApiService.put('users/${user.id}', {
+      'fullName': user.fullName,
+      'email': user.email,
+      'phone': user.phone,
+      'role': user.role,
+      'active': user.isActive,
+    });
+    final decoded = BackendApiService.decode(response);
+    return decoded is Map<String, dynamic>
+        ? _userFromJson(decoded)
+        : user;
   }
+
+  static BusinessModel _businessFromJson(Map<String, dynamic> json) =>
+      BusinessModel(
+        id: (json['id'] as num?)?.toInt(),
+        name: json['name'] as String? ?? '',
+        type: json['type'] as String? ?? 'Retail Shop',
+        address: json['address'] as String?,
+        phone: json['phone'] as String?,
+        email: json['email'] as String?,
+        gstNumber: (json['gstNumber'] ?? json['gst_number']) as String?,
+        currency: json['currency'] as String? ?? 'INR',
+        currencySymbol:
+            (json['currencySymbol'] ?? json['currency_symbol']) as String? ??
+                '₹',
+        ownerId: ((json['ownerId'] ?? json['owner_id']) as num?)?.toInt(),
+        isActive: json['isActive'] != false && json['is_active'] != false,
+        userRole:
+            (json['userRole'] ?? json['user_role']) as String?,
+      );
+
+  static UserModel _userFromJson(Map<String, dynamic> json) => UserModel(
+        id: (json['id'] as num?)?.toInt(),
+        username: (json['username'] as String?) ?? '',
+        passwordHash: '',
+        fullName:
+            (json['fullName'] ?? json['full_name']) as String? ?? '',
+        email: json['email'] as String?,
+        phone: json['phone'] as String?,
+        role: json['role'] as String? ?? 'owner',
+        isActive: json['isActive'] != false && json['is_active'] != false,
+      );
 }

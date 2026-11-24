@@ -5,15 +5,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../models/product_model.dart';
 import '../repositories/product_repository.dart';
 import '../../../core/database/database_providers.dart';
-import '../../notifications/providers/notifications_provider.dart';
-
-/// Thrown when a product name already exists for the same business.
-class DuplicateProductNameException implements Exception {
-  final String name;
-  const DuplicateProductNameException(this.name);
-  @override
-  String toString() => 'A product named "$name" already exists.';
-}
+import '../services/product_api_service.dart';
 
 // ── Repository ─────────────────────────────────────────────────────────────────
 final productRepositoryProvider = Provider<ProductRepository>((ref) {
@@ -25,68 +17,110 @@ class InventoryFilter {
   final String searchQuery;
   final int? categoryId;
   final int? subcategoryId;
+  final String? brand;
+  final String status;
   final bool lowStockOnly;
+  final int page;
+  final int pageSize;
+  final String sortBy;
+  final String sortDirection;
 
   const InventoryFilter({
     this.searchQuery = '',
     this.categoryId,
     this.subcategoryId,
+    this.brand,
+    this.status = 'Active',
     this.lowStockOnly = false,
+    this.page = 0,
+    this.pageSize = 25,
+    this.sortBy = 'name',
+    this.sortDirection = 'asc',
   });
 
   InventoryFilter copyWith({
     String? searchQuery,
     int? categoryId,
     int? subcategoryId,
+    String? brand,
+    String? status,
     bool? lowStockOnly,
+    int? page,
+    int? pageSize,
+    String? sortBy,
+    String? sortDirection,
     bool clearCategory = false,
     bool clearSubcategory = false,
+    bool clearBrand = false,
   }) {
     return InventoryFilter(
       searchQuery: searchQuery ?? this.searchQuery,
       categoryId: clearCategory ? null : (categoryId ?? this.categoryId),
-      subcategoryId: clearSubcategory ? null : (subcategoryId ?? this.subcategoryId),
+      subcategoryId: clearSubcategory
+          ? null
+          : (subcategoryId ?? this.subcategoryId),
+      brand: clearBrand ? null : (brand ?? this.brand),
+      status: status ?? this.status,
       lowStockOnly: lowStockOnly ?? this.lowStockOnly,
+      page: page ?? this.page,
+      pageSize: pageSize ?? this.pageSize,
+      sortBy: sortBy ?? this.sortBy,
+      sortDirection: sortDirection ?? this.sortDirection,
     );
   }
 }
 
-final inventoryFilterProvider = StateProvider<InventoryFilter>((ref) => const InventoryFilter());
+final inventoryFilterProvider = StateProvider<InventoryFilter>(
+  (ref) => const InventoryFilter(),
+);
 
 // ── Products List ──────────────────────────────────────────────────────────────
 final productsProvider = FutureProvider.autoDispose<List<Product>>((ref) async {
-  ref.watch(databaseVersionProvider);
-  final repo = ref.watch(productRepositoryProvider);
-  final filter = ref.watch(inventoryFilterProvider);
   final businessId = ref.watch(activeBusinessIdProvider);
 
-  return repo.getAllProducts(
+  return ProductApiService.getAllProducts(
     businessId: businessId,
-    searchQuery: filter.searchQuery,
+    status: 'Active',
+  );
+});
+
+final productPageProvider = FutureProvider.autoDispose<ProductApiPage>((
+  ref,
+) async {
+  final filter = ref.watch(inventoryFilterProvider);
+  final businessId = ref.watch(activeBusinessIdProvider);
+  return ProductApiService.getProducts(
+    businessId: businessId,
+    query: filter.searchQuery,
     categoryId: filter.categoryId,
-    subcategoryId: filter.subcategoryId,
+    brand: filter.brand,
+    status: filter.status,
     lowStockOnly: filter.lowStockOnly,
+    page: filter.page,
+    size: filter.pageSize,
+    sortBy: filter.sortBy,
+    direction: filter.sortDirection,
   );
 });
 
 // ── Categories ─────────────────────────────────────────────────────────────────
-final categoriesProvider = FutureProvider.autoDispose<List<Category>>((ref) async {
-  ref.watch(databaseVersionProvider);
-  final repo = ref.watch(productRepositoryProvider);
+final categoriesProvider = FutureProvider.autoDispose<List<Category>>((
+  ref,
+) async {
   final businessId = ref.watch(activeBusinessIdProvider);
-  return repo.getAllCategories(businessId);
+  return ProductApiService.getCategories(businessId: businessId);
 });
 
 // ── Subcategories ──────────────────────────────────────────────────────────────
-final subcategoriesProvider = FutureProvider.family.autoDispose<List<Subcategory>, int?>((ref, categoryId) async {
-  ref.watch(databaseVersionProvider);
-  final repo = ref.watch(productRepositoryProvider);
-  final businessId = ref.watch(activeBusinessIdProvider);
-  return repo.getSubcategories(businessId, categoryId: categoryId);
-});
+final subcategoriesProvider = FutureProvider.family
+    .autoDispose<List<Subcategory>, int?>((ref, _) async {
+      return const <Subcategory>[];
+    });
 
 // ── Customer Types (Price Lists) ───────────────────────────────────────────────
-final customerTypesProvider = FutureProvider.autoDispose<List<CustomerType>>((ref) async {
+final customerTypesProvider = FutureProvider.autoDispose<List<CustomerType>>((
+  ref,
+) async {
   ref.watch(databaseVersionProvider);
   final repo = ref.watch(productRepositoryProvider);
   final businessId = ref.watch(activeBusinessIdProvider);
@@ -94,35 +128,59 @@ final customerTypesProvider = FutureProvider.autoDispose<List<CustomerType>>((re
 });
 
 // ── Price Categories (Legacy Compatibility) ────────────────────────────────────
-final priceCategoriesProvider = FutureProvider.autoDispose<List<PriceCategory>>((ref) async {
-  ref.watch(databaseVersionProvider);
-  final repo = ref.watch(productRepositoryProvider);
-  final businessId = ref.watch(activeBusinessIdProvider);
-  return repo.getPriceCategories(businessId);
-});
+final priceCategoriesProvider = FutureProvider.autoDispose<List<PriceCategory>>(
+  (ref) async {
+    ref.watch(databaseVersionProvider);
+    final repo = ref.watch(productRepositoryProvider);
+    final businessId = ref.watch(activeBusinessIdProvider);
+    return repo.getPriceCategories(businessId);
+  },
+);
 
 // ── Tiered Prices State (for form) ─────────────────────────────────────────────
-final productTieredPricesProvider = StateProvider.autoDispose<List<ProductTierPrice>>((ref) => []);
+final productTieredPricesProvider =
+    StateProvider.autoDispose<List<ProductTierPrice>>((ref) => []);
 
-final tieredPricesForProductProvider = FutureProvider.family<List<ProductTierPrice>, int>((ref, productId) async {
-  final repo = ref.watch(productRepositoryProvider);
-  return repo.getProductPrices(productId);
-});
+final tieredPricesForProductProvider =
+    FutureProvider.family<List<ProductTierPrice>, int>((ref, productId) async {
+      final repo = ref.watch(productRepositoryProvider);
+      return repo.getProductPrices(productId);
+    });
 
-final allProductTierPricesProvider = FutureProvider.autoDispose<Map<int, List<ProductTierPrice>>>((ref) async {
-  ref.watch(databaseVersionProvider);
-  final repo = ref.watch(productRepositoryProvider);
-  final businessId = ref.watch(activeBusinessIdProvider);
-  return repo.getAllProductPrices(businessId);
-});
+final allProductTierPricesProvider =
+    FutureProvider.autoDispose<Map<int, List<ProductTierPrice>>>((ref) async {
+      ref.watch(databaseVersionProvider);
+      final repo = ref.watch(productRepositoryProvider);
+      final businessId = ref.watch(activeBusinessIdProvider);
+      return repo.getAllProductPrices(businessId);
+    });
 
 // ── Inventory Stats ────────────────────────────────────────────────────────────
-final inventoryStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  ref.watch(databaseVersionProvider);
-  final repo = ref.watch(productRepositoryProvider);
-  final businessId = ref.watch(activeBusinessIdProvider);
-  return repo.getInventoryStats(businessId);
-});
+final inventoryStatsProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
+  (ref) async {
+    final businessId = ref.watch(activeBusinessIdProvider);
+    final products = await ProductApiService.getAllProducts(
+      businessId: businessId,
+      status: 'Active',
+    );
+    final activeProducts = products
+        .where((product) => product.isActive)
+        .toList();
+    return {
+      'total_products': activeProducts.length,
+      'low_stock_count': activeProducts
+          .where((product) => product.isLowStock && !product.isOutOfStock)
+          .length,
+      'out_of_stock_count': activeProducts
+          .where((product) => product.isOutOfStock)
+          .length,
+      'inventory_value': activeProducts.fold<double>(
+        0,
+        (total, product) => total + product.stock * product.purchasePrice,
+      ),
+    };
+  },
+);
 
 // ── Stock Movement Ledger ──────────────────────────────────────────────────────
 class StockLedgerFilter {
@@ -148,29 +206,34 @@ class StockLedgerFilter {
   }) {
     return StockLedgerFilter(
       productId: clearProduct ? null : (productId ?? this.productId),
-      transactionType: clearType ? null : (transactionType ?? this.transactionType),
+      transactionType: clearType
+          ? null
+          : (transactionType ?? this.transactionType),
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
     );
   }
 }
 
-final stockLedgerFilterProvider = StateProvider<StockLedgerFilter>((ref) => const StockLedgerFilter());
+final stockLedgerFilterProvider = StateProvider<StockLedgerFilter>(
+  (ref) => const StockLedgerFilter(),
+);
 
-final stockLedgerProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
-  ref.watch(databaseVersionProvider);
-  final repo = ref.watch(productRepositoryProvider);
-  final businessId = ref.watch(activeBusinessIdProvider);
-  final filter = ref.watch(stockLedgerFilterProvider);
+final stockLedgerProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+      ref.watch(databaseVersionProvider);
+      final repo = ref.watch(productRepositoryProvider);
+      final businessId = ref.watch(activeBusinessIdProvider);
+      final filter = ref.watch(stockLedgerFilterProvider);
 
-  return repo.getStockLedger(
-    businessId,
-    productId: filter.productId,
-    transactionType: filter.transactionType,
-    startDate: filter.startDate,
-    endDate: filter.endDate,
-  );
-});
+      return repo.getStockLedger(
+        businessId,
+        productId: filter.productId,
+        transactionType: filter.transactionType,
+        startDate: filter.startDate,
+        endDate: filter.endDate,
+      );
+    });
 
 // ── Selected Product ───────────────────────────────────────────────────────────
 final selectedProductProvider = StateProvider<Product?>((ref) => null);
@@ -180,41 +243,34 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
   final ProductRepository _repo;
   final Ref _ref;
 
-  ProductFormNotifier(this._repo, this._ref) : super(const AsyncValue.data(null));
+  ProductFormNotifier(this._repo, this._ref)
+    : super(const AsyncValue.data(null));
 
-  Future<bool> saveProduct(Product product) async {
+  Future<bool> saveProduct(
+    Product product, {
+    String? imagePath,
+    bool removeImage = false,
+  }) async {
     state = const AsyncValue.loading();
     try {
       final businessId = _ref.read(activeBusinessIdProvider);
-
-      // Unique name check
-      final nameTaken = await _repo.isProductNameTaken(
-        product.name,
-        businessId,
-        excludeId: product.id,
+      await ProductApiService.saveProduct(
+        product: product,
+        businessId: businessId,
+        imagePath: imagePath,
+        removeImage: removeImage,
       );
-      if (nameTaken) {
-        throw DuplicateProductNameException(product.name);
-      }
-
-      if (product.id == null) {
-        final id = await _repo.addProduct(product, businessId);
-        final tieredPrices = _ref.read(productTieredPricesProvider);
-        if (tieredPrices.isNotEmpty) {
-          await _repo.updateProductPrices(id, tieredPrices);
-        }
-      } else {
-        await _repo.updateProduct(product);
-        final tieredPrices = _ref.read(productTieredPricesProvider);
-        await _repo.updateProductPrices(product.id!, tieredPrices);
-      }
-      _ref.read(notificationsProvider.notifier).scanAndGenerateAlerts();
+      _ref.read(inventoryFilterProvider.notifier).state = _ref
+          .read(inventoryFilterProvider)
+          .copyWith(page: 0);
+      _ref.invalidate(productsProvider);
+      _ref.invalidate(productPageProvider);
+      _ref.invalidate(inventoryStatsProvider);
+      _ref.invalidate(categoriesProvider);
       if (mounted) {
         state = const AsyncValue.data(null);
       }
       return true;
-    } on DuplicateProductNameException {
-      rethrow;
     } catch (e, st) {
       if (mounted) {
         state = AsyncValue.error(e, st);
@@ -226,7 +282,14 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
   Future<bool> deleteProduct(int id) async {
     state = const AsyncValue.loading();
     try {
-      await _repo.deleteProduct(id);
+      final businessId = _ref.read(activeBusinessIdProvider);
+      await ProductApiService.deleteProduct(id: id, businessId: businessId);
+      _ref.read(inventoryFilterProvider.notifier).state = _ref
+          .read(inventoryFilterProvider)
+          .copyWith(page: 0);
+      _ref.invalidate(productsProvider);
+      _ref.invalidate(productPageProvider);
+      _ref.invalidate(inventoryStatsProvider);
       if (mounted) {
         state = const AsyncValue.data(null);
       }
@@ -239,17 +302,46 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
+  Future<bool> setProductStatus(int id, {required bool isActive}) async {
+    state = const AsyncValue.loading();
+    try {
+      final businessId = _ref.read(activeBusinessIdProvider);
+      await ProductApiService.setProductStatus(
+        id: id,
+        businessId: businessId,
+        isActive: isActive,
+      );
+      _ref.invalidate(productsProvider);
+      _ref.invalidate(productPageProvider);
+      _ref.invalidate(inventoryStatsProvider);
+      if (mounted) state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      if (mounted) state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
   Future<bool> duplicateProduct(Product product) async {
     state = const AsyncValue.loading();
     try {
       final businessId = _ref.read(activeBusinessIdProvider);
       final duplicated = product.copyWith(
-        id: null,
+        clearId: true,
         name: '${product.name} (Copy)',
         sku: product.sku != null ? '${product.sku}-COPY' : null,
         barcode: null,
       );
-      await _repo.addProduct(duplicated, businessId);
+      await ProductApiService.saveProduct(
+        product: duplicated,
+        businessId: businessId,
+      );
+      _ref.read(inventoryFilterProvider.notifier).state = _ref
+          .read(inventoryFilterProvider)
+          .copyWith(page: 0);
+      _ref.invalidate(productsProvider);
+      _ref.invalidate(productPageProvider);
+      _ref.invalidate(inventoryStatsProvider);
       if (mounted) {
         state = const AsyncValue.data(null);
       }
@@ -271,15 +363,16 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     try {
       final businessId = _ref.read(activeBusinessIdProvider);
-      final currentUser = _ref.read(currentUserProvider);
-      await _repo.recordStockAdjustment(
+      await ProductApiService.adjustProductStock(
+        id: productId,
         businessId: businessId,
-        productId: productId,
-        adjustedQty: adjustedQty,
+        adjustedQuantity: adjustedQty,
         adjustmentType: adjustmentType,
         reason: reason,
-        userId: currentUser?.id,
       );
+      _ref.invalidate(productsProvider);
+      _ref.invalidate(productPageProvider);
+      _ref.invalidate(inventoryStatsProvider);
       if (mounted) {
         state = const AsyncValue.data(null);
       }
@@ -296,11 +389,19 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     try {
       final businessId = _ref.read(activeBusinessIdProvider);
-      if (category.id == null) {
-        await _repo.addCategory(category, businessId);
+      if (category.id != null) {
+        await ProductApiService.updateCategory(
+          businessId: businessId,
+          categoryId: category.id!,
+          name: category.name,
+        );
       } else {
-        await _repo.updateCategory(category);
+        await ProductApiService.createCategory(
+          businessId: businessId,
+          name: category.name,
+        );
       }
+      _ref.invalidate(categoriesProvider);
       if (mounted) {
         state = const AsyncValue.data(null);
       }
@@ -316,7 +417,12 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
   Future<bool> deleteCategory(int id) async {
     state = const AsyncValue.loading();
     try {
-      await _repo.deleteCategory(id);
+      final businessId = _ref.read(activeBusinessIdProvider);
+      await ProductApiService.deleteCategory(
+        businessId: businessId,
+        categoryId: id,
+      );
+      _ref.invalidate(categoriesProvider);
       if (mounted) {
         state = const AsyncValue.data(null);
       }
@@ -433,6 +539,7 @@ class ProductFormNotifier extends StateNotifier<AsyncValue<void>> {
   }
 }
 
-final productFormProvider = StateNotifierProvider.autoDispose<ProductFormNotifier, AsyncValue<void>>(
-  (ref) => ProductFormNotifier(ref.watch(productRepositoryProvider), ref),
-);
+final productFormProvider =
+    StateNotifierProvider.autoDispose<ProductFormNotifier, AsyncValue<void>>(
+      (ref) => ProductFormNotifier(ref.watch(productRepositoryProvider), ref),
+    );
