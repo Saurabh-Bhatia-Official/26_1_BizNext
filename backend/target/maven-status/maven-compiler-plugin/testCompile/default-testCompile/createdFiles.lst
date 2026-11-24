@@ -1,0 +1,8 @@
+com\biznext\erp\SalesReturnServiceTest.class
+com\biznext\customer\CustomerServiceTest.class
+com\biznext\erp\database\DatabaseConfigurationTest.class
+com\biznext\erp\ProductServiceTest.class
+com\biznext\erp\database\HibernateContextIntegrationTest.class
+com\biznext\erp\database\NeonConnectivityIntegrationTest.class
+com\biznext\erp\InventoryMovementServiceTest.class
+com\biznext\erp\JournalEntryServiceTest.class

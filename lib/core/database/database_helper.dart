@@ -1685,7 +1685,7 @@ class DatabaseHelper {
   }
 
   // ── Secure Deletion ────────────────────────────────────────────────────────
-  Future<void> resetSoftware() async {
+ Future<void> resetSoftware() async {
     await resetDatabase();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
