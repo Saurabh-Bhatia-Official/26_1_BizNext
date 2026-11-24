@@ -20,12 +20,12 @@ public interface ProductRepository extends JpaRepository<ProductEntity, Long> {
     @Query("""
             SELECT p FROM ProductEntity p
             WHERE p.businessId = :businessId
-              AND (:query IS NULL OR
-                   LOWER(p.productName) LIKE LOWER(CONCAT('%', :query, '%')) OR
-                   LOWER(COALESCE(p.sku, '')) LIKE LOWER(CONCAT('%', :query, '%')) OR
-                   LOWER(COALESCE(p.barcode, '')) LIKE LOWER(CONCAT('%', :query, '%')))
+              AND (CAST(:query AS string) IS NULL OR
+                   LOWER(p.productName) LIKE LOWER(CONCAT('%', CAST(:query AS string), '%')) OR
+                   LOWER(COALESCE(p.sku, '')) LIKE LOWER(CONCAT('%', CAST(:query AS string), '%')) OR
+                   LOWER(COALESCE(p.barcode, '')) LIKE LOWER(CONCAT('%', CAST(:query AS string), '%')))
               AND (:categoryId IS NULL OR p.categoryId = :categoryId)
-              AND (:brand IS NULL OR LOWER(COALESCE(p.brand, '')) = LOWER(:brand))
+              AND (CAST(:brand AS string) IS NULL OR LOWER(COALESCE(p.brand, '')) = LOWER(CAST(:brand AS string)))
               AND (:active IS NULL OR p.active = :active)
               AND (:lowStockOnly = FALSE OR p.stockQuantity <= p.minimumStockLevel)
             """)

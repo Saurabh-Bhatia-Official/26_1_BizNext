@@ -15,7 +15,7 @@ public interface InventoryMovementRepository extends JpaRepository<InventoryMove
             "AND (:productId IS NULL OR m.productId = :productId) " +
             "AND (:warehouseId IS NULL OR m.warehouseId = :warehouseId) " +
             "AND (:type IS NULL OR m.movementType = :type) " +
-            "AND (:search IS NULL OR LOWER(COALESCE(m.note, '')) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+            "AND (CAST(:search AS string) IS NULL OR LOWER(COALESCE(m.note, '')) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) " +
             "ORDER BY m.createdAt DESC")
     List<InventoryMovementEntity> searchMovements(@Param("businessId") Long businessId,
                                                  @Param("productId") Long productId,
