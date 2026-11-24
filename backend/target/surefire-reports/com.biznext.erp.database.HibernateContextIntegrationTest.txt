@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.biznext.erp.database.HibernateContextIntegrationTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 92.36 s -- in com.biznext.erp.database.HibernateContextIntegrationTest
