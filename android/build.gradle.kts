@@ -20,6 +20,19 @@ subprojects {
 }
 
 subprojects {
+    if (project.name != "app") {
+        afterEvaluate {
+            val isAndroid = plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")
+            if (isAndroid) {
+                extensions.findByType<com.android.build.gradle.BaseExtension>()?.apply {
+                    compileSdkVersion(36)
+                }
+            }
+        }
+    }
+}
+
+subprojects {
     tasks.withType<JavaCompile>().configureEach {
         sourceCompatibility = "17"
         targetCompatibility = "17"
