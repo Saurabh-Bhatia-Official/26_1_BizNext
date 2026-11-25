@@ -1,6 +1,7 @@
 // lib/features/inventory/screens/inventory_screen.dart
 
 import 'dart:math' as math;
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,7 +17,6 @@ import '../../../core/widgets/category_manager_screen.dart';
 import '../../../core/providers/notification_provider.dart';
 import '../../../core/services/rbac_service.dart';
 import '../../../core/providers/screen_layout_provider.dart';
-import '../../../core/widgets/media_image.dart';
 
 class InventoryScreen extends ConsumerWidget {
   const InventoryScreen({super.key});
@@ -606,8 +606,8 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
                     ),
-                    child: MediaImage.isAvailable(widget.product.imagePath)
-                      ? ClipRRect(borderRadius: BorderRadius.circular(16), child: MediaImage(source: widget.product.imagePath!, fit: BoxFit.cover))
+                    child: widget.product.imagePath != null
+                        ? ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.file(File(widget.product.imagePath!), fit: BoxFit.cover))
                         : const Icon(Icons.inventory_2_rounded, color: AppColors.primary, size: 24),
                   ),
                   const Spacer(),
@@ -869,8 +869,8 @@ class _ProductTableState extends ConsumerState<_ProductTable> {
                           color: AppColors.primary.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: MediaImage.isAvailable(p.imagePath)
-                          ? ClipRRect(borderRadius: BorderRadius.circular(10), child: MediaImage(source: p.imagePath!, fit: BoxFit.cover))
+                        child: p.imagePath != null
+                            ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(File(p.imagePath!), fit: BoxFit.cover))
                             : const Icon(Icons.inventory_2_rounded, color: AppColors.primary, size: 18),
                       ),
                       const SizedBox(width: 12),
@@ -1200,7 +1200,9 @@ void _showStockLedgerDialog(BuildContext context, WidgetRef ref, {int? productId
                                 rows: entries.map((e) {
                                   final type = e['transaction_type'] as String? ?? '';
                                   final qty = (e['quantity'] as num?)?.toDouble() ?? 0.0;
-                                  final isPositive = qty > 0;
+                                final isSale = type.toUpperCase().contains('SALE');
+final displayQty = isSale ? -qty.abs() : qty;
+final isPositive = displayQty > 0;
                                   final color = type.contains('PURCHASE') || type.contains('OPENING')
                                       ? Colors.green
                                       : (type.contains('SALE') ? Colors.blue : Colors.orange);
@@ -1219,7 +1221,7 @@ void _showStockLedgerDialog(BuildContext context, WidgetRef ref, {int? productId
                                       DataCell(Text(e['product_name'] as String? ?? 'Product')),
                                       DataCell(
                                         Text(
-                                          '${isPositive ? '+' : ''}$qty ${e['product_unit'] ?? ''}',
+                                          '${isPositive ? '+' : ''}$displayQty ${e['product_unit'] ?? ''}',
                                           style: TextStyle(fontWeight: FontWeight.w900, color: isPositive ? Colors.green : Colors.red),
                                         ),
                                       ),

@@ -27,7 +27,10 @@ class AIChatbotService {
       final db = await DatabaseHelper.instance.database;
 
       // 1. Sales Intent
-      if (query.contains('sale') || query.contains('sold') || query.contains('earnings')) {
+     if (query.contains('sale') ||
+    query.contains('sold') ||
+    query.contains('earnings') ||
+    query.contains('revenue')) {
         String dateFilter = '';
         String periodText = 'total';
         
@@ -79,6 +82,7 @@ class AIChatbotService {
       
       // 3. Transactions Intent
       else if (query.contains('transaction') || query.contains('history') || query.contains('recent')) {
+        debugPrint('AI Assistant businessId: $businessId');
         sql = "SELECT type, amount, description, date FROM transactions WHERE business_id = $businessId ORDER BY date DESC LIMIT 5";
         final result = await db.rawQuery(sql);
         resultStr = jsonEncode(result);

@@ -1,14 +1,13 @@
 // lib/features/customers/screens/add_edit_customer_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/providers/notification_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/customer_model.dart';
 import '../providers/customer_provider.dart';
-import '../services/customer_api_service.dart';
 import '../../../core/services/shortcut_service.dart';
 
 class AddEditCustomerScreen extends ConsumerStatefulWidget {
@@ -16,7 +15,8 @@ class AddEditCustomerScreen extends ConsumerStatefulWidget {
   const AddEditCustomerScreen({super.key, this.customer});
 
   @override
-  ConsumerState<AddEditCustomerScreen> createState() => _AddEditCustomerScreenState();
+  ConsumerState<AddEditCustomerScreen> createState() =>
+      _AddEditCustomerScreenState();
 }
 
 class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
@@ -44,7 +44,14 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
 
   @override
   void dispose() {
-    for (final c in [_nameCtrl, _phoneCtrl, _emailCtrl, _addressCtrl, _gstCtrl, _balanceCtrl]) {
+    for (final c in [
+      _nameCtrl,
+      _phoneCtrl,
+      _emailCtrl,
+      _addressCtrl,
+      _gstCtrl,
+      _balanceCtrl,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -55,9 +62,14 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final formState = ref.watch(customerFormProvider);
     final shortcuts = ref.watch(shortcutSettingsProvider);
-    final saveShortcut = shortcuts['save'] ?? ShortcutNotifier.defaults['save']?.defaultShortcut ?? '';
+    final saveShortcut =
+        shortcuts['save'] ??
+        ShortcutNotifier.defaults['save']?.defaultShortcut ??
+        '';
     final saveBtnLabel = isEditing ? 'Update Customer' : 'Create Customer';
-    final saveBtnText = saveShortcut.isNotEmpty ? '$saveBtnLabel ($saveShortcut)' : saveBtnLabel;
+    final saveBtnText = saveShortcut.isNotEmpty
+        ? '$saveBtnLabel ($saveShortcut)'
+        : saveBtnLabel;
 
     return AppShortcut(
       actionId: 'cancel',
@@ -77,7 +89,10 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 780),
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(horizontal: isPhone ? 14 : 24, vertical: isPhone ? 16 : 24),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isPhone ? 14 : 24,
+                    vertical: isPhone ? 16 : 24,
+                  ),
                   child: Form(
                     key: _formKey,
                     child: Column(
@@ -93,45 +108,57 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                               label: 'Customer Name',
                               hint: 'e.g. John Doe',
                               icon: Icons.person_rounded,
-                              validator: (v) {
-                                final value = (v ?? '').trim();
-                                if (value.isEmpty) return 'Name is required';
-                                if (value.length < 2) return 'Enter a valid customer name';
-                                return null;
-                              },
+                             validator: (v) {
+  final value = v?.trim() ?? '';
+
+  if (value.isEmpty) {
+    return 'Customer name is required';
+  }
+
+  if (value.length < 2 || value.length > 100) {
+    return 'Name must be between 2 and 100 characters';
+  }
+
+  if (!RegExp(r'[A-Za-z]').hasMatch(value)) {
+    return 'Name must contain at least one letter';
+  }
+
+  return null;
+},
                             ),
                             const SizedBox(height: 18),
                             _ResponsiveCustomerRow(
                               isPhone: isPhone,
                               children: [
-                                _CustomerField(
-                                  controller: _phoneCtrl,
-                                  label: 'Phone Number',
-                                  hint: '+91...',
-                                  icon: Icons.phone_rounded,
-                                  keyboardType: TextInputType.phone,
-                                  validator: (v) {
-                                    final value = (v ?? '').trim();
-                                    if (value.isEmpty) return 'Mobile number is required';
-                                    final digits = CustomerApiService.normalizePhone(value);
-                                    if (digits.length < 10 || digits.length > 15) {
-                                      return 'Enter a valid mobile number';
-                                    }
-                                    return null;
-                                  },
-                                ),
+                               _CustomerField(
+  controller: _phoneCtrl,
+  label: 'Phone Number',
+  hint: '10-digit mobile number',
+  icon: Icons.phone_rounded,
+  keyboardType: TextInputType.number,
+  maxLength: 10,
+  inputFormatters: [
+    FilteringTextInputFormatter.digitsOnly,
+    LengthLimitingTextInputFormatter(10),
+  ],
+  validator: (v) {
+    final value = v?.trim() ?? '';
+
+    if (value.isEmpty) return null;
+
+    if (!RegExp(r'^[6-9][0-9]{9}$').hasMatch(value)) {
+      return 'Enter a valid 10-digit Indian mobile number';
+    }
+
+    return null;
+  },
+),
                                 _CustomerField(
                                   controller: _emailCtrl,
                                   label: 'Email Address',
                                   hint: 'john@example.com',
                                   icon: Icons.email_rounded,
                                   keyboardType: TextInputType.emailAddress,
-                                  validator: (v) {
-                                    final value = (v ?? '').trim();
-                                    if (value.isEmpty) return null;
-                                    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-                                    return emailRegex.hasMatch(value) ? null : 'Enter a valid email';
-                                  },
                                 ),
                               ],
                             ),
@@ -152,12 +179,34 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                               keyboardType: TextInputType.multiline,
                             ),
                             const SizedBox(height: 18),
-                            _CustomerField(
-                              controller: _gstCtrl,
-                              label: 'GST Number',
-                              hint: 'Optional GSTIN',
-                              icon: Icons.receipt_long_rounded,
-                            ),
+                           _CustomerField(
+  controller: _gstCtrl,
+  label: 'GST Number',
+  hint: 'Optional GSTIN',
+  icon: Icons.receipt_long_rounded,
+  maxLength: 15,
+  textCapitalization: TextCapitalization.characters,
+  inputFormatters: [
+    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+    UpperCaseTextFormatter(),
+    LengthLimitingTextInputFormatter(15),
+  ],
+  validator: (v) {
+    final value = v?.trim() ?? '';
+
+    if (value.isEmpty) return null;
+
+    final gstRegex = RegExp(
+      r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$',
+    );
+
+    if (!gstRegex.hasMatch(value)) {
+      return 'Enter a valid 15-character GSTIN';
+    }
+
+    return null;
+  },
+),
                           ],
                         ),
                         SizedBox(height: isPhone ? 16 : 24),
@@ -172,7 +221,8 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                               hint: '0.00',
                               icon: Icons.account_balance_wallet_rounded,
                               keyboardType: TextInputType.number,
-                              helperText: 'Positive for receivable, Negative for payable',
+                              helperText:
+                                  'Positive for receivable, Negative for payable',
                             ),
                           ],
                         ),
@@ -187,11 +237,21 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
                               onPressed: formState.isLoading ? null : _save,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
                               ),
                               child: formState.isLoading
-                                  ? const CircularProgressIndicator(color: Colors.white)
-                                  : Text(saveBtnText, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                                  ? const CircularProgressIndicator(
+                                      color: Colors.white,
+                                    )
+                                  : Text(
+                                      saveBtnText,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 16,
+                                      ),
+                                    ),
                             ),
                           ),
                         ).animate().slideY(begin: 0.2, end: 0),
@@ -211,6 +271,7 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final businessId = ref.read(activeBusinessIdProvider);
+
     final customer = CustomerModel(
       id: widget.customer?.id,
       businessId: businessId,
@@ -222,18 +283,26 @@ class _AddEditCustomerScreenState extends ConsumerState<AddEditCustomerScreen> {
       balance: double.tryParse(_balanceCtrl.text) ?? 0,
     );
 
-    final success = await ref.read(customerFormProvider.notifier).saveCustomer(customer);
-    if (success && mounted) {
-      Navigator.pop(context);
-      return;
-    }
+    final success = await ref
+        .read(customerFormProvider.notifier)
+        .saveCustomer(customer);
 
-    if (!success && mounted) {
-      final error = ref.read(customerFormProvider).asError.error;
-      final message = error is CustomerApiException
-          ? error.message
-          : (error?.toString() ?? 'Failed to save customer.');
-      AppAlert.error(ref, message);
+    if (!mounted) return;
+
+    if (success) {
+      Navigator.pop(context);
+    } else {
+      final error = ref.read(customerFormProvider).error;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error?.toString().replaceFirst('Exception: ', '') ??
+                'Unable to save customer. Please try again.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 }
@@ -287,12 +356,21 @@ class _CustomerFormCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkCard : Colors.white,
         borderRadius: BorderRadius.circular(isPhone ? 18 : 26),
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder, width: 1.5),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+          width: 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(fontSize: isPhone ? 15 : 16, fontWeight: FontWeight.w900)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: isPhone ? 15 : 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           SizedBox(height: isPhone ? 16 : 22),
           ...children,
         ],
@@ -300,7 +378,6 @@ class _CustomerFormCard extends StatelessWidget {
     ).animate().fadeIn(duration: 400.ms).slideX(begin: 0.1, end: 0);
   }
 }
-
 class _CustomerField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -311,16 +388,23 @@ class _CustomerField extends StatelessWidget {
   final String? helperText;
   final String? Function(String?)? validator;
 
-  const _CustomerField({
-    required this.controller,
-    required this.label,
-    required this.hint,
-    required this.icon,
-    this.maxLines = 1,
-    this.keyboardType,
-    this.helperText,
-    this.validator,
-  });
+  final List<TextInputFormatter>? inputFormatters;
+  final int? maxLength;
+  final TextCapitalization textCapitalization;
+
+ const _CustomerField({
+  required this.controller,
+  required this.label,
+  required this.hint,
+  required this.icon,
+  this.maxLines = 1,
+  this.keyboardType,
+  this.helperText,
+  this.validator,
+  this.inputFormatters,
+  this.maxLength,
+  this.textCapitalization = TextCapitalization.none,
+});
 
   @override
   Widget build(BuildContext context) {
@@ -331,20 +415,37 @@ class _CustomerField extends StatelessWidget {
         : (keyboardType ?? TextInputType.text);
     final effectiveInputAction = isMultiline ? null : TextInputAction.next;
 
-    return TextFormField(
-      controller: controller,
-      maxLines: maxLines,
-      keyboardType: effectiveKeyboardType,
-      textInputAction: effectiveInputAction,
-      validator: validator,
-      style: const TextStyle(fontWeight: FontWeight.w600),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        helperText: helperText,
-        prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
-        fillColor: isDark ? Colors.white.withValues(alpha: 0.03) : AppColors.lightBg,
-      ),
+   return TextFormField(
+  controller: controller,
+  maxLines: maxLines,
+  keyboardType: effectiveKeyboardType,
+  textInputAction: effectiveInputAction,
+  validator: validator,
+  inputFormatters: inputFormatters,
+  maxLength: maxLength,
+  textCapitalization: textCapitalization,
+  style: const TextStyle(fontWeight: FontWeight.w600),
+  decoration: InputDecoration(
+    labelText: label,
+    hintText: hint,
+    helperText: helperText,
+    prefixIcon: Icon(icon, color: AppColors.primary, size: 20),
+    fillColor: isDark
+        ? Colors.white.withValues(alpha: 0.03)
+        : AppColors.lightBg,
+  ),
+);
+  }
+}
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return newValue.copyWith(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
     );
   }
 }

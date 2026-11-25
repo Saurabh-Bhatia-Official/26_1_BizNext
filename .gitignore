@@ -3,12 +3,6 @@
 *.log
 *.pyc
 *.swp
-.env
-.env.*
-!.env.example
-backend/.env
-backend/.env.*
-!backend/.env.example
 .DS_Store
 .atom/
 .build/
@@ -52,3 +46,15 @@ app.*.map.json
 
 # FVM
 .fvm/
+# Temporary analysis files
+analysis_*.txt
+current_analysis*.txt
+final_analysis*.txt
+analyze_output.txt
+
+# Build and backup files
+BizNext-Windows.zip
+nuget.exe
+
+# Old nested project
+/Desktop/

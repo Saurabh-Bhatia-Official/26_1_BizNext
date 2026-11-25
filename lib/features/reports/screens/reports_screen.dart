@@ -1482,12 +1482,12 @@ class _ReportBreakdownSection extends ConsumerWidget {
               const SizedBox(height: 24),
               Text('Product Velocity & Stock Movement', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
-              ...list.map((i) => _ReportListTile(
-                title: i['name'] as String? ?? 'Product',
-                subtitle: '${i['total_qty_sold'] ?? 0} sold in period • Current Stock: ${i['stock'] ?? 0}',
-                trailing: CurrencyFormatter.format((i['total_revenue'] as num?)?.toDouble() ?? 0.0),
-                tag: ((i['total_qty_sold'] as num?) ?? 0) > 10 ? 'High Velocity' : 'Standard',
-              )),
+             ...list.map((i) => _ReportListTile(
+  title: i['product_name'] as String? ?? 'Product',
+  subtitle: '${i['sold_qty'] ?? 0} sold in period • Current Stock: ${i['current_stock'] ?? 0}',
+  trailing: CurrencyFormatter.format((i['inventory_value'] as num?)?.toDouble() ?? 0.0),
+  tag: ((i['sold_qty'] as num?) ?? 0) > 10 ? 'High Velocity' : 'Standard',
+)),
             ],
           );
         },

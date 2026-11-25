@@ -1,5 +1,5 @@
 // lib/features/suppliers/screens/add_edit_supplier_screen.dart
-
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
@@ -109,42 +109,85 @@ class _AddEditSupplierScreenState extends ConsumerState<AddEditSupplierScreen> {
                               label: 'Supplier Display Name *',
                               hint: 'e.g. ABC Wholesalers Ltd',
                               icon: Icons.business_rounded,
-                              validator: (v) => v?.trim().isEmpty == true ? 'Supplier name is required' : null,
+                             validator: (value) {
+  final name = value?.trim() ?? '';
+
+  if (name.isEmpty) {
+    return 'Supplier name is required';
+  }
+
+  if (name.length < 2 || name.length > 100) {
+    return 'Name must be between 2 and 100 characters';
+  }
+
+  if (!RegExp(r'[a-zA-Z]').hasMatch(name)) {
+    return 'Name must contain at least one letter';
+  }
+
+  return null;
+},
                             ),
                             const SizedBox(height: 18),
                             _ResponsiveSupplierRow(
                               isPhone: isPhone,
                               children: [
                                 _SupplierField(
-                                  controller: _companyCtrl,
-                                  label: 'Company Legal Name',
-                                  hint: 'Official registered entity name',
-                                  icon: Icons.domain_rounded,
-                                ),
-                                _SupplierField(
-                                  controller: _contactPersonCtrl,
-                                  label: 'Contact Person / Rep',
-                                  hint: 'Key account manager name',
-                                  icon: Icons.person_rounded,
-                                ),
+  controller: _companyCtrl,
+  label: 'Company Legal Name',
+  hint: 'Official registered entity name',
+  icon: Icons.domain_rounded,
+  validator: (value) {
+    final name = value?.trim() ?? '';
+
+    if (name.isEmpty) return null;
+
+    if (!RegExp(r'[a-zA-Z]').hasMatch(name)) {
+      return 'Company name must contain at least one letter';
+    }
+
+    return null;
+  },
+),
+                               _SupplierField(
+  controller: _contactPersonCtrl,
+  label: 'Contact Person / Rep',
+  hint: 'Key account manager name',
+  icon: Icons.person_rounded,
+),
                               ],
                             ),
                             const SizedBox(height: 18),
                             _ResponsiveSupplierRow(
                               isPhone: isPhone,
                               children: [
-                                _SupplierField(
-                                  controller: _phoneCtrl,
-                                  label: 'Phone / Mobile',
-                                  hint: '+91...',
-                                  icon: Icons.phone_rounded,
-                                ),
-                                _SupplierField(
-                                  controller: _emailCtrl,
-                                  label: 'Email Address',
-                                  hint: 'orders@supplier.com',
-                                  icon: Icons.email_rounded,
-                                ),
+                               _SupplierField(
+  controller: _phoneCtrl,
+  label: 'Phone / Mobile',
+  hint: '10-digit mobile number',
+  icon: Icons.phone_rounded,
+  keyboardType: TextInputType.number,
+  inputFormatters: [
+  FilteringTextInputFormatter.digitsOnly,
+  LengthLimitingTextInputFormatter(10),
+],
+  validator: (value) {
+    final phone = value?.trim() ?? '';
+
+    if (phone.isEmpty) return null;
+
+    if (!RegExp(r'^[6-9][0-9]{9}$').hasMatch(phone)) {
+      return 'Enter a valid 10-digit mobile number';
+    }
+
+    return null;
+  },
+),
+                               _SupplierField(
+  controller: _emailCtrl,
+  label: 'Email Address',
+  hint: 'orders@supplier.com',
+  icon: Icons.email_rounded,
+),
                               ],
                             ),
                           ],
@@ -160,47 +203,64 @@ class _AddEditSupplierScreenState extends ConsumerState<AddEditSupplierScreen> {
                               isPhone: isPhone,
                               children: [
                                 _SupplierField(
-                                  controller: _gstCtrl,
-                                  label: 'GSTIN / Tax ID',
-                                  hint: '15-digit GST Number',
-                                  icon: Icons.tag_rounded,
-                                ),
-                                _SupplierField(
-                                  controller: _panCtrl,
-                                  label: 'PAN Card Number',
-                                  hint: 'Permanent Account Number',
-                                  icon: Icons.badge_rounded,
-                                ),
+  controller: _gstCtrl,
+  label: 'GSTIN / Tax ID',
+  hint: '15-digit GST Number',
+  icon: Icons.tag_rounded,
+),
+                               _SupplierField(
+  controller: _panCtrl,
+  label: 'PAN Card Number',
+  hint: 'Permanent Account Number',
+  icon: Icons.badge_rounded,
+),
                               ],
                             ),
                             const SizedBox(height: 18),
                             _ResponsiveSupplierRow(
                               isPhone: isPhone,
                               children: [
-                                _SupplierField(
-                                  controller: _paymentTermsCtrl,
-                                  label: 'Payment Terms',
-                                  hint: 'e.g. Net 30, Due on Receipt',
-                                  icon: Icons.schedule_rounded,
-                                ),
-                                _SupplierField(
-                                  controller: _creditLimitCtrl,
-                                  label: 'Credit Limit ₹',
-                                  hint: '0.00',
-                                  icon: Icons.credit_card_rounded,
-                                  keyboardType: TextInputType.number,
-                                ),
+                               _SupplierField(
+  controller: _paymentTermsCtrl,
+  label: 'Payment Terms',
+  hint: 'e.g. Net 30, Due on Receipt',
+  icon: Icons.schedule_rounded,
+),
+                               _SupplierField(
+  controller: _creditLimitCtrl,
+  label: 'Credit Limit ₹',
+  hint: '0.00',
+  icon: Icons.credit_card_rounded,
+  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+  validator: (value) {
+    final amount = value?.trim() ?? '';
+
+    if (amount.isEmpty) return null;
+
+    final amountRegex = RegExp(r'^\d+(\.\d{1,2})?$');
+
+    if (!amountRegex.hasMatch(amount)) {
+      return 'Enter a valid amount (maximum 2 decimal places)';
+    }
+
+    if ((double.tryParse(amount) ?? -1) < 0) {
+      return 'Amount cannot be negative';
+    }
+
+    return null;
+  },
+),
                               ],
                             ),
                             const SizedBox(height: 18),
-                            _SupplierField(
-                              controller: _openingBalanceCtrl,
-                              label: 'Opening Balance (Payable) ₹',
-                              hint: '0.00',
-                              icon: Icons.account_balance_wallet_rounded,
-                              keyboardType: TextInputType.number,
-                              helperText: 'Initial outstanding owed to this supplier upon setup',
-                            ),
+                           _SupplierField(
+  controller: _openingBalanceCtrl,
+  label: 'Opening Balance (Payable) ₹',
+  hint: '0.00',
+  icon: Icons.account_balance_wallet_rounded,
+  keyboardType: TextInputType.number,
+  helperText: 'Initial outstanding owed to this supplier upon setup',
+),
                           ],
                         ),
                         SizedBox(height: isPhone ? 16 : 24),
@@ -214,14 +274,25 @@ class _AddEditSupplierScreenState extends ConsumerState<AddEditSupplierScreen> {
                               isPhone: isPhone,
                               flexes: const [2, 1],
                               children: [
-                                _SupplierField(
-                                  controller: _addressCtrl,
-                                  label: 'Billing / Dispatch Address',
-                                  hint: 'Full physical address...',
-                                  icon: Icons.location_on_rounded,
-                                  maxLines: 2,
-                                  keyboardType: TextInputType.multiline,
-                                ),
+                              _SupplierField(
+  controller: _addressCtrl,
+  label: 'Billing / Dispatch Address',
+  hint: 'Full physical address...',
+  icon: Icons.location_on_rounded,
+  maxLines: 2,
+  keyboardType: TextInputType.multiline,
+  validator: (value) {
+    final address = value?.trim() ?? '';
+
+    if (address.isEmpty) return null;
+
+    if (!RegExp(r"^[a-zA-Z0-9\s,./#'-]+$").hasMatch(address)) {
+      return 'Address contains invalid characters';
+    }
+
+    return null;
+  },
+),
                                 _SupplierField(
                                   controller: _stateCtrl,
                                   label: 'State / Region',
@@ -231,14 +302,25 @@ class _AddEditSupplierScreenState extends ConsumerState<AddEditSupplierScreen> {
                               ],
                             ),
                             const SizedBox(height: 18),
-                            _SupplierField(
-                              controller: _bankDetailsCtrl,
-                              label: 'Bank Account & NEFT Details',
-                              hint: 'Bank Name, Account #, IFSC, Branch...',
-                              icon: Icons.account_balance_rounded,
-                              maxLines: 2,
-                              keyboardType: TextInputType.multiline,
-                            ),
+                           _SupplierField(
+  controller: _bankDetailsCtrl,
+  label: 'Bank Account & NEFT Details',
+  hint: 'Bank Name, Account #, IFSC, Branch...',
+  icon: Icons.account_balance_rounded,
+  maxLines: 2,
+  keyboardType: TextInputType.multiline,
+  validator: (value) {
+    final details = value?.trim() ?? '';
+
+    if (details.isEmpty) return null;
+
+    if (!RegExp(r"^[a-zA-Z0-9\s,./#'-]+$").hasMatch(details)) {
+      return 'Bank details contain invalid characters';
+    }
+
+    return null;
+  },
+),
                             const SizedBox(height: 18),
                             _SupplierField(
                               controller: _notesCtrl,
@@ -405,7 +487,7 @@ class _SupplierField extends StatelessWidget {
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
   final String? helperText;
-
+  final List<TextInputFormatter>? inputFormatters;
   const _SupplierField({
     required this.controller,
     required this.label,
@@ -415,6 +497,7 @@ class _SupplierField extends StatelessWidget {
     this.keyboardType,
     this.validator,
     this.helperText,
+    this.inputFormatters,
   });
 
   @override
@@ -430,6 +513,7 @@ class _SupplierField extends StatelessWidget {
       controller: controller,
       maxLines: maxLines,
       keyboardType: effectiveKeyboardType,
+      inputFormatters: inputFormatters,
       textInputAction: effectiveInputAction,
       validator: validator,
       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),

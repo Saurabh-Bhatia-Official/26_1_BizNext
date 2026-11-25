@@ -430,10 +430,30 @@ void _showAddAccountDialog(BuildContext context, WidgetRef ref, {dynamic initial
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: 'Account Name', prefixIcon: Icon(Icons.account_balance_wallet)),
-                  ),
+                  TextFormField(
+  controller: nameCtrl,
+  maxLength: 100,
+  inputFormatters: [
+    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9 ]')),
+  ],
+  decoration: const InputDecoration(
+    labelText: 'Account Name',
+    prefixIcon: Icon(Icons.account_balance_wallet),
+  ),
+  validator: (value) {
+    final name = value?.trim() ?? '';
+
+    if (name.isEmpty) {
+      return 'Account name is required';
+    }
+
+    if (!RegExp(r'[a-zA-Z]').hasMatch(name)) {
+      return 'Account name must contain at least one letter';
+    }
+
+    return null;
+  },
+),  
                   const SizedBox(height: 16),
                   AppSearchableDropdown<String>(
                     value: type,
@@ -468,10 +488,33 @@ void _showAddAccountDialog(BuildContext context, WidgetRef ref, {dynamic initial
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
                 onPressed: () async {
-                  if (nameCtrl.text.trim().isEmpty) return;
-                  final bal = double.tryParse(balanceCtrl.text) ?? 0.0;
+                final accountName = nameCtrl.text.trim();
+
+if (accountName.isEmpty ||
+    !RegExp(r'[a-zA-Z]').hasMatch(accountName)) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('Account name must contain at least one letter'),
+    ),
+  );
+  return;
+}
+                  final balanceText = balanceCtrl.text.trim();
+
+if (balanceText.isEmpty ||
+    !RegExp(r'^-?\d+(\.\d+)?$').hasMatch(balanceText)) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('Enter a valid opening balance'),
+    ),
+  );
+  return;
+}
+
+final bal = double.parse(balanceText);
                   final rawNum = accountNumCtrl.text.trim().isEmpty ? null : accountNumCtrl.text.trim();
                   final businessId = ref.read(activeBusinessIdProvider);
+                  debugPrint('Accounts businessId: $businessId');
                   final token = rawNum != null ? AccountTokenManager.tokenizeAccount(rawNum, businessId: businessId) : null;
                   
                   if (initialAccount == null) {
@@ -797,28 +840,37 @@ void _showTransactionDialog(BuildContext context, WidgetRef ref, String initialT
                           ),
                         ] else
                           Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: amountCtrl,
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    labelText: 'Amount', 
-                                    prefixText: '₹ ',
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(color: isIncome ? AppColors.success : AppColors.error),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              _DatePickerButton(
-                                selectedDate: selectedDate,
-                                onDateSelected: (date) => setState(() => selectedDate = date),
-                              ),
-                            ],
-                          ),
+  children: [
+    Expanded(
+      child: TextField(
+        controller: amountCtrl,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [
+          TextInputFormatter.withFunction((oldValue, newValue) {
+            return RegExp(r'^\d*\.?\d{0,2}$').hasMatch(newValue.text)
+                ? newValue
+                : oldValue;
+          }),
+        ],
+        decoration: InputDecoration(
+          labelText: 'Amount',
+          prefixText: '₹ ',
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: isIncome ? AppColors.success : AppColors.error,
+            ),
+          ),
+        ),
+      ),
+    ),
+    const SizedBox(width: 16),
+    _DatePickerButton(
+      selectedDate: selectedDate,
+      onDateSelected: (date) => setState(() => selectedDate = date),
+    ),
+  ],
+),
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -1874,14 +1926,21 @@ void _showTransferDialog(BuildContext context, WidgetRef ref) {
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: amountCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'Amount',
-                        prefixText: '₹ ',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
+  controller: amountCtrl,
+  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+  inputFormatters: [
+    TextInputFormatter.withFunction((oldValue, newValue) {
+      return RegExp(r'^\d*\.?\d{0,2}$').hasMatch(newValue.text)
+          ? newValue
+          : oldValue;
+    }),
+  ],
+  decoration: InputDecoration(
+    labelText: 'Amount',
+    prefixText: '₹ ',
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+  ),
+),
                     const SizedBox(height: 16),
                     TextField(
                       controller: descCtrl,
@@ -1898,8 +1957,22 @@ void _showTransferDialog(BuildContext context, WidgetRef ref) {
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
                 onPressed: () async {
+                  debugPrint('TRANSFER BUTTON CLICKED');
                   final amt = double.tryParse(amountCtrl.text) ?? 0;
-                  if (fromId == null || toId == null || amt <= 0 || fromId == toId) return;
+                 if (fromId == null || toId == null) {
+  AppAlert.error(ref, 'Please select both accounts');
+  return;
+}
+
+if (fromId == toId) {
+  AppAlert.error(ref, 'From and To accounts must be different');
+  return;
+}
+
+if (amt <= 0) {
+  AppAlert.error(ref, 'Please enter a valid amount');
+  return;
+}
 
                   final businessId = ref.read(activeBusinessIdProvider);
                   await ref.read(accountsRepositoryProvider).addTransfer(
