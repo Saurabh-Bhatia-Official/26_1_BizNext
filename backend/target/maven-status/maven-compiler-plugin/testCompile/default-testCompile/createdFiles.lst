@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-=======
 com\biznext\erp\database\ApiInvestigationTest.class
-com\biznext\erp\database\QueryFixExperimentTest.class
->>>>>>> 7879563f805fffec516cb1afd4a6398f3010773c
 com\biznext\erp\SalesReturnServiceTest.class
 com\biznext\customer\CustomerServiceTest.class
 com\biznext\erp\database\DatabaseConfigurationTest.class
