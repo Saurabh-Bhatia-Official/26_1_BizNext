@@ -260,7 +260,7 @@ jobs:
       - name: Build Android Release APK
         run: |
           unset JAVA_HOME
-          flutter build apk --release --android-skip-build-dependency-validation
+          flutter build apk --release
 
       - name: Stage Android APK Artifact
         run: |
