@@ -2,14 +2,14 @@ name: Multi-Platform Build & Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v1.0.0)'
+        description: 'Release Tag (leave empty for automatic versioning, e.g. v0.0.1)'
         required: false
-        default: 'v1.0.0'
+        default: ''
       repository:
         description: 'Target Release Repository (e.g. owner/repo). Defaults to current repository.'
         required: false
@@ -29,11 +29,69 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  # ── 0. Determine Version ───────────────────────────────────────────────────
+  determine-version:
+    name: Determine Release Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.calc-version.outputs.version }}
+      clean_version: ${{ steps.calc-version.outputs.clean_version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate Next Version
+        id: calc-version
+        env:
+          MANUAL_TAG: ${{ github.event.inputs.tag_name }}
+        run: |
+          python3 - << 'EOF'
+          import os, subprocess, re
+
+          manual_tag = os.environ.get("MANUAL_TAG", "").strip()
+          if manual_tag:
+              tag = manual_tag if manual_tag.startswith("v") else f"v{manual_tag}"
+          else:
+              subprocess.run(["git", "fetch", "--tags", "--force"], check=False)
+              res = subprocess.run(["git", "tag", "-l"], capture_output=True, text=True)
+              tags = res.stdout.strip().splitlines()
+
+              patch_numbers = []
+              for t in tags:
+                  m = re.match(r"^v?0\.0\.(\d+)$", t.strip())
+                  if m:
+                      patch_numbers.append(int(m.group(1)))
+
+              if patch_numbers:
+                  latest_patch = max(patch_numbers)
+                  next_patch = latest_patch + 1
+                  tag = f"v0.0.{next_patch}"
+              else:
+                  tag = "v0.0.1"
+
+          clean_ver = tag.lstrip("v")
+          print(f"Calculated Release Tag: {tag}")
+          print(f"Clean Version: {clean_ver}")
+
+          github_output = os.environ.get("GITHUB_OUTPUT")
+          if github_output:
+              with open(github_output, "a") as f:
+                  f.write(f"version={tag}\n")
+                  f.write(f"clean_version={clean_ver}\n")
+          EOF
+
   # ── 1. Windows Build ────────────────────────────────────────────────────────
   build-windows:
     name: Build Windows (EXE & Portable ZIP)
     runs-on: windows-latest
+    needs: [determine-version]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -68,9 +126,8 @@ jobs:
             choco install innosetup --yes --no-progress
             $env:PATH += ";C:\Program Files (x86)\Inno Setup 6"
           }
-          $tag = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "${{ github.event.inputs.tag_name }}" }
-          if (-not $tag) { $tag = "1.0.0" }
-          $cleanVersion = $tag.TrimStart('v')
+          $cleanVersion = "${{ needs.determine-version.outputs.clean_version }}"
+          if (-not $cleanVersion) { $cleanVersion = "0.0.1" }
           iscc /DMyAppVersion="$cleanVersion" /O"build\windows\installer" /F"BizNext-Windows-x64" installer.iss
           Copy-Item -Path "build\windows\installer\BizNext-Windows-x64.exe" -Destination "BizNext-Windows-x64.exe"
 
@@ -87,6 +144,7 @@ jobs:
   build-linux:
     name: Build Linux (DEB & Portable ZIP)
     runs-on: ubuntu-latest
+    needs: [determine-version]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -123,12 +181,8 @@ jobs:
       - name: Package Linux Debian (.deb) Package
         run: |
           chmod +x scripts/package_linux_deb.sh
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            TAG="${{ github.ref_name }}"
-          else
-            TAG="${{ github.event.inputs.tag_name || '1.0.0' }}"
-          fi
-          if [ -z "$TAG" ]; then TAG="1.0.0"; fi
+          TAG="${{ needs.determine-version.outputs.version }}"
+          if [ -z "$TAG" ]; then TAG="v0.0.1"; fi
           ./scripts/package_linux_deb.sh "$TAG" "BizNext-Linux-x64.deb"
 
       - name: Upload Linux Artifacts
@@ -144,6 +198,7 @@ jobs:
   build-macos:
     name: Build macOS (DMG & Portable ZIP)
     runs-on: macos-latest
+    needs: [determine-version]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -188,6 +243,7 @@ jobs:
   build-android:
     name: Build Android (APK)
     runs-on: ubuntu-latest
+    needs: [determine-version]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -225,6 +281,7 @@ jobs:
   build-ios:
     name: Build iOS (IPA)
     runs-on: macos-latest
+    needs: [determine-version]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -259,8 +316,8 @@ jobs:
   publish-release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-windows, build-linux, build-macos, build-android, build-ios]
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    needs: [determine-version, build-windows, build-linux, build-macos, build-android, build-ios]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -280,9 +337,9 @@ jobs:
           cat SHA256SUMS.txt
           cd -
           
-          TAG="${{ github.ref_name }}"
-          if [ "${{ github.ref_type }}" != "tag" ] || [ -z "$TAG" ]; then
-            TAG="${{ github.event.inputs.tag_name || 'v1.0.0' }}"
+          TAG="${{ needs.determine-version.outputs.version }}"
+          if [ -z "$TAG" ]; then
+            TAG="v0.0.1"
           fi
           echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
 
@@ -297,9 +354,12 @@ jobs:
         with:
           repository: ${{ env.TARGET_REPO }}
           tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
           name: BizNext ${{ env.RELEASE_TAG }}
           draft: ${{ github.event.inputs.draft || false }}
           prerelease: ${{ github.event.inputs.prerelease || false }}
+          generate_release_notes: false
+          body: ""
           files: |
             release_assets/BizNext-Windows-x64.exe
             release_assets/BizNext-Windows-x64.zip
@@ -310,37 +370,3 @@ jobs:
             release_assets/BizNext-Android.apk
             release_assets/BizNext-iOS.ipa
             release_assets/SHA256SUMS.txt
-          body: |
-            ## BizNext Release ${{ env.RELEASE_TAG }}
-            
-            Welcome to the official release of **BizNext** — Production-ready POS & ERP Business Management System.
-            
-            ### Available Packages & Downloads
-            
-            | Platform | File | Description |
-            | :--- | :--- | :--- |
-            | **Windows** | [`BizNext-Windows-x64.exe`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Windows-x64.exe) | Complete installer with wizard & desktop shortcuts |
-            | **Windows** | [`BizNext-Windows-x64.zip`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Windows-x64.zip) | Portable standalone zip distribution |
-            | **Linux** | [`BizNext-Linux-x64.deb`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Linux-x64.deb) | Debian/Ubuntu package (`sudo dpkg -i` or `sudo apt install`) |
-            | **Linux** | [`BizNext-Linux-x64.zip`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Linux-x64.zip) | Portable standalone Linux bundle |
-            | **macOS** | [`BizNext-macOS.dmg`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-macOS.dmg) | Disk image with drag-and-drop to Applications folder |
-            | **macOS** | [`BizNext-macOS.zip`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-macOS.zip) | Portable macOS `.app` bundle |
-            | **Android** | [`BizNext-Android.apk`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-Android.apk) | Production release APK for Android devices |
-            | **iOS** | [`BizNext-iOS.ipa`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/BizNext-iOS.ipa) | Production release IPA for iOS devices |
-            | **Checksums** | [`SHA256SUMS.txt`](https://github.com/${{ env.TARGET_REPO }}/releases/download/${{ env.RELEASE_TAG }}/SHA256SUMS.txt) | SHA256 integrity verification hashes |
-            
-            ### Installation Instructions
-            
-            - **Windows**: Run `BizNext-Windows-x64.exe` and follow the setup wizard.
-            - **Debian / Ubuntu**:
-              ```bash
-              sudo dpkg -i BizNext-Linux-x64.deb
-              # Or with apt:
-              sudo apt install ./BizNext-Linux-x64.deb
-              ```
-            - **macOS**: Open `BizNext-macOS.dmg` and drag `BizNext.app` into your `Applications` directory.
-            - **Android**: Install `BizNext-Android.apk` on your device (enable install from unknown sources if prompted).
-            - **iOS**: Sideload or deploy `BizNext-iOS.ipa` via AltStore, Sideloadly, or enterprise MDM.
-            
-            ### Data Safety Guarantee
-            BizNext automatically manages its internal database. On first launch, required tables and default configurations are safely established. Existing application data is preserved across all updates and upgrades without destructive modifications.
