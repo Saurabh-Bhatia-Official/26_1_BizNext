@@ -58,3 +58,8 @@ nuget.exe
 
 # Old nested project
 /Desktop/
+
+# Local environment secrets
+.env
+.env.*
+!.env.example

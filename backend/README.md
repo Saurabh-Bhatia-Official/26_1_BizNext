@@ -14,7 +14,7 @@ Cloudinary variables are backend-only secrets. Rotate any credentials that were 
 
 Flyway applies versioned schema migrations at startup. `V3__products_module_schema.sql` creates the business-scoped product categories and products tables, case-insensitive business-scoped SKU uniqueness, category relationship, validation checks, and product query indexes. Existing local SQLite products/categories are not automatically copied; seed or import those records through a trusted migration before using the Neon catalog.
 
-The inventory product form sends new product images through the signed backend upload. Offer posters still use the existing Cloudinary client flow. Existing product image paths and offer posters can be migrated for the active business from **Settings → Data Backup & Recovery → Migrate Images to Cloudinary**; this legacy migration remains local-database based.
+The backend supports signed product image uploads, but the Flutter `MediaUploadService` currently returns the local path unchanged and does not call the upload API. Existing product image paths and offer posters can be migrated for the active business from **Settings → Data Backup & Recovery → Migrate Images to Cloudinary**; this legacy migration remains local-database based.
 
 Flyway applies versioned schema migrations at startup, and Hibernate is configured with `ddl-auto=validate`. The initial migration creates the customer module's empty tables, customer-type relationship, sales/ledger references needed for deletion checks, and a business-scoped normalized-mobile unique index. It does not import local SQLite data, drop tables, or enable Hibernate schema updates against Neon.
 
@@ -40,7 +40,7 @@ All product routes require `businessId` for business-scoped queries.
 
 `sortBy` accepts `name`, `price`, or `date`; `direction` accepts `asc` or `desc`; page sizes are capped at 200. SKU uniqueness is enforced per business in PostgreSQL. Replacing an image uploads the new file before the database update, removes it if the database write fails, and deletes the old Cloudinary image only after the update commits.
 
-The Flutter inventory list and product create/update/delete/status/category operations use these APIs. Existing sales and purchase transactions, tiered price lists, supplier references, and the old local database's historical product data have not been migrated to Neon.
+These routes are implemented by the backend. The checked-in Flutter inventory repository still reads and writes local SQLite and does not call these endpoints. Sales and purchase transactions, tiered price lists, supplier references, and historical local product data are also not migrated to Neon.
 
 ## Customer API scope
 
@@ -74,6 +74,6 @@ Create/update JSON example:
 
 Paginated responses include `content`, `page`, `size`, `totalElements`, `totalPages`, and `last`. Validation returns 400, missing/out-of-scope customers return 404, duplicate normalized phones and prohibited deletes return 409, and unexpected errors return a generic 500 response.
 
-The Flutter customer HTTP client consumes these routes and fetches list pages. It retains SQLite fallback for connection failures, while HTTP errors such as duplicate/validation responses are surfaced to the UI instead of being silently treated as a successful local save. Configure `BIZNEXT_API_BASE_URL` for the target device/platform; `localhost` refers to the device itself on mobile emulators.
+The checked-in Flutter customer repository still reads and writes local SQLite; it does not currently have an HTTP client or SQLite fallback connected to these routes. `BIZNEXT_API_BASE_URL` is not yet wired into the Flutter application. When a client is added, set it for the target device/platform; `localhost` refers to the device itself on mobile emulators.
 
 Business authentication/authorization is not yet enabled: the Flutter app currently authenticates entirely against local SQLite and generates its bearer token on-device. Product and customer business-scoped queries prevent accidental cross-business data mixing but `businessId` is not proof of authorization. A trusted server-side identity/business-membership source is required before these APIs can safely enforce user-to-business authorization. Do not expose the API publicly until server-verifiable authentication and role checks are added.
