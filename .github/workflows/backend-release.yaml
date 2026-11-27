@@ -1,0 +1,203 @@
+name: Backend Build, Release & Render Deploy
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - 'v*'
+      - 'backend-v*'
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-release.yaml'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v1.0.0 or backend-v1.0.0)'
+        required: false
+        default: 'v1.0.0'
+      repository:
+        description: 'Target Release Repository (e.g. owner/repo). Defaults to current repository.'
+        required: false
+        type: string
+        default: ''
+      draft:
+        description: 'Create Draft Release'
+        required: false
+        type: boolean
+        default: false
+      prerelease:
+        description: 'Create Prerelease'
+        required: false
+        type: boolean
+        default: false
+      deploy_render:
+        description: 'Deploy Backend to Render'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  # ── 1. Backend Build & Package ──────────────────────────────────────────────
+  build-backend:
+    name: Build & Package Backend JAR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+
+      - name: Build and Package Spring Boot Application
+        working-directory: backend
+        run: |
+          mvn clean package -DskipTests
+
+      - name: Run Backend Validation Tests
+        working-directory: backend
+        run: |
+          mvn test-compile
+
+      - name: Stage Backend JAR Artifact
+        run: |
+          cp backend/target/biznext-api-*.jar BizNext-Backend-API.jar
+
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-package
+          path: BizNext-Backend-API.jar
+          retention-days: 14
+
+  # ── 2. Render Deployment ────────────────────────────────────────────────────
+  deploy-render:
+    name: Deploy Backend to Render
+    runs-on: ubuntu-latest
+    needs: [build-backend]
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_render == true || github.event.inputs.deploy_render == 'true'
+    steps:
+      - name: Trigger Render Service Deployment
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID || 'srv-dc4l4i49v7es73fde7s0' }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          RENDER_BACKEND_URL: ${{ vars.RENDER_BACKEND_URL || 'https://two6-1-biznext.onrender.com' }}
+        run: |
+          if [ -n "$RENDER_API_KEY" ]; then
+            echo "Triggering deployment for Render service $RENDER_SERVICE_ID via Render REST API..."
+            
+            HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+              -H "Accept: application/json" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${RENDER_API_KEY}" \
+              -d '{"clearCache":"do_not_clear"}')
+
+            HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
+            BODY=$(echo "$HTTP_RESPONSE" | head -n -1)
+
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+              echo "Render deployment triggered successfully (HTTP $HTTP_CODE)."
+              DEPLOY_ID=$(echo "$BODY" | jq -r '.id // empty' 2>/dev/null || echo "")
+              
+              if [ -n "$DEPLOY_ID" ]; then
+                echo "Deploy ID: $DEPLOY_ID"
+                echo "Monitoring deployment status..."
+                for i in {1..30}; do
+                  sleep 10
+                  POLL_RESP=$(curl -s -X GET "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys/${DEPLOY_ID}" \
+                    -H "Accept: application/json" \
+                    -H "Authorization: Bearer ${RENDER_API_KEY}")
+                  STATUS=$(echo "$POLL_RESP" | jq -r '.status // empty' 2>/dev/null || echo "")
+                  echo "Poll #$i: Status = $STATUS"
+                  
+                  if [ "$STATUS" = "live" ]; then
+                    echo "::notice::Render deployment is LIVE!"
+                    break
+                  elif [ "$STATUS" = "build_failed" ] || [ "$STATUS" = "update_failed" ] || [ "$STATUS" = "canceled" ]; then
+                    echo "::error::Render deployment failed with status: $STATUS"
+                    exit 1
+                  fi
+                done
+              fi
+            else
+              echo "::error::Render API returned HTTP $HTTP_CODE: $BODY"
+              exit 1
+            fi
+
+          elif [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "Triggering Render deployment via deploy hook..."
+            HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${RENDER_DEPLOY_HOOK_URL}")
+            HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
+
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+              echo "::notice::Render deploy hook triggered successfully (HTTP $HTTP_CODE)."
+            else
+              echo "::error::Render deploy hook returned HTTP $HTTP_CODE"
+              exit 1
+            fi
+          else
+            echo "::error::Neither RENDER_API_KEY nor RENDER_DEPLOY_HOOK_URL is configured in GitHub Secrets."
+            echo "Please configure RENDER_API_KEY in Repository Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Verify Backend Endpoint Accessibility
+        env:
+          RENDER_BACKEND_URL: ${{ vars.RENDER_BACKEND_URL || 'https://two6-1-biznext.onrender.com' }}
+        run: |
+          echo "Verifying backend health on $RENDER_BACKEND_URL..."
+          STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$RENDER_BACKEND_URL/api/customers?businessId=1" || true)
+          echo "Endpoint response status: $STATUS_CODE"
+
+  # ── 3. Publish Backend GitHub Release ───────────────────────────────────────
+  publish-backend-release:
+    name: Publish Backend GitHub Release Asset
+    runs-on: ubuntu-latest
+    needs: [build-backend]
+    if: startsWith(github.ref, 'refs/tags/backend-v') || (startsWith(github.ref, 'refs/tags/v') && github.event_name != 'push') || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name != '')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Backend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-package
+
+      - name: Compute Checksum
+        run: |
+          sha256sum BizNext-Backend-API.jar > SHA256SUM-BACKEND.txt
+          cat SHA256SUM-BACKEND.txt
+
+          TAG="${{ github.ref_name }}"
+          if [ "${{ github.ref_type }}" != "tag" ] || [ -z "$TAG" ]; then
+            TAG="${{ github.event.inputs.tag_name || 'v1.0.0' }}"
+          fi
+          echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
+
+          TARGET_REPO="${{ github.event.inputs.repository }}"
+          if [ -z "$TARGET_REPO" ]; then
+            TARGET_REPO="${{ github.repository }}"
+          fi
+          echo "TARGET_REPO=$TARGET_REPO" >> $GITHUB_ENV
+
+      - name: Attach JAR to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: BizNext Backend ${{ env.RELEASE_TAG }}
+          draft: ${{ github.event.inputs.draft || false }}
+          prerelease: ${{ github.event.inputs.prerelease || false }}
+          files: |
+            BizNext-Backend-API.jar
+            SHA256SUM-BACKEND.txt

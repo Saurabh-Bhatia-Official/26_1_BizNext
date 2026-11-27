@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../config/app_environment.dart';
 import '../database/database_helper.dart';
 import '../security/token_service.dart';
 
 class SyncService {
   final DatabaseHelper _db = DatabaseHelper.instance;
-  static const String _baseUrl = "http://localhost:8000/api/v1";
+  static String get _baseUrl => AppEnvironment.syncApiUrl;
   
   Timer? _syncTimer;
   bool _isSyncing = false;

@@ -1,0 +1,90 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+Thumbs.db
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ / Android Studio / IDE
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Gradle & Android
+.gradle/
+**/.gradle/
+build/
+**/build/
+captures/
+**/captures/
+local.properties
+**/local.properties
+GeneratedPluginRegistrant.java
+.cxx/
+**/android/app/debug
+**/android/app/profile
+**/android/app/release
+key.properties
+**/*.keystore
+**/*.jks
+
+# Java / Maven Backend
+target/
+**/target/
+*.jar
+*.war
+*.ear
+
+# Flutter / Dart / Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.flutter-plugins
+.pub-cache/
+.pub/
+coverage/
+**/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# FVM
+.fvm/
+
+# Temporary analysis files
+analysis_*.txt
+current_analysis*.txt
+final_analysis*.txt
+analyze_output.txt
+
+# Build and backup files
+BizNext-Windows.zip
+nuget.exe
+
+# Old nested project
+/Desktop/
+
+# Local environment secrets
+.env
+.env.*
+.env.local
+!.env.example
+!.env.*.example

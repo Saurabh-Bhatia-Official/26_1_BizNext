@@ -1,6 +1,8 @@
 {
-  "dart.flutterSdkPath": ".fvm/versions/stable",
+  "dart.flutterSdkPath": "frontend/.fvm/versions/stable",
   "search.exclude": {
-    "**/.fvm": true
+    "**/.fvm": true,
+    "**/target": true,
+    "**/.gradle": true
   }
 }

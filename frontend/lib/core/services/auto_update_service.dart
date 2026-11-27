@@ -4,10 +4,11 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import '../config/app_environment.dart';
 import '../constants/app_constants.dart';
 
 class AutoUpdateService {
-  static const String _baseUrl = "http://localhost:8000/api/v1";
+  static String get _baseUrl => AppEnvironment.autoUpdateApiUrl;
 
   Future<Map<String, dynamic>?> checkAndUpdate() async {
     try {

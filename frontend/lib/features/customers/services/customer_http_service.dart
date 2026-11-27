@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../../core/config/app_environment.dart';
 import '../../../core/security/token_service.dart';
 import '../models/customer_model.dart';
 
@@ -16,14 +17,7 @@ class CustomerHttpException implements Exception {
 }
 
 class CustomerHttpService {
-  static const String _defaultBaseUrl = 'http://localhost:8080/api/customers';
-
-  static String get baseUrl {
-    return const String.fromEnvironment(
-      'BIZNEXT_API_BASE_URL',
-      defaultValue: _defaultBaseUrl,
-    );
-  }
+  static String get baseUrl => AppEnvironment.customersApiUrl;
 
   static Future<Map<String, String>> _headers() async {
     final token = await TokenService.instance.getActiveToken();
